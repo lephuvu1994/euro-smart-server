@@ -30,7 +30,7 @@ import { HelperQueryService } from './services/helper.query.service';
                     from: `"Smart Home" <${config.get('MAIL_FROM')}>`,
                 },
                 template: {
-                    dir: process.cwd() + '/src/templates/email',
+                    dir: __dirname + '/templates/email',
                     adapter: new HandlebarsAdapter(),
                     options: {
                         strict: true,

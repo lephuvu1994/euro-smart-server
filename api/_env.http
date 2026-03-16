@@ -1,0 +1,11 @@
+# ==========================================
+# Biến dùng chung – có thể copy vào từng file hoặc dùng khi gọi từ workspace
+# ==========================================
+@baseUrl = https://nestjs-smarthome.onrender.com
+@adminEmail = admin@bktech.com
+@adminPassword = AdminPassword123!
+@userEmail = cursor2@test.com
+@userPassword = Password@123!
+@companyCode = BKTech
+@deviceModelCode = 1001
+@macAddress = AA:BB:CC:11:22:33

@@ -3,7 +3,7 @@ import { Cron } from '@nestjs/schedule';
 const cronParser = require('cron-parser');
 import { DatabaseService } from '@app/database';
 import { RedisService } from '@app/redis-cache';
-import { SceneTriggerType } from '../dtos/request/scene-trigger.dto';
+import { SceneTriggerType } from '@app/common';
 import { SceneService } from '../scene.service';
 
 const SCENE_TRIGGER_LAST_KEY = 'scene_trigger_last';

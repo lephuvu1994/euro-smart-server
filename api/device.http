@@ -1,0 +1,111 @@
+# ==========================================
+# DEVICE – Đăng ký thiết bị, danh sách, điều khiển
+# ==========================================
+# Chạy "Login User" trước để có accessToken
+@baseUrl = https://nestjs-smarthome.onrender.com/v1
+@userEmail = cursor2@test.com
+@userPassword = Password@123!
+@macAddress = AA:BB:CC:11:22:33
+@deviceModelCode = 1001
+@companyCode = BKTech
+# deviceToken & deviceId: lấy từ GET /devices
+@deviceToken = your-device-token-here
+@deviceId = 00000000-0000-0000-0000-000000000000
+
+###
+# Login User (chạy trước)
+# @name loginUser
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+    "identifier": "{{userEmail}}",
+    "password": "{{userPassword}}"
+}
+
+###
+# --- ĐĂNG KÝ & DANH SÁCH ---
+
+# Đăng ký / claim thiết bị (identifier = MAC với MQTT)
+POST {{baseUrl}}/devices/register
+Authorization: Bearer {{loginUser.response.body.data.accessToken}}
+Content-Type: application/json
+
+{
+    "identifier": "{{macAddress}}",
+    "deviceCode": "{{deviceModelCode}}",
+    "partnerCode": "{{companyCode}}",
+    "protocol": "MQTT",
+    "name": "Đèn Phòng Khách"
+}
+
+###
+# Lấy danh sách thiết bị (phân trang)
+# @name getDevices
+GET {{baseUrl}}/devices?page=1&limit=10
+Authorization: Bearer {{loginUser.response.body.data.accessToken}}
+
+###
+# Lấy chi tiết một thiết bị (theo id)
+GET {{baseUrl}}/devices/{{deviceId}}
+Authorization: Bearer {{loginUser.response.body.data.accessToken}}
+
+###
+# Siri Sync – Lấy tất cả devices + scenes cho Siri/Google Assistant
+GET {{baseUrl}}/devices/siri-sync
+Authorization: Bearer {{loginUser.response.body.data.accessToken}}
+
+###
+# --- ĐIỀU KHIỂN ---
+
+# Set một feature (theo featureCode) – ví dụ shutter
+POST {{baseUrl}}/devices/{{deviceToken}}/features/shutter_main/setValue
+Authorization: Bearer {{loginUser.response.body.data.accessToken}}
+Content-Type: application/json
+
+{
+    "value": "OPEN"
+}
+
+###
+# Set feature dạng BINARY (bật/tắt, khóa trẻ em...)
+POST {{baseUrl}}/devices/{{deviceToken}}/features/security_lock/setValue
+Authorization: Bearer {{loginUser.response.body.data.accessToken}}
+Content-Type: application/json
+
+{
+    "value": 1
+}
+
+###
+# Set feature dạng CONFIG (object)
+POST {{baseUrl}}/devices/{{deviceToken}}/features/sys_config/setValue
+Authorization: Bearer {{loginUser.response.body.data.accessToken}}
+Content-Type: application/json
+
+{
+    "value": {
+        "config": {
+            "req_open_clicks": 5,
+            "req_close_clicks": 5,
+            "def_open_clicks": 1,
+            "def_close_clicks": 1,
+            "time_mode": false,
+            "start_hour": 0,
+            "end_hour": 0
+        }
+    }
+}
+
+###
+# Set toàn bộ giá trị thiết bị (bulk)
+POST {{baseUrl}}/devices/{{deviceToken}}/setValue
+Authorization: Bearer {{loginUser.response.body.data.accessToken}}
+Content-Type: application/json
+
+{
+    "value": {
+        "shutter_main": "CLOSE",
+        "security_lock": 0
+    }
+}

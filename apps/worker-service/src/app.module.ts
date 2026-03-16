@@ -7,6 +7,7 @@ import { RedisModule } from '@app/redis-cache';
 import { configs, APP_BULLMQ_QUEUES } from '@app/common';
 import { CustomLoggerModule } from '@app/common/logger/logger.module';
 import { HelperModule } from '@app/common/helper/helper.module';
+import { IntegrationModule } from '@app/common';
 import { EmailProcessorWorker } from './processors/email.processor';
 import { DeviceControlProcessor } from './processors/device-control.processor';
 import { MidNightScheduleWorker } from './schedulers/midnight.scheduler';
@@ -14,7 +15,7 @@ import { MidNightScheduleWorker } from './schedulers/midnight.scheduler';
 @Module({
     imports: [
         ConfigModule.forRoot({ load: configs, isGlobal: true, cache: true, envFilePath: ['.env'], expandVariables: true }),
-        DatabaseModule, RedisModule, CustomLoggerModule, HelperModule, ScheduleModule.forRoot(),
+        DatabaseModule, RedisModule, CustomLoggerModule, HelperModule, ScheduleModule.forRoot(), IntegrationModule,
         BullModule.forRootAsync({
             imports: [ConfigModule],
             useFactory: (cs: ConfigService) => ({

@@ -14,7 +14,7 @@ import { MessageService } from './services/message.service';
         I18nModule.forRoot({
             fallbackLanguage: 'en',
             loaderOptions: {
-                path: join(__dirname, '../../languages/'),
+                path: join(__dirname, 'languages/'),
                 watch: true,
             },
             resolvers: [

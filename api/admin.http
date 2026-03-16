@@ -1,0 +1,161 @@
+# ==========================================
+# ADMIN – Partner, Device Model, Quota, MQTT Config
+# ==========================================
+# Chạy request "Login Admin" trước để có accessToken
+@baseUrl = https://nestjs-smarthome.onrender.com/v1
+@adminEmail = vulewenlian94@gmail.com
+@adminPassword = Aa123456789@
+@companyCode = BKTech
+@deviceModelCode = 1001
+
+###
+# Login Admin (chạy trước các request bên dưới)
+# @name loginAdmin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+    "identifier": "{{adminEmail}}",
+    "password": "{{adminPassword}}"
+}
+
+###
+# ==========================================
+# --- PARTNERS ---
+# ==========================================
+
+# Tạo Partner (Công ty)
+POST {{baseUrl}}/admin/partners
+Authorization: Bearer {{loginAdmin.response.body.data.accessToken}}
+Content-Type: application/json
+
+{
+    "code": "{{companyCode}}",
+    "name": "BKTech Global SmartHome"
+}
+
+###
+# Lấy danh sách Partner (dropdown)
+# @name listPartners
+GET {{baseUrl}}/admin/options/partners
+Authorization: Bearer {{loginAdmin.response.body.data.accessToken}}
+
+###
+# Cập nhật Partner (tên, quota...)
+PUT {{baseUrl}}/admin/partners/{{companyCode}}
+Authorization: Bearer {{loginAdmin.response.body.data.accessToken}}
+Content-Type: application/json
+
+{
+    "name": "BKTech Global SmartHome (Updated)",
+    "quotas": [
+        {
+            "deviceModelCode": "{{deviceModelCode}}",
+            "quantity": 100
+        }
+    ]
+}
+
+###
+# Thống kê sử dụng theo Partner
+GET {{baseUrl}}/admin/stats/partners
+Authorization: Bearer {{loginAdmin.response.body.data.accessToken}}
+
+###
+# ==========================================
+# --- DEVICE MODELS ---
+# ==========================================
+
+# Tạo Device Model (khuôn mẫu thiết bị)
+POST {{baseUrl}}/admin/device-models
+Authorization: Bearer {{loginAdmin.response.body.data.accessToken}}
+Content-Type: application/json
+
+{
+    "code": "{{deviceModelCode}}",
+    "name": "Công tắc WiFi 4 nút Pro",
+    "featuresConfig": [
+            {
+                "code": "shutter_main",
+                "name": "Điều khiển cửa",
+                "type": "SHUTTER",
+                "category": "curtain",
+                "read_only": false,
+                "command_suffix": "set",
+                "command_key": "state",
+                "values": ["OPEN", "CLOSE", "STOP"]
+            },
+            {
+                "code": "security_lock",
+                "name": "Khóa trẻ em",
+                "type": "BINARY",
+                "category": "lock",
+                "read_only": false,
+                "command_suffix": "set",
+                "command_key": "child_lock",
+                "values": []
+            },
+            {
+                "code": "sys_config",
+                "name": "Cấu hình hệ thống",
+                "type": "CONFIG",
+                "category": "switch",
+                "read_only": false,
+                "command_suffix": "config",
+                "embedded_keys": [
+                    "req_open_clicks",
+                    "req_close_clicks",
+                    "def_open_clicks",
+                    "def_close_clicks",
+                    "time_mode",
+                    "start_hour",
+                    "end_hour"
+                ]
+            }
+        ]
+}
+
+###
+# Lấy danh sách Device Model (dropdown)
+# @name listDeviceModels
+GET {{baseUrl}}/admin/options/device-models
+Authorization: Bearer {{loginAdmin.response.body.data.accessToken}}
+
+###
+# Danh sách quota (raw)
+GET {{baseUrl}}/admin/quotas
+Authorization: Bearer {{loginAdmin.response.body.data.accessToken}}
+
+###
+# ==========================================
+# --- SYSTEM CONFIGS (MQTT & OTP) ---
+# ==========================================
+
+# Cấu hình MQTT (Broker) - Set nhanh host/user/pass
+POST {{baseUrl}}/admin/configs/mqtt
+Authorization: Bearer {{loginAdmin.response.body.data.accessToken}}
+Content-Type: application/json
+
+{
+    "host": "mqtts://n1e72d70.ala.asia-southeast1.emqxsl.com:8883",
+    "user": "admin_mqtt",
+    "pass": "password_mqtt"
+}
+
+###
+# Lấy toàn bộ cấu hình hệ thống
+GET {{baseUrl}}/admin/configs
+Authorization: Bearer {{loginAdmin.response.body.data.accessToken}}
+
+###
+# Cập nhật cấu hình hệ thống (MQTT, OTP...)
+PUT {{baseUrl}}/admin/configs
+Authorization: Bearer {{loginAdmin.response.body.data.accessToken}}
+Content-Type: application/json
+
+{
+    "mqttHost": "mqtts://n1e72d70.ala.asia-southeast1.emqxsl.com:8883",
+    "mqttUser": "admin_mqtt",
+    "mqttPass": "password_mqtt",
+    "otpExpire": 10
+}

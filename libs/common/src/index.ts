@@ -7,6 +7,7 @@ export { default as configs } from './config';
 // Constants & Enums
 export * from './enums/app.enum';
 export * from './enums/device-job.enum';
+export * from './enums/scene.enum';
 
 // DTOs (shared across apps)
 export * from './dtos/user.response.dto';
@@ -37,3 +38,10 @@ export * from './vietguys/vietguys.module';
 
 // MCP
 export * from './mcp/mcp.module';
+
+// Integration
+export * from './integration/registry/integration.manager';
+export * from './integration/drivers/mqtt-generic.driver';
+export * from './integration/drivers/zigbee.generic.driver';
+export * from './integration/interfaces/device-driver.interface';
+export * from './integration/integration.module';

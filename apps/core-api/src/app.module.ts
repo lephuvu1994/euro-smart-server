@@ -17,11 +17,11 @@ import { SmsSimModule } from '@app/common/sms-sim/sms-sim.module';
 import { HelperModule } from '@app/common/helper/helper.module';
 
 import { HealthController } from './controllers/health.controller';
-import { UserModule } from './modules/user/user.module';
-import { AdminModule } from './modules/admin/admin.module';
-import { DeviceModule } from './modules/device/device.module';
-import { HomeModule } from './modules/home/home.module';
-import { SceneModule } from './modules/scene/scene.module';
+import { UserModule } from '@euro-smart-server/modules/user';
+import { AdminModule } from '@euro-smart-server/modules/admin';
+import { DeviceModule } from '@euro-smart-server/modules/device';
+import { HomeModule } from '@euro-smart-server/modules/home';
+import { SceneModule } from '@euro-smart-server/modules/scene';
 
 @Module({
   imports: [

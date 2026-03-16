@@ -43,6 +43,21 @@
       ],
       "src/*": [
         "src/*"
+      ],
+      "@euro-smart-server/modules/admin": [
+        "../../libs/modules/admin/src/index.ts"
+      ],
+      "@euro-smart-server/modules/device": [
+        "../../libs/modules/device/src/index.ts"
+      ],
+      "@euro-smart-server/modules/home": [
+        "../../libs/modules/home/src/index.ts"
+      ],
+      "@euro-smart-server/modules/scene": [
+        "../../libs/modules/scene/src/index.ts"
+      ],
+      "@euro-smart-server/modules/user": [
+        "../../libs/modules/user/src/index.ts"
       ]
     }
   }

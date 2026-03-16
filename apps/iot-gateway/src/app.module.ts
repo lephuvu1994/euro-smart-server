@@ -6,14 +6,13 @@ import { RedisModule } from '@app/redis-cache';
 import { configs, APP_BULLMQ_QUEUES } from '@app/common';
 import { MqttModule } from '@app/common/mqtt/mqtt.module';
 import { CustomLoggerModule } from '@app/common/logger/logger.module';
-import { IntegrationManager } from './registry/integration.manager';
-import { MqttGenericDriver } from './drivers/mqtt-generic.driver';
+import { IntegrationModule } from '@app/common';
 import { MqttInboundService } from './listeners/mqtt-inbound.service';
 
 @Module({
     imports: [
         ConfigModule.forRoot({ load: configs, isGlobal: true, cache: true, envFilePath: ['.env'], expandVariables: true }),
-        DatabaseModule, RedisModule, MqttModule, CustomLoggerModule,
+        DatabaseModule, RedisModule, MqttModule, CustomLoggerModule, IntegrationModule,
         BullModule.forRootAsync({
             imports: [ConfigModule],
             useFactory: (cs: ConfigService) => ({
@@ -31,7 +30,7 @@ import { MqttInboundService } from './listeners/mqtt-inbound.service';
             { name: APP_BULLMQ_QUEUES.DEVICE_CONTROL }
         ),
     ],
-    providers: [IntegrationManager, MqttGenericDriver, MqttInboundService],
-    exports: [IntegrationManager],
+    providers: [MqttInboundService],
+    exports: [],
 })
 export class AppModule {}

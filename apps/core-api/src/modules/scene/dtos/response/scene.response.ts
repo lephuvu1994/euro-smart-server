@@ -1,8 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import {
-    SceneTriggerType,
-    LocationTriggerEvent,
-} from '../request/scene-trigger.dto';
+import { SceneTriggerType } from '@app/common';
+import { LocationTriggerEvent } from '../request/scene-trigger.dto';
 
 export class SceneActionResponseDto {
     @ApiProperty()

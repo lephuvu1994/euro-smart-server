@@ -20,11 +20,7 @@ import { Type } from 'class-transformer';
  *
  * Scene: manual (triggers rỗng) hoặc automation (có trigger; executor chưa implement).
  */
-export enum SceneTriggerType {
-    SCHEDULE = 'SCHEDULE',
-    LOCATION = 'LOCATION',
-    DEVICE_STATE = 'DEVICE_STATE',
-}
+import { SceneTriggerType } from "@app/common";
 
 /** Logic gộp nhiều điều kiện thiết bị (thứ tự trong mảng được giữ, evaluate theo thứ tự) */
 export type ConditionLogic = 'and' | 'or';

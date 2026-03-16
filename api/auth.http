@@ -1,0 +1,62 @@
+# ==========================================
+# AUTH – Đăng ký, Đăng nhập, Quên mật khẩu
+# ==========================================
+# Base URL – đổi host/port nếu cần
+@baseUrl = https://nestjs-smarthome.onrender.com/v1
+@adminEmail = admin@bktech.com
+@adminPassword = AdminPassword123!
+@userEmail = cursor2@test.com
+@userPassword = Password@123!
+@userPhone = 0987654321
+
+###
+# Đăng ký user mới (Signup) – dùng Email
+# Body: email hoặc phone bắt buộc; password bắt buộc
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+    "identifier": "{{userEmail}}",
+    "password": "{{userPassword}}"
+}
+
+###
+# Đăng nhập Admin (lấy token cho các API admin)
+# @name loginAdmin
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+    "identifier": "{{adminEmail}}",
+    "password": "{{adminPassword}}"
+}
+
+###
+# Đăng nhập User (lấy token cho home, device, scene) – dùng Email
+# @name loginUser
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+    "identifier": "{{userEmail}}",
+    "password": "{{userPassword}}"
+}
+
+###
+# Quên mật khẩu – gửi OTP qua Email
+POST {{baseUrl}}/auth/forgot-password
+Content-Type: application/json
+
+{
+    "identifier": "{{userEmail}}"
+}
+
+###
+# Quên mật khẩu – gửi OTP qua SĐT (VietGuys SMS / Zalo / Voice OTP)
+POST {{baseUrl}}/auth/forgot-password
+Content-Type: application/json
+
+{
+    "identifier": "{{userPhone}}"
+}
+

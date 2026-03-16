@@ -1,10 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DatabaseService } from '@app/database';
 import { RedisService } from '@app/redis-cache';
-import {
-    LocationTriggerEvent,
-    SceneTriggerType,
-} from '../dtos/request/scene-trigger.dto';
+import { LocationTriggerEvent } from '../dtos/request/scene-trigger.dto';
+import { SceneTriggerType } from '@app/common';
 import { SceneService } from '../scene.service';
 
 const USER_HOME_STATE_KEY = 'scene:location:user_home_state';

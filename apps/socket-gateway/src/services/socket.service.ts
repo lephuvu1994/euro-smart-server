@@ -1,10 +1,45 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { Server } from 'socket.io';
+import { RedisService } from '@app/redis-cache';
+import { Redis } from 'ioredis';
 
 @Injectable()
-export class SocketService {
+export class SocketService implements OnModuleInit, OnModuleDestroy {
     private readonly logger = new Logger(SocketService.name);
     public server: Server = null; // Sẽ được gán từ Gateway
+    private subscriberClient: Redis;
+
+    constructor(private readonly redisService: RedisService) {}
+
+    onModuleInit() {
+        this.subscriberClient = this.redisService.createSubscriber();
+        this.subscriberClient.subscribe('socket:emit', (err) => {
+            if (err) {
+                this.logger.error('Failed to subscribe to Redis channel', err);
+            } else {
+                this.logger.log('Subscribed to Redis channel: socket:emit');
+            }
+        });
+
+        this.subscriberClient.on('message', (channel, message) => {
+            if (channel === 'socket:emit' && this.server) {
+                try {
+                    const payload = JSON.parse(message);
+                    if (payload.room && payload.event) {
+                        this.server.to(payload.room).emit(payload.event, payload.data);
+                    }
+                } catch (e) {
+                    this.logger.error(`Invalid socket emit payload: ${e.message}`);
+                }
+            }
+        });
+    }
+
+    onModuleDestroy() {
+        if (this.subscriberClient) {
+            this.subscriberClient.disconnect();
+        }
+    }
 
     // Map lưu trữ: UserId -> Danh sách Socket ID (Vì 1 user có thể login trên nhiều thiết bị)
     private readonly userConnections = new Map<string, string[]>();

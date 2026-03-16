@@ -4,7 +4,6 @@ import { RedisService } from '@app/redis-cache';
 import { Queue } from 'bullmq';
 import { InjectQueue } from '@nestjs/bullmq';
 import { APP_BULLMQ_QUEUES } from '@app/common';
-import { SocketGateway } from 'src/modules/socket/gateways/socket.gateway';
 import { DEVICE_JOBS } from '@app/common';
 import { DatabaseService } from '@app/database';
 
@@ -15,7 +14,6 @@ export class MqttInboundService implements OnApplicationBootstrap {
         private readonly databaseService: DatabaseService,
         private mqttService: MqttService,
         private redisService: RedisService,
-        private readonly socketGateway: SocketGateway,
         @InjectQueue(APP_BULLMQ_QUEUES.DEVICE_STATUS)
         private statusQueue: Queue,
         @InjectQueue(APP_BULLMQ_QUEUES.DEVICE_CONTROL)
@@ -71,9 +69,11 @@ export class MqttInboundService implements OnApplicationBootstrap {
             });
 
             // 5. Bắn Socket (Gửi fullState thay vì rawData)
-            this.socketGateway.server
-                .to(`device_${deviceToken}`) // Room theo Device Token
-                .emit('DEVICE_UPDATE', fullState);
+            this.redisService.publish('socket:emit', JSON.stringify({
+                room: `device_${deviceToken}`, // Room theo Device Token
+                event: 'DEVICE_UPDATE',
+                data: fullState
+            }));
 
             this.logger.log(
                 `Device ${deviceToken} status updated: ${JSON.stringify(rawData)}`
@@ -184,14 +184,16 @@ export class MqttInboundService implements OnApplicationBootstrap {
 
             // 5. Bắn Socket báo cho Frontend (Chỉ bắn 1 lần gói gọn các thay đổi)
             if (updates.length > 0) {
-                this.socketGateway.server
-                    .to(`device_${token}`) // Room theo Device Token
-                    .emit('DEVICE_UPDATE', {
+                this.redisService.publish('socket:emit', JSON.stringify({
+                    room: `device_${token}`, // Room theo Device Token
+                    event: 'DEVICE_UPDATE',
+                    data: {
                         deviceId: device.id,
                         token: token,
                         updates: updates, // Frontend sẽ loop qua mảng này để update từng UI component
                         timestamp: new Date(),
-                    });
+                    }
+                }));
 
                 // 6. Đẩy job đánh giá scene trigger DEVICE_STATE (cảm biến / trạng thái thiết bị)
                 await this.deviceControlQueue.add(

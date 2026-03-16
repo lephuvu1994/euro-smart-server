@@ -1,0 +1,466 @@
+# ==========================================
+# SCENE – API đầy đủ
+# ==========================================
+# Gồm: CRUD scene, chạy tay, trigger LOCATION (API báo vị trí), SCHEDULE (lập lịch), DEVICE_STATE (cảm biến/trạng thái thiết bị)
+# Chạy request "Login User" trước để lấy token.
+@baseUrl = http://localhost:3001/v1
+@userEmail = cursor2@test.com
+@userPassword = Password@123!
+@homeId = 00000000-0000-0000-0000-000000000000
+@sceneId = 00000000-0000-0000-0000-000000000000
+@deviceToken = your-device-token-here
+@deviceToken2 = sensor-temp-token
+@deviceToken3 = switch-a-token
+
+###
+# Login User (bắt buộc chạy trước)
+# @name loginUser
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+    "identifier": "{{userEmail}}",
+    "password": "{{userPassword}}"
+}
+
+# ==========================================
+# 1. SCENE CRUD & CHẠY TAY
+# ==========================================
+
+###
+# 1.1 Lấy danh sách scene theo nhà
+# @name getScenes
+GET {{baseUrl}}/scenes?homeId={{homeId}}
+Authorization: Bearer {{loginUser.response.body.data.accessToken}}
+
+###
+# 1.2 Lấy chi tiết một scene
+GET {{baseUrl}}/scenes/{{sceneId}}
+Authorization: Bearer {{loginUser.response.body.data.accessToken}}
+
+###
+# 1.3 Tạo scene chỉ chạy tay (không trigger – manual only)
+POST {{baseUrl}}/scenes
+Authorization: Bearer {{loginUser.response.body.data.accessToken}}
+Content-Type: application/json
+
+{
+    "homeId": "{{homeId}}",
+    "name": "Tối về nhà",
+    "active": true,
+    "actions": [
+        {
+            "deviceToken": "{{deviceToken}}",
+            "featureCode": "shutter_main",
+            "value": "OPEN"
+        },
+        {
+            "deviceToken": "{{deviceToken}}",
+            "featureCode": "security_lock",
+            "value": 0
+        }
+    ]
+}
+
+###
+# 1.4 Cập nhật scene (tên, active, triggers, actions)
+PATCH {{baseUrl}}/scenes/{{sceneId}}
+Authorization: Bearer {{loginUser.response.body.data.accessToken}}
+Content-Type: application/json
+
+{
+    "name": "Tối về nhà (đã sửa)",
+    "active": true,
+    "actions": [
+        {
+            "deviceToken": "{{deviceToken}}",
+            "featureCode": "shutter_main",
+            "value": "CLOSE"
+        }
+    ]
+}
+
+###
+# 1.5 Chạy scene thủ công (đẩy job thực thi actions)
+POST {{baseUrl}}/scenes/{{sceneId}}/run
+Authorization: Bearer {{loginUser.response.body.data.accessToken}}
+
+# ==========================================
+# 2. TRIGGER LOCATION – API báo vị trí (geofence)
+# ==========================================
+# App gọi sau mỗi lần cập nhật GPS. Server so khớp với Home (lat/lng/radius) → enter/leave → tự chạy scene có trigger LOCATION.
+
+###
+# 2.1 Báo vị trí user (kích hoạt scene LOCATION enter/leave)
+POST {{baseUrl}}/scenes/triggers/location
+Authorization: Bearer {{loginUser.response.body.data.accessToken}}
+Content-Type: application/json
+
+{
+    "latitude": 21.0285,
+    "longitude": 105.8542
+}
+
+###
+# 2.2 Tạo scene trigger LOCATION – vào nhà (enter)
+# Zone theo latitude/longitude/radius (geofence)
+POST {{baseUrl}}/scenes
+Authorization: Bearer {{loginUser.response.body.data.accessToken}}
+Content-Type: application/json
+
+{
+    "homeId": "{{homeId}}",
+    "name": "Về nhà tự bật đèn",
+    "active": true,
+    "triggers": [
+        {
+            "type": "LOCATION",
+            "locationConfig": {
+                "event": "enter",
+                "latitude": 21.0285,
+                "longitude": 105.8542,
+                "radius": 150
+            }
+        }
+    ],
+    "actions": [
+        {
+            "deviceToken": "{{deviceToken}}",
+            "featureCode": "shutter_main",
+            "value": "OPEN"
+        }
+    ]
+}
+
+###
+# 2.3 Tạo scene trigger LOCATION – ra khỏi nhà (leave)
+POST {{baseUrl}}/scenes
+Authorization: Bearer {{loginUser.response.body.data.accessToken}}
+Content-Type: application/json
+
+{
+    "homeId": "{{homeId}}",
+    "name": "Đi khỏi nhà tắt đèn",
+    "active": true,
+    "triggers": [
+        {
+            "type": "LOCATION",
+            "locationConfig": {
+                "event": "leave",
+                "latitude": 21.0285,
+                "longitude": 105.8542,
+                "radius": 150
+            }
+        }
+    ],
+    "actions": [
+        {
+            "deviceToken": "{{deviceToken}}",
+            "featureCode": "shutter_main",
+            "value": "CLOSE"
+        }
+    ]
+}
+
+###
+# 2.4 Cập nhật scene – thêm/sửa trigger LOCATION
+PATCH {{baseUrl}}/scenes/{{sceneId}}
+Authorization: Bearer {{loginUser.response.body.data.accessToken}}
+Content-Type: application/json
+
+{
+    "triggers": [
+        {
+            "type": "LOCATION",
+            "locationConfig": {
+                "event": "enter",
+                "zoneId": "{{homeId}}",
+                "radius": 200
+            }
+        }
+    ]
+}
+
+# ==========================================
+# 3. TRIGGER SCHEDULE – Lập lịch theo giờ
+# ==========================================
+# Server chạy cron mỗi phút, so khớp cron/at time + timezone → tự chạy scene. Không cần API gọi thêm.
+
+###
+# 3.1 Tạo scene trigger SCHEDULE – cron (vd: 18h00 mỗi ngày)
+POST {{baseUrl}}/scenes
+Authorization: Bearer {{loginUser.response.body.data.accessToken}}
+Content-Type: application/json
+
+{
+    "homeId": "{{homeId}}",
+    "name": "Tự bật đèn 18h",
+    "active": true,
+    "triggers": [
+        {
+            "type": "SCHEDULE",
+            "scheduleConfig": {
+                "cron": "0 18 * * *",
+                "timezone": "Asia/Ho_Chi_Minh"
+            }
+        }
+    ],
+    "actions": [
+        {
+            "deviceToken": "{{deviceToken}}",
+            "featureCode": "shutter_main",
+            "value": "OPEN"
+        }
+    ]
+}
+
+###
+# 3.2 Tạo scene trigger SCHEDULE – at time (giờ:phút cố định)
+POST {{baseUrl}}/scenes
+Authorization: Bearer {{loginUser.response.body.data.accessToken}}
+Content-Type: application/json
+
+{
+    "homeId": "{{homeId}}",
+    "name": "Bật đèn lúc 7h30 sáng",
+    "active": true,
+    "triggers": [
+        {
+            "type": "SCHEDULE",
+            "scheduleConfig": {
+                "hour": 7,
+                "minute": 30,
+                "timezone": "Asia/Ho_Chi_Minh"
+            }
+        }
+    ],
+    "actions": [
+        {
+            "deviceToken": "{{deviceToken}}",
+            "featureCode": "shutter_main",
+            "value": "OPEN"
+        }
+    ]
+}
+
+###
+# 3.3 Cập nhật scene – thêm/sửa trigger SCHEDULE
+PATCH {{baseUrl}}/scenes/{{sceneId}}
+Authorization: Bearer {{loginUser.response.body.data.accessToken}}
+Content-Type: application/json
+
+{
+    "triggers": [
+        {
+            "type": "SCHEDULE",
+            "scheduleConfig": {
+                "cron": "0 19 * * *",
+                "timezone": "Asia/Ho_Chi_Minh"
+            }
+        }
+    ]
+}
+
+# ==========================================
+# 4. TRIGGER DEVICE_STATE – Cảm biến / trạng thái thiết bị
+# ==========================================
+# Kích hoạt khi MQTT state/status cập nhật (thiết bị/cảm biến báo giá trị). Server evaluate conditions (and/or) từ Redis → tự chạy scene. Không cần API gọi tay.
+
+###
+# 4.1 Tạo scene trigger DEVICE_STATE – một điều kiện (1 thiết bị / 1 cảm biến)
+POST {{baseUrl}}/scenes
+Authorization: Bearer {{loginUser.response.body.data.accessToken}}
+Content-Type: application/json
+
+{
+    "homeId": "{{homeId}}",
+    "name": "Cảm biến chuyển động bật đèn",
+    "active": true,
+    "triggers": [
+        {
+            "type": "DEVICE_STATE",
+            "deviceStateConfig": {
+                "conditionLogic": "and",
+                "conditions": [
+                    {
+                        "deviceToken": "{{deviceToken}}",
+                        "featureCode": "motion",
+                        "value": 1,
+                        "operator": "eq"
+                    }
+                ]
+            }
+        }
+    ],
+    "actions": [
+        {
+            "deviceToken": "{{deviceToken}}",
+            "featureCode": "shutter_main",
+            "value": "OPEN"
+        }
+    ]
+}
+
+###
+# 4.2 Tạo scene trigger DEVICE_STATE – nhiều điều kiện AND (tất cả thỏa mới chạy)
+# Ví dụ: (chuyển động = 1) AND (nhiệt độ > 30) AND (công tắc A = bật)
+POST {{baseUrl}}/scenes
+Authorization: Bearer {{loginUser.response.body.data.accessToken}}
+Content-Type: application/json
+
+{
+    "homeId": "{{homeId}}",
+    "name": "Chuyển động + nóng thì bật quạt",
+    "active": true,
+    "triggers": [
+        {
+            "type": "DEVICE_STATE",
+            "deviceStateConfig": {
+                "conditionLogic": "and",
+                "conditions": [
+                    {
+                        "deviceToken": "{{deviceToken}}",
+                        "featureCode": "motion",
+                        "value": 1,
+                        "operator": "eq"
+                    },
+                    {
+                        "deviceToken": "{{deviceToken2}}",
+                        "featureCode": "temperature",
+                        "value": 30,
+                        "operator": "gt"
+                    },
+                    {
+                        "deviceToken": "{{deviceToken3}}",
+                        "featureCode": "sw1",
+                        "value": 1,
+                        "operator": "eq"
+                    }
+                ]
+            }
+        }
+    ],
+    "actions": [
+        {
+            "deviceToken": "{{deviceToken}}",
+            "featureCode": "shutter_main",
+            "value": "OPEN"
+        }
+    ]
+}
+
+###
+# 4.3 Tạo scene trigger DEVICE_STATE – nhiều điều kiện OR (một thỏa là chạy)
+POST {{baseUrl}}/scenes
+Authorization: Bearer {{loginUser.response.body.data.accessToken}}
+Content-Type: application/json
+
+{
+    "homeId": "{{homeId}}",
+    "name": "Cảm biến A hoặc B bật thì bật đèn",
+    "active": true,
+    "triggers": [
+        {
+            "type": "DEVICE_STATE",
+            "deviceStateConfig": {
+                "conditionLogic": "or",
+                "conditions": [
+                    {
+                        "deviceToken": "{{deviceToken}}",
+                        "featureCode": "motion",
+                        "value": 1,
+                        "operator": "eq"
+                    },
+                    {
+                        "deviceToken": "{{deviceToken2}}",
+                        "featureCode": "motion",
+                        "value": 1,
+                        "operator": "eq"
+                    }
+                ]
+            }
+        }
+    ],
+    "actions": [
+        {
+            "deviceToken": "{{deviceToken}}",
+            "featureCode": "shutter_main",
+            "value": "OPEN"
+        }
+    ]
+}
+
+###
+# 4.4 Cập nhật scene – thêm/sửa trigger DEVICE_STATE (operator: eq, ne, gt, gte, lt, lte)
+PATCH {{baseUrl}}/scenes/{{sceneId}}
+Authorization: Bearer {{loginUser.response.body.data.accessToken}}
+Content-Type: application/json
+
+{
+    "triggers": [
+        {
+            "type": "DEVICE_STATE",
+            "deviceStateConfig": {
+                "conditionLogic": "and",
+                "conditions": [
+                    {
+                        "deviceToken": "{{deviceToken}}",
+                        "featureCode": "temperature",
+                        "value": 28,
+                        "operator": "gte"
+                    }
+                ]
+            }
+        }
+    ]
+}
+
+# ==========================================
+# 5. SCENE KẾT HỢP NHIỀU LOẠI TRIGGER
+# ==========================================
+# Một scene có thể có nhiều trigger (vd: vừa schedule vừa location). Bất kỳ trigger nào kích hoạt đều chạy scene.
+
+###
+# 5.1 Tạo scene có cả SCHEDULE + LOCATION
+POST {{baseUrl}}/scenes
+Authorization: Bearer {{loginUser.response.body.data.accessToken}}
+Content-Type: application/json
+
+{
+    "homeId": "{{homeId}}",
+    "name": "18h hoặc về nhà thì bật đèn",
+    "active": true,
+    "triggers": [
+        {
+            "type": "SCHEDULE",
+            "scheduleConfig": {
+                "cron": "0 18 * * *",
+                "timezone": "Asia/Ho_Chi_Minh"
+            }
+        },
+        {
+            "type": "LOCATION",
+            "locationConfig": {
+                "event": "enter",
+                "latitude": 21.0285,
+                "longitude": 105.8542,
+                "radius": 150
+            }
+        }
+    ],
+    "actions": [
+        {
+            "deviceToken": "{{deviceToken}}",
+            "featureCode": "shutter_main",
+            "value": "OPEN"
+        }
+    ]
+}
+
+# ==========================================
+# GHI CHÚ
+# ==========================================
+# - CRUD: GET list (theo homeId), GET :sceneId, POST tạo, PATCH cập nhật. Hiện chưa có DELETE scene.
+# - SCHEDULE: server cron mỗi phút, so khớp scheduleConfig (cron hoặc hour+minute) + timezone → tự chạy. Không cần API khác.
+# - LOCATION: app gọi POST /scenes/triggers/location mỗi khi cập nhật GPS; server so khớp Home (lat/lng/radius) → enter/leave → tự chạy scene.
+# - DEVICE_STATE: kích hoạt khi thiết bị gửi state/status qua MQTT; server evaluate conditions (đọc giá trị từ Redis) and/or → tự chạy scene. Không cần API gọi tay.

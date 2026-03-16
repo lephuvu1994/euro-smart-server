@@ -1,0 +1,80 @@
+name: smarthome-dev-build
+
+on:
+  push:
+    branches: [main, staging, develop]
+  pull_request:
+    branches: [main, staging, develop]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    strategy:
+      matrix:
+        node-version: [22.x] # LTS version
+      fail-fast: false
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      # 👇 THÊM BƯỚC NÀY VÀO
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Get yarn cache directory path
+        id: yarn-cache-dir-path
+        run: echo "dir=$(yarn config get cacheFolder)" >> $GITHUB_OUTPUT
+
+      # 2. Cache lại folder đó
+      - name: Cache yarn dependencies
+        uses: actions/cache@v4
+        id: yarn-cache
+        with:
+          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
+          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
+
+      # 3. Cài đặt (Sửa --frozen-lockfile thành --immutable)
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      # 4. Các lệnh chạy script
+      - name: Run linting fix
+        run: yarn lint
+
+      - name: Run format fix
+        run: yarn format
+
+      # 👇 THÊM BƯỚC NÀY (Bắt buộc trước khi test)
+      - name: Generate Prisma Client
+        run: yarn prisma generate
+
+      - name: Run unit tests
+        run: yarn test
+      - name: Generate badges
+        run: yarn make-badges
+        continue-on-error: true
+
+      - name: Commit changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: 'chore: update badges and apply formatting/linting fixes'
+          file_pattern: '*.md *.ts *.js *.json'
+          commit_user_name: 'github-actions[bot]'
+          commit_user_email: 'github-actions[bot]@users.noreply.github.com'
+          commit_author: 'github-actions[bot] <github-actions[bot]@users.noreply.github.com>'
+          skip_dirty_check: false

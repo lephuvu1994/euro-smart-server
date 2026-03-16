@@ -3,14 +3,10 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Job, Queue } from 'bullmq';
 import { Logger } from '@nestjs/common';
-import { APP_BULLMQ_QUEUES } from '@app/common';
+import { APP_BULLMQ_QUEUES, DEVICE_JOBS, IntegrationManager, SceneTriggerType } from '@app/common';
 import { RedisService } from '@app/redis-cache';
-// import { SocketGateway } from 'src/modules/socket/gateways/socket.gateway';
-import { IntegrationManager } from '../../integration/registry/integration.manager';
 import { DatabaseService } from '@app/database';
-import { DEVICE_JOBS } from '@app/common';
-import { SceneTriggerType } from 'src/modules/scene/dtos/request/scene-trigger.dto';
-import { SceneService } from 'src/modules/scene/scene.service';
+import { SceneService } from '../../scene/scene.service';
 
 @Processor(APP_BULLMQ_QUEUES.DEVICE_CONTROL)
 export class DeviceControlProcessor extends WorkerHost {
@@ -21,7 +17,8 @@ export class DeviceControlProcessor extends WorkerHost {
         private readonly databaseService: DatabaseService,
         private readonly redisService: RedisService,
         private readonly sceneService: SceneService,
-        private readonly socketGateway: SocketGateway,
+        // TODO: Replace with event-based notification (e.g. Redis pub/sub) for cross-service WebSocket
+        // private readonly socketGateway: SocketGateway,
         @InjectQueue(APP_BULLMQ_QUEUES.DEVICE_CONTROL)
         private readonly deviceQueue: Queue
     ) {
@@ -94,16 +91,16 @@ export class DeviceControlProcessor extends WorkerHost {
             // 3. Thực thi qua Driver
             await driver.setValue(device, feature, value);
 
-            // 4. Thông báo cho người dùng qua WebSocket
-            this.socketGateway.server
-                .to(`device_${device.token}`)
-                .emit('COMMAND_SENT', {
-                    deviceId: device.id,
-                    featureCode,
-                    value,
-                    timestamp: new Date(),
-                    status: 'sent',
-                });
+            // TODO: Notify user via WebSocket (cross-service event)
+            // this.socketGateway.server
+            //     .to(`device_${device.token}`)
+            //     .emit('COMMAND_SENT', {
+            //         deviceId: device.id,
+            //         featureCode,
+            //         value,
+            //         timestamp: new Date(),
+            //         status: 'sent',
+            //     });
 
             this.logger.log(
                 `✅ [${driver.name}] Command dispatched for ${device.token}`
@@ -112,12 +109,13 @@ export class DeviceControlProcessor extends WorkerHost {
         } catch (error) {
             this.logger.error(`❌ Failed to control device: ${error.message}`);
 
-            this.socketGateway.server
-                .to(`device_${device.token}`)
-                .emit('COMMAND_ERROR', {
-                    deviceId: device.id,
-                    error: error.message,
-                });
+            // TODO: Notify user via WebSocket (cross-service event)
+            // this.socketGateway.server
+            //     .to(`device_${device.token}`)
+            //     .emit('COMMAND_ERROR', {
+            //         deviceId: device.id,
+            //         error: error.message,
+            //     });
 
             throw error; // Ném lỗi để BullMQ thực hiện retry (theo config attempts)
         }
@@ -180,17 +178,17 @@ export class DeviceControlProcessor extends WorkerHost {
             // 3. Thực thi qua Driver
             await driver.setValueBulk(device, newFeatures);
 
-            // 4. Thông báo cho người dùng qua WebSocket
-            this.socketGateway.server
-                .to(`device_${device.token}`)
-                .emit('COMMAND_SENT', {
-                    deviceId: device.id,
-                    values: featureMQTTPayloads.map(f => {
-                        return { code: f.featureCode, value: f.value };
-                    }),
-                    timestamp: new Date(),
-                    status: 'sent',
-                });
+            // TODO: Notify user via WebSocket (cross-service event)
+            // this.socketGateway.server
+            //     .to(`device_${device.token}`)
+            //     .emit('COMMAND_SENT', {
+            //         deviceId: device.id,
+            //         values: featureMQTTPayloads.map(f => {
+            //             return { code: f.featureCode, value: f.value };
+            //         }),
+            //         timestamp: new Date(),
+            //         status: 'sent',
+            //     });
 
             this.logger.log(
                 `✅ [${driver.name}] Command dispatched for ${device.token}`
@@ -199,12 +197,13 @@ export class DeviceControlProcessor extends WorkerHost {
         } catch (error) {
             this.logger.error(`❌ Failed to control device: ${error.message}`);
 
-            this.socketGateway.server
-                .to(`device_${device.token}`)
-                .emit('COMMAND_ERROR', {
-                    deviceId: device.id,
-                    error: error.message,
-                });
+            // TODO: Notify user via WebSocket (cross-service event)
+            // this.socketGateway.server
+            //     .to(`device_${device.token}`)
+            //     .emit('COMMAND_ERROR', {
+            //         deviceId: device.id,
+            //         error: error.message,
+            //     });
 
             throw error; // Ném lỗi để BullMQ thực hiện retry (theo config attempts)
         }
@@ -314,17 +313,18 @@ export class DeviceControlProcessor extends WorkerHost {
         try {
             const driver = this.integrationManager.getDriver(device.protocol);
             await driver.setValueBulk(device, newFeatures);
-            this.socketGateway.server
-                .to(`device_${device.token}`)
-                .emit('COMMAND_SENT', {
-                    deviceId: device.id,
-                    values: newFeatures.map(f => ({
-                        code: f.code,
-                        value: f.lastValue ?? f.lastValueString,
-                    })),
-                    timestamp: new Date(),
-                    status: 'sent',
-                });
+            // TODO: Notify user via WebSocket (cross-service event)
+            // this.socketGateway.server
+            //     .to(`device_${device.token}`)
+            //     .emit('COMMAND_SENT', {
+            //         deviceId: device.id,
+            //         values: newFeatures.map(f => ({
+            //             code: f.code,
+            //             value: f.lastValue ?? f.lastValueString,
+            //         })),
+            //         timestamp: new Date(),
+            //         status: 'sent',
+            //     });
             this.logger.log(
                 `✅ Scene device ${deviceToken}: ${newFeatures.length} feature(s)`
             );
@@ -337,12 +337,13 @@ export class DeviceControlProcessor extends WorkerHost {
             this.logger.error(
                 `❌ Scene device ${deviceToken}: ${err?.message}`
             );
-            this.socketGateway.server
-                .to(`device_${device.token}`)
-                .emit('COMMAND_ERROR', {
-                    deviceId: device.id,
-                    error: err?.message,
-                });
+            // TODO: Notify user via WebSocket (cross-service event)
+            // this.socketGateway.server
+            //     .to(`device_${device.token}`)
+            //     .emit('COMMAND_ERROR', {
+            //         deviceId: device.id,
+            //         error: err?.message,
+            //     });
             throw err;
         }
     }

@@ -7,11 +7,11 @@ import VietguysConfig from './vietguys.config';
 import SmsConfig from './sms.config';
 
 export default [
-    AppConfig,
-    RedisConfig,
-    AuthConfig,
-    DocConfig,
-    MCPConfig,
-    VietguysConfig,
-    SmsConfig,
+  AppConfig,
+  RedisConfig,
+  AuthConfig,
+  DocConfig,
+  MCPConfig,
+  VietguysConfig,
+  SmsConfig,
 ];

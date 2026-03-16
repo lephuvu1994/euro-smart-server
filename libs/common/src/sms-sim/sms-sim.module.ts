@@ -3,7 +3,7 @@ import { SmsSimService } from './sms-sim.service';
 
 @Global()
 @Module({
-    providers: [SmsSimService],
-    exports: [SmsSimService],
+  providers: [SmsSimService],
+  exports: [SmsSimService],
 })
 export class SmsSimModule {}

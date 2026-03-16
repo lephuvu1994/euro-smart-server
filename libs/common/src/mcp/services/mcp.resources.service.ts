@@ -3,15 +3,15 @@ import { MCPResource, MCPResourceTemplate } from '../mcp.decorators';
 
 @Injectable()
 export class MCPResourcesService {
-    /**
-     * Static resource - API documentation
-     */
-    @MCPResource('docs://api/overview')
-    async getApiOverview() {
-        return {
-            uri: 'docs://api/overview',
-            mimeType: 'text/markdown',
-            text: `# NestJS Starter API
+  /**
+   * Static resource - API documentation
+   */
+  @MCPResource('docs://api/overview')
+  async getApiOverview() {
+    return {
+      uri: 'docs://api/overview',
+      mimeType: 'text/markdown',
+      text: `# NestJS Starter API
 
 This is a production-ready NestJS boilerplate with comprehensive features:
 
@@ -32,44 +32,44 @@ This is a production-ready NestJS boilerplate with comprehensive features:
 - \`/v1/post/*\` - Post management
 - \`/health\` - Health check endpoint
 - \`/docs\` - API documentation`,
-        };
-    }
+    };
+  }
 
-    /**
-     * Static resource - Server status
-     */
-    @MCPResource('status://server')
-    async getServerStatus() {
-        return {
-            uri: 'status://server',
-            mimeType: 'application/json',
-            text: JSON.stringify(
-                {
-                    status: 'running',
-                    environment: process.env.APP_ENV || 'development',
-                    nodeVersion: process.version,
-                    platform: process.platform,
-                    uptime: process.uptime(),
-                    timestamp: new Date().toISOString(),
-                },
-                null,
-                2
-            ),
-        };
-    }
+  /**
+   * Static resource - Server status
+   */
+  @MCPResource('status://server')
+  async getServerStatus() {
+    return {
+      uri: 'status://server',
+      mimeType: 'application/json',
+      text: JSON.stringify(
+        {
+          status: 'running',
+          environment: process.env.APP_ENV || 'development',
+          nodeVersion: process.version,
+          platform: process.platform,
+          uptime: process.uptime(),
+          timestamp: new Date().toISOString(),
+        },
+        null,
+        2,
+      ),
+    };
+  }
 
-    /**
-     * Dynamic resource template - Documentation by section
-     */
-    @MCPResourceTemplate({
-        uriTemplate: 'docs://api/{section}',
-        name: 'API Documentation',
-        description: 'Access API documentation by section (auth, user, post)',
-        mimeType: 'text/markdown',
-    })
-    async getDocumentation(variables: { section: string }) {
-        const docs: Record<string, string> = {
-            auth: `# Authentication
+  /**
+   * Dynamic resource template - Documentation by section
+   */
+  @MCPResourceTemplate({
+    uriTemplate: 'docs://api/{section}',
+    name: 'API Documentation',
+    description: 'Access API documentation by section (auth, user, post)',
+    mimeType: 'text/markdown',
+  })
+  async getDocumentation(variables: { section: string }) {
+    const docs: Record<string, string> = {
+      auth: `# Authentication
 
 ## POST /v1/auth/login
 Login with email and password
@@ -90,7 +90,7 @@ Login with email and password
 }
 \`\`\``,
 
-            user: `# User Management
+      user: `# User Management
 
 ## GET /v1/user/profile
 Get current user profile (requires authentication)
@@ -110,7 +110,7 @@ Authorization: Bearer <access_token>
 }
 \`\`\``,
 
-            post: `# Post Management
+      post: `# Post Management
 
 ## GET /v1/post
 List all posts
@@ -130,43 +130,43 @@ List all posts
   }
 }
 \`\`\``,
-        };
+    };
 
-        const content =
-            docs[variables.section] ||
-            `# Unknown Section\n\nSection '${variables.section}' not found.`;
+    const content =
+      docs[variables.section] ||
+      `# Unknown Section\n\nSection '${variables.section}' not found.`;
 
-        return {
-            uri: `docs://api/${variables.section}`,
-            mimeType: 'text/markdown',
-            text: content,
-        };
-    }
+    return {
+      uri: `docs://api/${variables.section}`,
+      mimeType: 'text/markdown',
+      text: content,
+    };
+  }
 
-    /**
-     * Dynamic resource template - Environment info
-     */
-    @MCPResourceTemplate({
-        uriTemplate: 'config://{key}',
-        name: 'Configuration',
-        description: 'Access configuration values by key (non-sensitive only)',
-        mimeType: 'text/plain',
-    })
-    async getConfig(variables: { key: string }) {
-        const allowedConfigs: Record<string, string> = {
-            nodeVersion: process.version,
-            platform: process.platform,
-            environment: process.env.APP_ENV || 'development',
-            port: process.env.HTTP_PORT || '3001',
-        };
+  /**
+   * Dynamic resource template - Environment info
+   */
+  @MCPResourceTemplate({
+    uriTemplate: 'config://{key}',
+    name: 'Configuration',
+    description: 'Access configuration values by key (non-sensitive only)',
+    mimeType: 'text/plain',
+  })
+  async getConfig(variables: { key: string }) {
+    const allowedConfigs: Record<string, string> = {
+      nodeVersion: process.version,
+      platform: process.platform,
+      environment: process.env.APP_ENV || 'development',
+      port: process.env.HTTP_PORT || '3001',
+    };
 
-        const value =
-            allowedConfigs[variables.key] || 'Config not found or not allowed';
+    const value =
+      allowedConfigs[variables.key] || 'Config not found or not allowed';
 
-        return {
-            uri: `config://${variables.key}`,
-            mimeType: 'text/plain',
-            text: value,
-        };
-    }
+    return {
+      uri: `config://${variables.key}`,
+      mimeType: 'text/plain',
+      text: value,
+    };
+  }
 }

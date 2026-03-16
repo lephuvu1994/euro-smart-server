@@ -24,22 +24,55 @@ import { HomeModule } from './modules/home/home.module';
 import { SceneModule } from './modules/scene/scene.module';
 
 @Module({
-    imports: [
-        ConfigModule.forRoot({ load: configs, isGlobal: true, cache: true, envFilePath: ['.env'], expandVariables: true }),
-        DatabaseModule, RedisModule, AuthModule, VietguysModule, SmsSimModule, HelperModule,
-        CustomLoggerModule, RequestModule, ResponseModule,
-        CacheModule.registerAsync({
-            imports: [ConfigModule],
-            useFactory: (cs: ConfigService) => ({ isGlobal: true, store: redisStore, host: cs.get('redis.host'), port: cs.get('redis.port'), password: cs.get('redis.password'), tls: cs.get('redis.tls'), ttl: 5000 }),
-            inject: [ConfigService],
-        }),
-        BullModule.forRootAsync({
-            imports: [ConfigModule],
-            useFactory: (cs: ConfigService) => ({ connection: { host: cs.get('redis.host'), port: Number(cs.get('redis.port')), password: cs.get('redis.password'), maxRetriesPerRequest: null } }),
-            inject: [ConfigService],
-        }),
-        TerminusModule, UserModule, AdminModule, DeviceModule, HomeModule, SceneModule,
-    ],
-    controllers: [HealthController],
+  imports: [
+    ConfigModule.forRoot({
+      load: configs,
+      isGlobal: true,
+      cache: true,
+      envFilePath: ['.env'],
+      expandVariables: true,
+    }),
+    DatabaseModule,
+    RedisModule,
+    AuthModule,
+    VietguysModule,
+    SmsSimModule,
+    HelperModule,
+    CustomLoggerModule,
+    RequestModule,
+    ResponseModule,
+    CacheModule.registerAsync({
+      imports: [ConfigModule],
+      useFactory: (cs: ConfigService) => ({
+        isGlobal: true,
+        store: redisStore,
+        host: cs.get('redis.host'),
+        port: cs.get('redis.port'),
+        password: cs.get('redis.password'),
+        tls: cs.get('redis.tls'),
+        ttl: 5000,
+      }),
+      inject: [ConfigService],
+    }),
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: (cs: ConfigService) => ({
+        connection: {
+          host: cs.get('redis.host'),
+          port: Number(cs.get('redis.port')),
+          password: cs.get('redis.password'),
+          maxRetriesPerRequest: null,
+        },
+      }),
+      inject: [ConfigService],
+    }),
+    TerminusModule,
+    UserModule,
+    AdminModule,
+    DeviceModule,
+    HomeModule,
+    SceneModule,
+  ],
+  controllers: [HealthController],
 })
 export class AppModule {}

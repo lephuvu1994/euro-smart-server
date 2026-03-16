@@ -27,13 +27,13 @@ import { createLoggerConfig } from './services/logger.service';
  */
 @Global()
 @Module({
-    imports: [
-        LoggerModule.forRootAsync({
-            imports: [ConfigModule],
-            inject: [ConfigService],
-            useFactory: createLoggerConfig,
-        }),
-    ],
-    exports: [LoggerModule],
+  imports: [
+    LoggerModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: createLoggerConfig,
+    }),
+  ],
+  exports: [LoggerModule],
 })
 export class CustomLoggerModule {}

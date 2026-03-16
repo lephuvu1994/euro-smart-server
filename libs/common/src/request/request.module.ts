@@ -8,38 +8,38 @@ import { RolesGuard } from './guards/roles.guard';
 import { RequestLoggerMiddleware } from './middlewares/request.middleware';
 
 @Module({
-    imports: [
-        ThrottlerModule.forRootAsync({
-            imports: [ConfigModule],
-            useFactory: (configService: ConfigService) => ({
-                throttlers: [
-                    {
-                        ttl: configService.get('app.throttle.ttl'),
-                        limit: configService.get('app.throttle.limit'),
-                    },
-                ],
-            }),
-            inject: [ConfigService],
-        }),
-    ],
-    exports: [],
-    providers: [
-        {
-            provide: APP_GUARD,
-            useClass: ThrottlerGuard,
-        },
-        {
-            provide: APP_GUARD,
-            useClass: JwtAccessGuard,
-        },
-        {
-            provide: APP_GUARD,
-            useClass: RolesGuard,
-        },
-    ],
+  imports: [
+    ThrottlerModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: (configService: ConfigService) => ({
+        throttlers: [
+          {
+            ttl: configService.get('app.throttle.ttl'),
+            limit: configService.get('app.throttle.limit'),
+          },
+        ],
+      }),
+      inject: [ConfigService],
+    }),
+  ],
+  exports: [],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: JwtAccessGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RolesGuard,
+    },
+  ],
 })
 export class RequestModule {
-    configure(consumer: MiddlewareConsumer) {
-        consumer.apply(RequestLoggerMiddleware).forRoutes('*');
-    }
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(RequestLoggerMiddleware).forRoutes('*');
+  }
 }

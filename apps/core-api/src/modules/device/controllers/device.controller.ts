@@ -1,13 +1,13 @@
 import {
-    Controller,
-    Post,
-    Body,
-    Param,
-    Req,
-    UseGuards,
-    Get,
-    Query,
-    HttpStatus,
+  Controller,
+  Post,
+  Body,
+  Param,
+  Req,
+  UseGuards,
+  Get,
+  Query,
+  HttpStatus,
 } from '@nestjs/common';
 import { RegisterDeviceDto } from '../dto/register-device.dto';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -24,122 +24,122 @@ import { GetDevicesDto } from '../dto/get-devices.dto';
 @ApiBearerAuth('accessToken')
 @Controller('/devices')
 export class DeviceController {
-    constructor(
-        private readonly provisioningService: DeviceProvisioningService,
-        private readonly deviceControlService: DeviceControlService,
-        private readonly deviceService: DeviceService
-    ) {}
+  constructor(
+    private readonly provisioningService: DeviceProvisioningService,
+    private readonly deviceControlService: DeviceControlService,
+    private readonly deviceService: DeviceService,
+  ) {}
 
-    @Post('register')
-    @ApiOperation({
-        summary:
-            'Đăng ký và chiếm quyền sở hữu thiết bị (Claim) — dùng cho cả BLE và AP mode',
-    })
-    async registerDevice(@Req() req: any, @Body() dto: RegisterDeviceDto) {
-        return await this.provisioningService.registerAndClaim(
-            req.user.userId,
-            dto
-        );
-    }
+  @Post('register')
+  @ApiOperation({
+    summary:
+      'Đăng ký và chiếm quyền sở hữu thiết bị (Claim) — dùng cho cả BLE và AP mode',
+  })
+  async registerDevice(@Req() req: any, @Body() dto: RegisterDeviceDto) {
+    return await this.provisioningService.registerAndClaim(
+      req.user.userId,
+      dto,
+    );
+  }
 
-    /**
-     * API: Điều khiển thiết bị (Bật/Tắt, Điều chỉnh độ sáng, đóng mở cửa...)
-     * POST /v1/devices/:deviceToken/features/:featureCode/setValue
-     */
-    @Post(':deviceToken/features/:featureCode/setValue')
-    @ApiOperation({
-        summary:
-            'Điều khiển thiết bị (Bật/Tắt, Điều chỉnh độ sáng, đóng mở cửa...)',
-        description:
-            'Điều khiển thiết bị (Bật/Tắt, Điều chỉnh độ sáng, đóng mở cửa...)',
-    })
-    async setFeatureValue(
-        @Param('deviceToken') deviceToken: string,
-        @Param('featureCode') featureCode: string,
-        @Body() body: SetFeatureValueDto,
-        @Req() req: any
-    ) {
-        const userId = req.user.userId;
-        return await this.deviceControlService.sendControlCommand(
-            deviceToken,
-            userId,
-            featureCode,
-            body.value
-        );
-    }
+  /**
+   * API: Điều khiển thiết bị (Bật/Tắt, Điều chỉnh độ sáng, đóng mở cửa...)
+   * POST /v1/devices/:deviceToken/features/:featureCode/setValue
+   */
+  @Post(':deviceToken/features/:featureCode/setValue')
+  @ApiOperation({
+    summary:
+      'Điều khiển thiết bị (Bật/Tắt, Điều chỉnh độ sáng, đóng mở cửa...)',
+    description:
+      'Điều khiển thiết bị (Bật/Tắt, Điều chỉnh độ sáng, đóng mở cửa...)',
+  })
+  async setFeatureValue(
+    @Param('deviceToken') deviceToken: string,
+    @Param('featureCode') featureCode: string,
+    @Body() body: SetFeatureValueDto,
+    @Req() req: any,
+  ) {
+    const userId = req.user.userId;
+    return await this.deviceControlService.sendControlCommand(
+      deviceToken,
+      userId,
+      featureCode,
+      body.value,
+    );
+  }
 
-    /**
-     * API: Điều khiển thiết bị (Bật/Tắt, Điều chỉnh độ sáng, đóng mở cửa...)
-     * POST /v1/devices/:deviceToken/features/:featureCode/setValue
-     */
-    @Post(':deviceToken/setValue')
-    @ApiOperation({
-        summary:
-            'Điều khiển thiết bị (Bật/Tắt, Điều chỉnh độ sáng, đóng mở cửa...)',
-        description:
-            'Điều khiển thiết bị (Bật/Tắt, Điều chỉnh độ sáng, đóng mở cửa...)',
-    })
-    async setDeviceValue(
-        @Param('deviceToken') deviceToken: string,
-        @Body() body: SetFeatureValueDto,
-        @Req() req: any
-    ) {
-        const userId = req.user.userId;
-        return await this.deviceControlService.sendDeviceValueCommand(
-            deviceToken,
-            userId,
-            body.value
-        );
-    }
+  /**
+   * API: Điều khiển thiết bị (Bật/Tắt, Điều chỉnh độ sáng, đóng mở cửa...)
+   * POST /v1/devices/:deviceToken/features/:featureCode/setValue
+   */
+  @Post(':deviceToken/setValue')
+  @ApiOperation({
+    summary:
+      'Điều khiển thiết bị (Bật/Tắt, Điều chỉnh độ sáng, đóng mở cửa...)',
+    description:
+      'Điều khiển thiết bị (Bật/Tắt, Điều chỉnh độ sáng, đóng mở cửa...)',
+  })
+  async setDeviceValue(
+    @Param('deviceToken') deviceToken: string,
+    @Body() body: SetFeatureValueDto,
+    @Req() req: any,
+  ) {
+    const userId = req.user.userId;
+    return await this.deviceControlService.sendDeviceValueCommand(
+      deviceToken,
+      userId,
+      body.value,
+    );
+  }
 
-    /**
-     * API: Siri Sync — get all devices + scenes for Siri entity registration
-     * GET /v1/devices/siri-sync
-     * MUST be before :id route to avoid route conflict
-     */
-    @Get('siri-sync')
-    @ApiOperation({
-        summary: 'Get all devices + scenes for Siri/Google Assistant sync',
-    })
-    async getSiriSync(@Req() req: any) {
-        const userId = req.user.userId || req.user.id;
-        const result = await this.deviceService.getSiriSyncData(userId);
+  /**
+   * API: Siri Sync — get all devices + scenes for Siri entity registration
+   * GET /v1/devices/siri-sync
+   * MUST be before :id route to avoid route conflict
+   */
+  @Get('siri-sync')
+  @ApiOperation({
+    summary: 'Get all devices + scenes for Siri/Google Assistant sync',
+  })
+  async getSiriSync(@Req() req: any) {
+    const userId = req.user.userId || req.user.id;
+    const result = await this.deviceService.getSiriSyncData(userId);
 
-        return {
-            statusCode: HttpStatus.OK,
-            data: result,
-        };
-    }
+    return {
+      statusCode: HttpStatus.OK,
+      data: result,
+    };
+  }
 
-    /**
-     * API: Lấy danh sách thiết bị của User (có phân trang)
-     * GET /v1/devices?page=1&limit=10
-     */
-    @Get()
-    async getMyDevices(@Req() req: any, @Query() query: GetDevicesDto) {
-        const userId = req.user.id;
-        const result = await this.deviceService.getUserDevices(userId, query);
+  /**
+   * API: Lấy danh sách thiết bị của User (có phân trang)
+   * GET /v1/devices?page=1&limit=10
+   */
+  @Get()
+  async getMyDevices(@Req() req: any, @Query() query: GetDevicesDto) {
+    const userId = req.user.id;
+    const result = await this.deviceService.getUserDevices(userId, query);
 
-        return {
-            statusCode: HttpStatus.OK,
-            message: 'Lấy danh sách thiết bị thành công',
-            data: result.data,
-            meta: result.meta,
-        };
-    }
-    /**
-     * API: Lấy chi tiết một thiết bị
-     * GET /v1/devices/:id
-     */
-    @Get(':id')
-    async getDeviceDetail(@Param('id') id: string, @Req() req: any) {
-        const userId = req.user.id;
-        const device = await this.deviceService.getDeviceDetail(id, userId);
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Lấy danh sách thiết bị thành công',
+      data: result.data,
+      meta: result.meta,
+    };
+  }
+  /**
+   * API: Lấy chi tiết một thiết bị
+   * GET /v1/devices/:id
+   */
+  @Get(':id')
+  async getDeviceDetail(@Param('id') id: string, @Req() req: any) {
+    const userId = req.user.id;
+    const device = await this.deviceService.getDeviceDetail(id, userId);
 
-        return {
-            statusCode: HttpStatus.OK,
-            message: 'Lấy thông tin thiết bị thành công',
-            data: { device },
-        };
-    }
+    return {
+      statusCode: HttpStatus.OK,
+      message: 'Lấy thông tin thiết bị thành công',
+      data: { device },
+    };
+  }
 }

@@ -8,9 +8,9 @@ import { UserPublicController } from './controllers/user.public.controller';
 import { UserService } from './services/user.service';
 
 @Module({
-    imports: [HelperModule, DatabaseModule],
-    controllers: [UserAdminController, UserPublicController],
-    providers: [UserService],
-    exports: [UserService],
+  imports: [HelperModule, DatabaseModule],
+  controllers: [UserAdminController, UserPublicController],
+  providers: [UserService],
+  exports: [UserService],
 })
 export class UserModule {}

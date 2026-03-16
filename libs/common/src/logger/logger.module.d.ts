@@ -1,2 +1,1 @@
-export declare class CustomLoggerModule {
-}
+export declare class CustomLoggerModule {}

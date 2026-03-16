@@ -6,34 +6,34 @@ import { IsNotEmpty, IsString, ValidateNested } from 'class-validator';
 import { UserResponseDto } from '../../../dtos/user.response.dto';
 
 export class TokenDto {
-    @ApiProperty({
-        example: faker.string.alphanumeric({ length: 64 }),
-        required: true,
-    })
-    @Expose()
-    @IsString()
-    @IsNotEmpty()
-    accessToken: string;
+  @ApiProperty({
+    example: faker.string.alphanumeric({ length: 64 }),
+    required: true,
+  })
+  @Expose()
+  @IsString()
+  @IsNotEmpty()
+  accessToken: string;
 
-    @ApiProperty({
-        example: faker.string.alphanumeric({ length: 64 }),
-        required: true,
-    })
-    @Expose()
-    @IsString()
-    @IsNotEmpty()
-    refreshToken: string;
+  @ApiProperty({
+    example: faker.string.alphanumeric({ length: 64 }),
+    required: true,
+  })
+  @Expose()
+  @IsString()
+  @IsNotEmpty()
+  refreshToken: string;
 }
 
 export class AuthResponseDto extends TokenDto {
-    @ApiProperty({
-        type: () => UserResponseDto,
-        required: true,
-    })
-    @Expose()
-    @Type(() => UserResponseDto)
-    @ValidateNested()
-    user: UserResponseDto;
+  @ApiProperty({
+    type: () => UserResponseDto,
+    required: true,
+  })
+  @Expose()
+  @Type(() => UserResponseDto)
+  @ValidateNested()
+  user: UserResponseDto;
 }
 
 export class AuthRefreshResponseDto extends TokenDto {}

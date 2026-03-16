@@ -1,3 +1,3 @@
 export declare class ForgotPasswordDto {
-    identifier: string;
+  identifier: string;
 }

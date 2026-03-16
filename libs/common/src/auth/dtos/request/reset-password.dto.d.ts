@@ -1,5 +1,5 @@
 export declare class ResetPasswordDto {
-    identifier: string;
-    resetToken: string;
-    newPassword: string;
+  identifier: string;
+  resetToken: string;
+  newPassword: string;
 }

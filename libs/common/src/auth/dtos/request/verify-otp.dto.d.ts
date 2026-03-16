@@ -1,4 +1,4 @@
 export declare class VerifyOtpDto {
-    identifier: string;
-    otp: string;
+  identifier: string;
+  otp: string;
 }

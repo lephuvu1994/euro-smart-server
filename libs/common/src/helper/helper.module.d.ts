@@ -1,2 +1,1 @@
-export declare class HelperModule {
-}
+export declare class HelperModule {}

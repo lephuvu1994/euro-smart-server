@@ -7,21 +7,21 @@ import { PublicRoute } from '@app/common/request/decorators/request.public.decor
 
 @ApiTags('health')
 @Controller({
-    version: VERSION_NEUTRAL,
-    path: '/health',
+  version: VERSION_NEUTRAL,
+  path: '/health',
 })
 export class HealthController {
-    constructor(
-        private readonly healthCheckService: HealthCheckService,
-        private readonly databaseService: DatabaseService
-    ) {}
+  constructor(
+    private readonly healthCheckService: HealthCheckService,
+    private readonly databaseService: DatabaseService,
+  ) {}
 
-    @Get()
-    @HealthCheck()
-    @PublicRoute()
-    public async getHealth() {
-        return this.healthCheckService.check([
-            () => this.databaseService.isHealthy(),
-        ]);
-    }
+  @Get()
+  @HealthCheck()
+  @PublicRoute()
+  public async getHealth() {
+    return this.healthCheckService.check([
+      () => this.databaseService.isHealthy(),
+    ]);
+  }
 }

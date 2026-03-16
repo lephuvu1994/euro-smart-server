@@ -4,24 +4,24 @@ import { PrismaClient } from '@prisma/client';
 
 @Injectable()
 export class DatabaseService extends PrismaClient implements OnModuleInit {
-    async onModuleInit() {
-        await this.$connect();
-    }
+  async onModuleInit() {
+    await this.$connect();
+  }
 
-    async isHealthy(): Promise<HealthIndicatorResult> {
-        try {
-            await this.$queryRaw`SELECT 1`;
-            return Promise.resolve({
-                prisma: {
-                    status: 'up',
-                },
-            });
-        } catch {
-            return Promise.resolve({
-                prisma: {
-                    status: 'down',
-                },
-            });
-        }
+  async isHealthy(): Promise<HealthIndicatorResult> {
+    try {
+      await this.$queryRaw`SELECT 1`;
+      return Promise.resolve({
+        prisma: {
+          status: 'up',
+        },
+      });
+    } catch {
+      return Promise.resolve({
+        prisma: {
+          status: 'down',
+        },
+      });
     }
+  }
 }

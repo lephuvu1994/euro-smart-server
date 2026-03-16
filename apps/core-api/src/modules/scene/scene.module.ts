@@ -9,19 +9,15 @@ import { SceneTriggerLocationService } from './services/scene-trigger-location.s
 import { SceneService } from './scene.service';
 
 @Module({
-    imports: [
-        DatabaseModule,
-        RedisModule,
-        BullModule.registerQueue({
-            name: APP_BULLMQ_QUEUES.DEVICE_CONTROL,
-        }),
-    ],
-    controllers: [SceneController],
-    providers: [
-        SceneService,
-        SceneScheduleService,
-        SceneTriggerLocationService,
-    ],
-    exports: [SceneService],
+  imports: [
+    DatabaseModule,
+    RedisModule,
+    BullModule.registerQueue({
+      name: APP_BULLMQ_QUEUES.DEVICE_CONTROL,
+    }),
+  ],
+  controllers: [SceneController],
+  providers: [SceneService, SceneScheduleService, SceneTriggerLocationService],
+  exports: [SceneService],
 })
 export class SceneModule {}

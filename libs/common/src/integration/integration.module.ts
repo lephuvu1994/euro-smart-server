@@ -6,8 +6,8 @@ import { ZigbeeGenericDriver } from './drivers/zigbee.generic.driver';
 
 @Global()
 @Module({
-    imports: [MqttModule],
-    providers: [IntegrationManager, MqttGenericDriver, ZigbeeGenericDriver],
-    exports: [IntegrationManager],
+  imports: [MqttModule],
+  providers: [IntegrationManager, MqttGenericDriver, ZigbeeGenericDriver],
+  exports: [IntegrationManager],
 })
 export class IntegrationModule {}

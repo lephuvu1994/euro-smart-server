@@ -1,11 +1,17 @@
 import { ConfigService } from '@nestjs/config';
 import { Strategy } from 'passport-jwt';
-declare const JwtAccessStrategy_base: new (...args: [opt: import("passport-jwt").StrategyOptionsWithRequest] | [opt: import("passport-jwt").StrategyOptionsWithoutRequest]) => Strategy & {
-    validate(...args: any[]): unknown;
+declare const JwtAccessStrategy_base: new (
+  ...args:
+    | [opt: import('passport-jwt').StrategyOptionsWithRequest]
+    | [opt: import('passport-jwt').StrategyOptionsWithoutRequest]
+) => Strategy & {
+  validate(...args: any[]): unknown;
 };
 export declare class JwtAccessStrategy extends JwtAccessStrategy_base {
-    private configService;
-    constructor(configService: ConfigService);
-    validate(payload: Record<string, string | number>): Promise<Record<string, string | number>>;
+  private configService;
+  constructor(configService: ConfigService);
+  validate(
+    payload: Record<string, string | number>,
+  ): Promise<Record<string, string | number>>;
 }
 export {};

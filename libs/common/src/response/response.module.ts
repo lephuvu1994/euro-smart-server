@@ -7,16 +7,16 @@ import { ResponseExceptionFilter } from './filters/response.exception.filter';
 import { ResponseInterceptor } from './interceptors/response.interceptor';
 
 @Module({
-    imports: [MessageModule],
-    providers: [
-        {
-            provide: APP_INTERCEPTOR,
-            useClass: ResponseInterceptor,
-        },
-        {
-            provide: APP_FILTER,
-            useClass: ResponseExceptionFilter,
-        },
-    ],
+  imports: [MessageModule],
+  providers: [
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: ResponseInterceptor,
+    },
+    {
+      provide: APP_FILTER,
+      useClass: ResponseExceptionFilter,
+    },
+  ],
 })
 export class ResponseModule {}

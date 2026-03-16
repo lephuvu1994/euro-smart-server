@@ -8,8 +8,8 @@ import { randomUUID } from 'crypto';
 import { APP_BULLMQ_QUEUES } from '../../enums/app.enum';
 import { DatabaseService } from '@app/database';
 import {
-    EmailTemplate,
-    ISendEmailParams,
+  EmailTemplate,
+  ISendEmailParams,
 } from '../../helper/interfaces/email.interface';
 import { HelperEncryptionService } from '../../helper/services/helper.encryption.service';
 import { IAuthUser } from '../../request/interfaces/request.interface';
@@ -25,411 +25,386 @@ import { VerifyOtpDto } from '../dtos/request/verify-otp.dto';
 import { ResetPasswordDto } from '../dtos/request/reset-password.dto';
 import { ChangePasswordDto } from '../dtos/request/change.password.dto';
 import {
-    AuthRefreshResponseDto,
-    AuthResponseDto,
+  AuthRefreshResponseDto,
+  AuthResponseDto,
 } from '../dtos/response/auth.response.dto';
 import { UserResponseDto } from '../../dtos/user.response.dto';
 import { IAuthService } from '../interfaces/auth.service.interface';
 
 @Injectable()
 export class AuthService implements IAuthService {
-    private readonly logger = new Logger(AuthService.name);
+  private readonly logger = new Logger(AuthService.name);
 
-    constructor(
-        private readonly databaseService: DatabaseService,
-        private readonly helperEncryptionService: HelperEncryptionService,
-        private readonly vietguysService: VietguysService,
-        private readonly smsSimService: SmsSimService,
-        @InjectQueue(APP_BULLMQ_QUEUES.EMAIL)
-        private readonly emailQueue: Queue
-    ) {}
+  constructor(
+    private readonly databaseService: DatabaseService,
+    private readonly helperEncryptionService: HelperEncryptionService,
+    private readonly vietguysService: VietguysService,
+    private readonly smsSimService: SmsSimService,
+    @InjectQueue(APP_BULLMQ_QUEUES.EMAIL)
+    private readonly emailQueue: Queue,
+  ) {}
 
-    /**
-     * 1. Đăng nhập (Email hoặc Phone)
-     */
-    public async login(data: UserLoginDto): Promise<AuthResponseDto> {
-        const { identifier, password } = data;
+  /**
+   * 1. Đăng nhập (Email hoặc Phone)
+   */
+  public async login(data: UserLoginDto): Promise<AuthResponseDto> {
+    const { identifier, password } = data;
 
-        const user = await this.databaseService.user.findFirst({
-            where: {
-                OR: [{ email: identifier }, { phone: identifier }],
-            },
-        });
+    const user = await this.databaseService.user.findFirst({
+      where: {
+        OR: [{ email: identifier }, { phone: identifier }],
+      },
+    });
 
-        if (!user) {
-            throw new HttpException(
-                'auth.error.userNotFound',
-                HttpStatus.NOT_FOUND
-            );
-        }
+    if (!user) {
+      throw new HttpException('auth.error.userNotFound', HttpStatus.NOT_FOUND);
+    }
 
-        const passwordMatched = await this.helperEncryptionService.match(
-            user.password,
-            password
+    const passwordMatched = await this.helperEncryptionService.match(
+      user.password,
+      password,
+    );
+
+    if (!passwordMatched) {
+      throw new HttpException(
+        'auth.error.invalidPassword',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const tokens = await this.helperEncryptionService.createJwtTokens({
+      role: user.role,
+      userId: user.id,
+    });
+
+    const userDto = plainToInstance(
+      UserResponseDto,
+      {
+        ...user,
+        avatar: null,
+        userName: user.email ? user.email.split('@')[0] : user.phone,
+      },
+      {
+        excludeExtraneousValues: true,
+      },
+    );
+
+    return {
+      ...tokens,
+      user: userDto,
+    };
+  }
+
+  /**
+   * 1b. Kiểm tra tài khoản tồn tại (Email hoặc Phone)
+   */
+  public async checkExists(data: CheckExistsDto): Promise<{ exists: boolean }> {
+    const { identifier } = data;
+
+    const user = await this.databaseService.user.findFirst({
+      where: {
+        OR: [{ email: identifier }, { phone: identifier }],
+      },
+      select: { id: true },
+    });
+
+    return { exists: !!user };
+  }
+
+  /**
+   * 2. Đăng ký (Không cần verify)
+   */
+  public async signup(data: UserCreateDto): Promise<AuthResponseDto> {
+    const { identifier, firstName, lastName, password } = data;
+
+    // Auto-detect: email hoặc phone
+    const isEmail = identifier.includes('@');
+    const email = isEmail ? identifier : null;
+    const phone = !isEmail ? identifier : null;
+
+    // Check trùng lặp
+    const existingUser = await this.databaseService.user.findFirst({
+      where: { [isEmail ? 'email' : 'phone']: identifier },
+    });
+
+    if (existingUser) {
+      throw new HttpException('user.error.userExists', HttpStatus.CONFLICT);
+    }
+
+    const hashed = await this.helperEncryptionService.createHash(password);
+
+    const createdUser = await this.databaseService.user.create({
+      data: {
+        email,
+        phone,
+        password: hashed,
+        firstName: firstName?.trim(),
+        lastName: lastName?.trim(),
+        role: UserRole.USER,
+      },
+    });
+
+    // Tạo nhà mặc định cho user lần đầu đăng ký
+    const defaultHome = await this.databaseService.home.create({
+      data: {
+        name: 'Nhà của tôi',
+        ownerId: createdUser.id,
+      },
+    });
+    await this.databaseService.homeMember.create({
+      data: {
+        userId: createdUser.id,
+        homeId: defaultHome.id,
+        role: 'OWNER',
+      },
+    });
+
+    const tokens = await this.helperEncryptionService.createJwtTokens({
+      role: createdUser.role,
+      userId: createdUser.id,
+    });
+
+    // Chỉ gửi mail nếu đăng ký bằng email
+    if (email) {
+      const emailJobPayload: Partial<ISendEmailParams> = {
+        to: email,
+        context: {
+          userName: `${firstName} ${lastName}`.trim() || 'User',
+        },
+      };
+
+      await this.emailQueue.add(EmailTemplate.WELCOME, emailJobPayload, {
+        delay: 5000,
+        removeOnComplete: true,
+        attempts: 3,
+        backoff: {
+          type: 'exponential',
+          delay: 2000,
+        },
+      });
+    }
+
+    const userDto = plainToInstance(
+      UserResponseDto,
+      {
+        ...createdUser,
+        avatar: null,
+        userName: email ? email.split('@')[0] : phone,
+      },
+      {
+        excludeExtraneousValues: true,
+      },
+    );
+
+    return {
+      ...tokens,
+      user: userDto,
+    };
+  }
+
+  /**
+   * 3. Refresh Token
+   */
+  public async refreshTokens(
+    payload: IAuthUser,
+  ): Promise<AuthRefreshResponseDto> {
+    return this.helperEncryptionService.createJwtTokens({
+      userId: payload.userId,
+      role: payload.role,
+    });
+  }
+
+  /**
+   * 4. Quên mật khẩu (Bước 1: Gửi OTP - Hybrid flow)
+   */
+  public async forgotPassword(data: ForgotPasswordDto): Promise<void> {
+    const { identifier } = data;
+    const isEmail = identifier.includes('@');
+
+    const user = await this.databaseService.user.findFirst({
+      where: { [isEmail ? 'email' : 'phone']: identifier },
+    });
+
+    if (!user) {
+      throw new HttpException('user.error.notFound', HttpStatus.NOT_FOUND);
+    }
+
+    let otp: string | null = null;
+    let provider = isEmail ? 'EMAIL' : 'SMS_SIM';
+
+    // A. Xử lý gửi OTP dựa trên provider
+    if (isEmail) {
+      otp = Math.floor(100000 + Math.random() * 900000).toString();
+    } else {
+      otp = Math.floor(100000 + Math.random() * 900000).toString();
+      try {
+        // Thử gửi qua USB SIM modem trước
+        await this.smsSimService.sendSms(
+          user.phone!,
+          `Ma OTP cua ban la: ${otp}`,
         );
-
-        if (!passwordMatched) {
-            throw new HttpException(
-                'auth.error.invalidPassword',
-                HttpStatus.BAD_REQUEST
-            );
-        }
-
-        const tokens = await this.helperEncryptionService.createJwtTokens({
-            role: user.role,
-            userId: user.id,
-        });
-
-        const userDto = plainToInstance(
-            UserResponseDto,
-            {
-                ...user,
-                avatar: null,
-                userName: user.email ? user.email.split('@')[0] : user.phone,
-            },
-            {
-                excludeExtraneousValues: true,
-            }
+      } catch (error) {
+        this.logger.warn(
+          `[AuthService] SMS SIM failed: ${error.message}. Falling back to Vietguys.`,
         );
-
-        return {
-            ...tokens,
-            user: userDto,
-        };
+        provider = 'VIETGUYS';
+      }
     }
 
-    /**
-     * 1b. Kiểm tra tài khoản tồn tại (Email hoặc Phone)
-     */
-    public async checkExists(
-        data: CheckExistsDto
-    ): Promise<{ exists: boolean }> {
-        const { identifier } = data;
+    // B. Lưu trạng thái OTP vào DB
+    const config = await this.databaseService.systemConfig.findUnique({
+      where: { key: 'OTP_EXPIRE' },
+    });
+    const expireMinutes = config ? parseInt(config.value, 10) : 5;
+    const otpExpire = new Date(Date.now() + expireMinutes * 60 * 1000);
 
-        const user = await this.databaseService.user.findFirst({
-            where: {
-                OR: [{ email: identifier }, { phone: identifier }],
-            },
-            select: { id: true },
-        });
+    await this.databaseService.user.update({
+      where: { id: user.id },
+      data: {
+        otpCode: otp,
+        otpExpire: otpExpire,
+        otpProvider: provider,
+      },
+    });
 
-        return { exists: !!user };
+    // C. Gửi message (Nếu không phải Firebase vì Firebase tự gửi rồi)
+    if (provider === 'EMAIL') {
+      await this.emailQueue.add(
+        EmailTemplate.FORGOT_PASSWORD,
+        {
+          to: user.email,
+          context: {
+            userName: `${user.firstName} ${user.lastName}`,
+            otp,
+          },
+        },
+        { removeOnComplete: true, attempts: 3, priority: 1 },
+      );
+    } else if (provider === 'VIETGUYS') {
+      await this.vietguysService.sendOtp(user.phone!, otp!);
+    }
+  }
+
+  /**
+   * 5a. Quên mật khẩu (Bước 2: Verify OTP only)
+   * Returns a resetToken for the next step.
+   */
+  public async verifyOtp(data: VerifyOtpDto): Promise<{ resetToken: string }> {
+    const { identifier, otp } = data;
+    const isEmail = identifier.includes('@');
+
+    const user = await this.databaseService.user.findFirst({
+      where: { [isEmail ? 'email' : 'phone']: identifier },
+    });
+
+    if (!user || !user.otpProvider) {
+      throw new HttpException('auth.error.otpExpired', HttpStatus.BAD_REQUEST);
     }
 
-    /**
-     * 2. Đăng ký (Không cần verify)
-     */
-    public async signup(data: UserCreateDto): Promise<AuthResponseDto> {
-        const { identifier, firstName, lastName, password } = data;
-
-        // Auto-detect: email hoặc phone
-        const isEmail = identifier.includes('@');
-        const email = isEmail ? identifier : null;
-        const phone = !isEmail ? identifier : null;
-
-        // Check trùng lặp
-        const existingUser = await this.databaseService.user.findFirst({
-            where: { [isEmail ? 'email' : 'phone']: identifier },
-        });
-
-        if (existingUser) {
-            throw new HttpException(
-                'user.error.userExists',
-                HttpStatus.CONFLICT
-            );
-        }
-
-        const hashed = await this.helperEncryptionService.createHash(password);
-
-        const createdUser = await this.databaseService.user.create({
-            data: {
-                email,
-                phone,
-                password: hashed,
-                firstName: firstName?.trim(),
-                lastName: lastName?.trim(),
-                role: UserRole.USER,
-            },
-        });
-
-        // Tạo nhà mặc định cho user lần đầu đăng ký
-        const defaultHome = await this.databaseService.home.create({
-            data: {
-                name: 'Nhà của tôi',
-                ownerId: createdUser.id,
-            },
-        });
-        await this.databaseService.homeMember.create({
-            data: {
-                userId: createdUser.id,
-                homeId: defaultHome.id,
-                role: 'OWNER',
-            },
-        });
-
-        const tokens = await this.helperEncryptionService.createJwtTokens({
-            role: createdUser.role,
-            userId: createdUser.id,
-        });
-
-        // Chỉ gửi mail nếu đăng ký bằng email
-        if (email) {
-            const emailJobPayload: Partial<ISendEmailParams> = {
-                to: email,
-                context: {
-                    userName: `${firstName} ${lastName}`.trim() || 'User',
-                },
-            };
-
-            await this.emailQueue.add(EmailTemplate.WELCOME, emailJobPayload, {
-                delay: 5000,
-                removeOnComplete: true,
-                attempts: 3,
-                backoff: {
-                    type: 'exponential',
-                    delay: 2000,
-                },
-            });
-        }
-
-        const userDto = plainToInstance(
-            UserResponseDto,
-            {
-                ...createdUser,
-                avatar: null,
-                userName: email ? email.split('@')[0] : phone,
-            },
-            {
-                excludeExtraneousValues: true,
-            }
-        );
-
-        return {
-            ...tokens,
-            user: userDto,
-        };
+    // Verify OTP
+    if (
+      user.otpCode !== otp ||
+      !user.otpExpire ||
+      user.otpExpire < new Date()
+    ) {
+      throw new HttpException('auth.error.invalidOtp', HttpStatus.BAD_REQUEST);
     }
 
-    /**
-     * 3. Refresh Token
-     */
-    public async refreshTokens(
-        payload: IAuthUser
-    ): Promise<AuthRefreshResponseDto> {
-        return this.helperEncryptionService.createJwtTokens({
-            userId: payload.userId,
-            role: payload.role,
-        });
+    // OTP valid → generate resetToken with 5-minute expiry
+    const resetToken = randomUUID();
+    const resetExpire = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+
+    await this.databaseService.user.update({
+      where: { id: user.id },
+      data: {
+        otpCode: resetToken,
+        otpExpire: resetExpire,
+        otpProvider: 'VERIFIED',
+      },
+    });
+
+    return { resetToken };
+  }
+
+  /**
+   * 5b. Quên mật khẩu (Bước 3: Reset Password after OTP verified)
+   * Requires resetToken from verifyOtp step.
+   */
+  public async resetPassword(data: ResetPasswordDto): Promise<void> {
+    const { identifier, newPassword, resetToken } = data;
+    const isEmail = identifier.includes('@');
+
+    const user = await this.databaseService.user.findFirst({
+      where: { [isEmail ? 'email' : 'phone']: identifier },
+    });
+
+    if (!user || user.otpProvider !== 'VERIFIED') {
+      throw new HttpException(
+        'auth.error.otpNotVerified',
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
-    /**
-     * 4. Quên mật khẩu (Bước 1: Gửi OTP - Hybrid flow)
-     */
-    public async forgotPassword(data: ForgotPasswordDto): Promise<void> {
-        const { identifier } = data;
-        const isEmail = identifier.includes('@');
-
-        const user = await this.databaseService.user.findFirst({
-            where: { [isEmail ? 'email' : 'phone']: identifier },
-        });
-
-        if (!user) {
-            throw new HttpException(
-                'user.error.notFound',
-                HttpStatus.NOT_FOUND
-            );
-        }
-
-        let otp: string | null = null;
-        let provider = isEmail ? 'EMAIL' : 'SMS_SIM';
-
-        // A. Xử lý gửi OTP dựa trên provider
-        if (isEmail) {
-            otp = Math.floor(100000 + Math.random() * 900000).toString();
-        } else {
-            otp = Math.floor(100000 + Math.random() * 900000).toString();
-            try {
-                // Thử gửi qua USB SIM modem trước
-                await this.smsSimService.sendSms(
-                    user.phone!,
-                    `Ma OTP cua ban la: ${otp}`
-                );
-            } catch (error) {
-                this.logger.warn(
-                    `[AuthService] SMS SIM failed: ${error.message}. Falling back to Vietguys.`
-                );
-                provider = 'VIETGUYS';
-            }
-        }
-
-        // B. Lưu trạng thái OTP vào DB
-        const config = await this.databaseService.systemConfig.findUnique({
-            where: { key: 'OTP_EXPIRE' },
-        });
-        const expireMinutes = config ? parseInt(config.value, 10) : 5;
-        const otpExpire = new Date(Date.now() + expireMinutes * 60 * 1000);
-
-        await this.databaseService.user.update({
-            where: { id: user.id },
-            data: {
-                otpCode: otp,
-                otpExpire: otpExpire,
-                otpProvider: provider,
-            },
-        });
-
-        // C. Gửi message (Nếu không phải Firebase vì Firebase tự gửi rồi)
-        if (provider === 'EMAIL') {
-            await this.emailQueue.add(
-                EmailTemplate.FORGOT_PASSWORD,
-                {
-                    to: user.email,
-                    context: {
-                        userName: `${user.firstName} ${user.lastName}`,
-                        otp,
-                    },
-                },
-                { removeOnComplete: true, attempts: 3, priority: 1 }
-            );
-        } else if (provider === 'VIETGUYS') {
-            await this.vietguysService.sendOtp(user.phone!, otp!);
-        }
+    // Validate resetToken and expiry
+    if (
+      user.otpCode !== resetToken ||
+      !user.otpExpire ||
+      user.otpExpire < new Date()
+    ) {
+      throw new HttpException(
+        'auth.error.resetTokenExpired',
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
-    /**
-     * 5a. Quên mật khẩu (Bước 2: Verify OTP only)
-     * Returns a resetToken for the next step.
-     */
-    public async verifyOtp(
-        data: VerifyOtpDto
-    ): Promise<{ resetToken: string }> {
-        const { identifier, otp } = data;
-        const isEmail = identifier.includes('@');
+    // Hash & update password, clear OTP state
+    const hashedPassword =
+      await this.helperEncryptionService.createHash(newPassword);
+    await this.databaseService.user.update({
+      where: { id: user.id },
+      data: {
+        password: hashedPassword,
+        otpCode: null,
+        otpExpire: null,
+        otpProvider: null,
+      },
+    });
+  }
 
-        const user = await this.databaseService.user.findFirst({
-            where: { [isEmail ? 'email' : 'phone']: identifier },
-        });
+  /**
+   * 6. Đổi mật khẩu (Dành cho user đã login)
+   */
+  async changePassword(userId: string, data: ChangePasswordDto): Promise<void> {
+    const { oldPassword, newPassword } = data;
 
-        if (!user || !user.otpProvider) {
-            throw new HttpException(
-                'auth.error.otpExpired',
-                HttpStatus.BAD_REQUEST
-            );
-        }
+    // 1. Tìm user
+    const user = await this.databaseService.user.findUnique({
+      where: { id: userId },
+    });
 
-        // Verify OTP
-        if (
-            user.otpCode !== otp ||
-            !user.otpExpire ||
-            user.otpExpire < new Date()
-        ) {
-            throw new HttpException(
-                'auth.error.invalidOtp',
-                HttpStatus.BAD_REQUEST
-            );
-        }
-
-        // OTP valid → generate resetToken with 5-minute expiry
-        const resetToken = randomUUID();
-        const resetExpire = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
-
-        await this.databaseService.user.update({
-            where: { id: user.id },
-            data: {
-                otpCode: resetToken,
-                otpExpire: resetExpire,
-                otpProvider: 'VERIFIED',
-            },
-        });
-
-        return { resetToken };
+    if (!user) {
+      throw new HttpException('user.error.notFound', HttpStatus.NOT_FOUND);
     }
 
-    /**
-     * 5b. Quên mật khẩu (Bước 3: Reset Password after OTP verified)
-     * Requires resetToken from verifyOtp step.
-     */
-    public async resetPassword(data: ResetPasswordDto): Promise<void> {
-        const { identifier, newPassword, resetToken } = data;
-        const isEmail = identifier.includes('@');
+    // 2. Kiểm tra mật khẩu cũ có khớp không
+    const isMatch = await this.helperEncryptionService.match(
+      user.password,
+      oldPassword,
+    );
 
-        const user = await this.databaseService.user.findFirst({
-            where: { [isEmail ? 'email' : 'phone']: identifier },
-        });
-
-        if (!user || user.otpProvider !== 'VERIFIED') {
-            throw new HttpException(
-                'auth.error.otpNotVerified',
-                HttpStatus.BAD_REQUEST
-            );
-        }
-
-        // Validate resetToken and expiry
-        if (
-            user.otpCode !== resetToken ||
-            !user.otpExpire ||
-            user.otpExpire < new Date()
-        ) {
-            throw new HttpException(
-                'auth.error.resetTokenExpired',
-                HttpStatus.BAD_REQUEST
-            );
-        }
-
-        // Hash & update password, clear OTP state
-        const hashedPassword =
-            await this.helperEncryptionService.createHash(newPassword);
-        await this.databaseService.user.update({
-            where: { id: user.id },
-            data: {
-                password: hashedPassword,
-                otpCode: null,
-                otpExpire: null,
-                otpProvider: null,
-            },
-        });
+    if (!isMatch) {
+      throw new HttpException(
+        'auth.error.invalidOldPassword',
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
-    /**
-     * 6. Đổi mật khẩu (Dành cho user đã login)
-     */
-    async changePassword(
-        userId: string,
-        data: ChangePasswordDto
-    ): Promise<void> {
-        const { oldPassword, newPassword } = data;
-
-        // 1. Tìm user
-        const user = await this.databaseService.user.findUnique({
-            where: { id: userId },
-        });
-
-        if (!user) {
-            throw new HttpException(
-                'user.error.notFound',
-                HttpStatus.NOT_FOUND
-            );
-        }
-
-        // 2. Kiểm tra mật khẩu cũ có khớp không
-        const isMatch = await this.helperEncryptionService.match(
-            user.password,
-            oldPassword
-        );
-
-        if (!isMatch) {
-            throw new HttpException(
-                'auth.error.invalidOldPassword',
-                HttpStatus.BAD_REQUEST
-            );
-        }
-
-        // 3. Hash mật khẩu mới và lưu
-        const hashedPassword =
-            await this.helperEncryptionService.createHash(newPassword);
-        await this.databaseService.user.update({
-            where: { id: userId },
-            data: { password: hashedPassword },
-        });
-    }
+    // 3. Hash mật khẩu mới và lưu
+    const hashedPassword =
+      await this.helperEncryptionService.createHash(newPassword);
+    await this.databaseService.user.update({
+      where: { id: userId },
+      data: { password: hashedPassword },
+    });
+  }
 }

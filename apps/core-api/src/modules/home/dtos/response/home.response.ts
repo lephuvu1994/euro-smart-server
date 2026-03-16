@@ -3,124 +3,124 @@ import { Expose, Type } from 'class-transformer';
 import { ValidateNested } from 'class-validator';
 
 export class HomeResponseDto {
-    @Expose()
-    @ApiProperty()
-    id: string;
+  @Expose()
+  @ApiProperty()
+  id: string;
 
-    @Expose()
-    @ApiProperty()
-    name: string;
+  @Expose()
+  @ApiProperty()
+  name: string;
 
-    @Expose()
-    @ApiProperty({ required: false, nullable: true })
-    latitude: number | null;
+  @Expose()
+  @ApiProperty({ required: false, nullable: true })
+  latitude: number | null;
 
-    @Expose()
-    @ApiProperty({ required: false, nullable: true })
-    longitude: number | null;
+  @Expose()
+  @ApiProperty({ required: false, nullable: true })
+  longitude: number | null;
 
-    @Expose()
-    @ApiProperty({ default: 100 })
-    radius: number;
+  @Expose()
+  @ApiProperty({ default: 100 })
+  radius: number;
 
-    @Expose()
-    @ApiProperty()
-    ownerId: string;
+  @Expose()
+  @ApiProperty()
+  ownerId: string;
 
-    @Expose()
-    @ApiProperty()
-    createdAt: Date;
+  @Expose()
+  @ApiProperty()
+  createdAt: Date;
 
-    @Expose()
-    @ApiProperty()
-    updatedAt: Date;
+  @Expose()
+  @ApiProperty()
+  updatedAt: Date;
 }
 
 export class RoomResponseDto {
-    @Expose()
-    @ApiProperty()
-    id: string;
+  @Expose()
+  @ApiProperty()
+  id: string;
 
-    @Expose()
-    @ApiProperty()
-    name: string;
+  @Expose()
+  @ApiProperty()
+  name: string;
 
-    @Expose()
-    @ApiProperty()
-    homeId: string;
+  @Expose()
+  @ApiProperty()
+  homeId: string;
 
-    @Expose()
-    @ApiProperty({ required: false, nullable: true })
-    floorId: string | null;
+  @Expose()
+  @ApiProperty({ required: false, nullable: true })
+  floorId: string | null;
 
-    @Expose()
-    @ApiProperty()
-    createdAt: Date;
+  @Expose()
+  @ApiProperty()
+  createdAt: Date;
 
-    @Expose()
-    @ApiProperty()
-    updatedAt: Date;
+  @Expose()
+  @ApiProperty()
+  updatedAt: Date;
 }
 
 export class FloorResponseDto {
-    @Expose()
-    @ApiProperty()
-    id: string;
+  @Expose()
+  @ApiProperty()
+  id: string;
 
-    @Expose()
-    @ApiProperty()
-    name: string;
+  @Expose()
+  @ApiProperty()
+  name: string;
 
-    @Expose()
-    @ApiProperty({ default: 0 })
-    sortOrder: number;
+  @Expose()
+  @ApiProperty({ default: 0 })
+  sortOrder: number;
 
-    @Expose()
-    @ApiProperty()
-    homeId: string;
+  @Expose()
+  @ApiProperty()
+  homeId: string;
 
-    @ApiProperty({
-        description: 'Danh sách các phòng thuộc tầng này',
-        type: [RoomResponseDto],
-    })
-    @Expose()
-    @Type(() => RoomResponseDto)
-    @ValidateNested({ each: true })
-    rooms: RoomResponseDto[];
+  @ApiProperty({
+    description: 'Danh sách các phòng thuộc tầng này',
+    type: [RoomResponseDto],
+  })
+  @Expose()
+  @Type(() => RoomResponseDto)
+  @ValidateNested({ each: true })
+  rooms: RoomResponseDto[];
 
-    @Expose()
-    @ApiProperty()
-    createdAt: Date;
+  @Expose()
+  @ApiProperty()
+  createdAt: Date;
 
-    @Expose()
-    @ApiProperty()
-    updatedAt: Date;
+  @Expose()
+  @ApiProperty()
+  updatedAt: Date;
 }
 
 export class HomeMemberResponseDto {
-    @Expose()
-    @ApiProperty()
+  @Expose()
+  @ApiProperty()
+  id: string;
+
+  @Expose()
+  @ApiProperty()
+  userId: string;
+
+  @Expose()
+  @ApiProperty()
+  homeId: string;
+
+  @Expose()
+  @ApiProperty()
+  role: string;
+
+  @Expose()
+  @ApiProperty({ description: 'Thông tin user (không có password)' })
+  user: {
     id: string;
-
-    @Expose()
-    @ApiProperty()
-    userId: string;
-
-    @Expose()
-    @ApiProperty()
-    homeId: string;
-
-    @Expose()
-    @ApiProperty()
-    role: string;
-
-    @Expose()
-    @ApiProperty({ description: 'Thông tin user (không có password)' })
-    user: {
-        id: string;
-        email: string | null;
-        phone: string | null;
-        firstName: string | null;
-        lastName: string | null;
-    };
+    email: string | null;
+    phone: string | null;
+    firstName: string | null;
+    lastName: string | null;
+  };
 }

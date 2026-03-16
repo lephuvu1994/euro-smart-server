@@ -5,17 +5,17 @@ import { ApiGenericResponseDto } from '../../response/dtos/response.generic.dto'
 import { IGenericResponseOptions } from '../../response/interfaces/response.interface';
 
 export function DocGenericResponse(
-    options: IGenericResponseOptions
+  options: IGenericResponseOptions,
 ): MethodDecorator {
-    const { messageKey, httpStatus } = options;
-    return applyDecorators(
-        ApiExtraModels(ApiGenericResponseDto),
-        ApiResponse({
-            status: httpStatus,
-            description: messageKey,
-            schema: {
-                $ref: getSchemaPath(ApiGenericResponseDto),
-            },
-        })
-    );
+  const { messageKey, httpStatus } = options;
+  return applyDecorators(
+    ApiExtraModels(ApiGenericResponseDto),
+    ApiResponse({
+      status: httpStatus,
+      description: messageKey,
+      schema: {
+        $ref: getSchemaPath(ApiGenericResponseDto),
+      },
+    }),
+  );
 }

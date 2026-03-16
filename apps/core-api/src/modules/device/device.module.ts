@@ -13,22 +13,22 @@ import { DeviceControlService } from './services/device-control.service';
 import { DeviceService } from './services/device.service';
 
 @Module({
-    imports: [
-        DatabaseModule,
-        RedisModule,
-        // SocketModule,
-        BullModule.registerQueue({
-            name: APP_BULLMQ_QUEUES.DEVICE_CONTROL,
-        }),
-        // IntegrationModule,
-        SceneModule,
-    ],
-    controllers: [DeviceController],
-    providers: [
-        DeviceService,
-        DeviceProvisioningService,
-        DeviceControlService,
-        // DeviceControlProcessor,
-    ],
+  imports: [
+    DatabaseModule,
+    RedisModule,
+    // SocketModule,
+    BullModule.registerQueue({
+      name: APP_BULLMQ_QUEUES.DEVICE_CONTROL,
+    }),
+    // IntegrationModule,
+    SceneModule,
+  ],
+  controllers: [DeviceController],
+  providers: [
+    DeviceService,
+    DeviceProvisioningService,
+    DeviceControlService,
+    // DeviceControlProcessor,
+  ],
 })
 export class DeviceModule {}

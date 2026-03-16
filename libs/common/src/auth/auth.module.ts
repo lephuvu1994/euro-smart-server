@@ -13,17 +13,17 @@ import { JwtRefreshStrategy } from './providers/refresh-jwt.strategy';
 import { AuthService } from './services/auth.service';
 
 @Module({
-    controllers: [AuthPublicController],
-    imports: [
-        HelperModule,
-        PassportModule,
-        DatabaseModule,
-        // Đăng ký lại queue email
-        BullModule.registerQueue({
-            name: APP_BULLMQ_QUEUES.EMAIL,
-        }),
-    ],
-    providers: [AuthService, JwtAccessStrategy, JwtRefreshStrategy],
-    exports: [AuthService, JwtAccessStrategy, JwtRefreshStrategy],
+  controllers: [AuthPublicController],
+  imports: [
+    HelperModule,
+    PassportModule,
+    DatabaseModule,
+    // Đăng ký lại queue email
+    BullModule.registerQueue({
+      name: APP_BULLMQ_QUEUES.EMAIL,
+    }),
+  ],
+  providers: [AuthService, JwtAccessStrategy, JwtRefreshStrategy],
+  exports: [AuthService, JwtAccessStrategy, JwtRefreshStrategy],
 })
 export class AuthModule {}

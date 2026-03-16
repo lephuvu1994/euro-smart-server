@@ -8,19 +8,19 @@ import { HelperModule } from '@app/common/helper/helper.module';
 import { AdminMigrationSeed } from './admin.seed';
 
 @Module({
-    imports: [
-        ConfigModule.forRoot({
-            load: configs,
-            isGlobal: true,
-            cache: true,
-            envFilePath: ['.env'],
-            expandVariables: true,
-        }),
-        DatabaseModule,
-        HelperModule,
-        CommandModule,
-    ],
-    providers: [AdminMigrationSeed],
-    exports: [AdminMigrationSeed],
+  imports: [
+    ConfigModule.forRoot({
+      load: configs,
+      isGlobal: true,
+      cache: true,
+      envFilePath: ['.env'],
+      expandVariables: true,
+    }),
+    DatabaseModule,
+    HelperModule,
+    CommandModule,
+  ],
+  providers: [AdminMigrationSeed],
+  exports: [AdminMigrationSeed],
 })
 export class MigrationModule {}

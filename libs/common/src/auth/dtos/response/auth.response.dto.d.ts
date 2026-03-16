@@ -1,10 +1,9 @@
 import { UserResponseDto } from '../../../dtos/user.response.dto';
 export declare class TokenDto {
-    accessToken: string;
-    refreshToken: string;
+  accessToken: string;
+  refreshToken: string;
 }
 export declare class AuthResponseDto extends TokenDto {
-    user: UserResponseDto;
+  user: UserResponseDto;
 }
-export declare class AuthRefreshResponseDto extends TokenDto {
-}
+export declare class AuthRefreshResponseDto extends TokenDto {}

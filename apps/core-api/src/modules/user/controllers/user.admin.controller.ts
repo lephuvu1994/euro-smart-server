@@ -10,23 +10,23 @@ import { UserService } from '../services/user.service';
 
 @ApiTags('admin.user')
 @Controller({
-    path: '/admin/user',
-    version: '1',
+  path: '/admin/user',
+  version: '1',
 })
 export class UserAdminController {
-    constructor(private readonly userService: UserService) {}
+  constructor(private readonly userService: UserService) {}
 
-    @Delete(':id')
-    @AllowedRoles([UserRole.ADMIN])
-    @ApiBearerAuth('accessToken')
-    @ApiOperation({ summary: 'Delete user' })
-    @DocGenericResponse({
-        httpStatus: HttpStatus.OK,
-        messageKey: 'user.success.deleted',
-    })
-    public async deleteUser(
-        @Param('id') userId: string
-    ): Promise<ApiGenericResponseDto> {
-        return this.userService.deleteUser(userId);
-    }
+  @Delete(':id')
+  @AllowedRoles([UserRole.ADMIN])
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({ summary: 'Delete user' })
+  @DocGenericResponse({
+    httpStatus: HttpStatus.OK,
+    messageKey: 'user.success.deleted',
+  })
+  public async deleteUser(
+    @Param('id') userId: string,
+  ): Promise<ApiGenericResponseDto> {
+    return this.userService.deleteUser(userId);
+  }
 }

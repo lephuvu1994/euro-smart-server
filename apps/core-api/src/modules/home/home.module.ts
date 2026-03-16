@@ -4,9 +4,9 @@ import { HomeController } from './home.controller';
 import { HomeService } from './home.service';
 
 @Module({
-    imports: [DatabaseModule],
-    controllers: [HomeController],
-    providers: [HomeService],
-    exports: [HomeService],
+  imports: [DatabaseModule],
+  controllers: [HomeController],
+  providers: [HomeService],
+  exports: [HomeService],
 })
 export class HomeModule {}

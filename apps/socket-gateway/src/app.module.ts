@@ -9,11 +9,20 @@ import { SocketGateway } from './gateways/socket.gateway';
 import { SocketService } from './services/socket.service';
 
 @Module({
-    imports: [
-        ConfigModule.forRoot({ load: configs, isGlobal: true, cache: true, envFilePath: ['.env'], expandVariables: true }),
-        RedisModule, CustomLoggerModule, JwtModule.register({}), HelperModule,
-    ],
-    providers: [SocketGateway, SocketService],
-    exports: [SocketService],
+  imports: [
+    ConfigModule.forRoot({
+      load: configs,
+      isGlobal: true,
+      cache: true,
+      envFilePath: ['.env'],
+      expandVariables: true,
+    }),
+    RedisModule,
+    CustomLoggerModule,
+    JwtModule.register({}),
+    HelperModule,
+  ],
+  providers: [SocketGateway, SocketService],
+  exports: [SocketService],
 })
 export class AppModule {}

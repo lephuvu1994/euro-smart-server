@@ -3,7 +3,7 @@ import { VietguysService } from './vietguys.service';
 
 @Global()
 @Module({
-    providers: [VietguysService],
-    exports: [VietguysService],
+  providers: [VietguysService],
+  exports: [VietguysService],
 })
 export class VietguysModule {}

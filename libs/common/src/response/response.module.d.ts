@@ -1,2 +1,1 @@
-export declare class ResponseModule {
-}
+export declare class ResponseModule {}

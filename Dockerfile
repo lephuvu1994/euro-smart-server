@@ -8,7 +8,7 @@ WORKDIR /app
 COPY package.json yarn.lock ./
 
 # Install all deps (including devDependencies for build)
-RUN yarn install --frozen-lockfile
+RUN yarn install --frozen-lockfile --network-timeout 100000
 
 # Copy prisma schema and generate client
 COPY prisma ./prisma/

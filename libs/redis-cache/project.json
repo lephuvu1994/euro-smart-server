@@ -1,0 +1,9 @@
+{
+  "name": "redis-cache",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/redis-cache/src",
+  "projectType": "library",
+  "tags": [],
+  "// targets": "to see all targets run: nx show project redis-cache --web",
+  "targets": {}
+}

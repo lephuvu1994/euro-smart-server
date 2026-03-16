@@ -1,0 +1,9 @@
+export interface IDeviceCommand {
+    // 1. Thông tin định tuyến (Routing Info)
+    token: string; // Dùng cho Topic MQTT: {company}/{token}/set
+
+    // 2. Thông tin lệnh (Command Info)
+    category: string; // switch, sensor...
+    type: string; // relay, dimmer...
+    value: any; // 1, 0, {r,g,b}...
+}

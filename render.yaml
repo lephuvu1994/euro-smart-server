@@ -1,0 +1,92 @@
+# Render Blueprint – euro-smart-server monorepo
+# All infrastructure (Postgres, Redis, EMQX) is external.
+# Only the 4 Node.js microservices run on Render.
+#
+# Usage:
+#   1. Push this file to your repo
+#   2. Go to https://dashboard.render.com → New → Blueprint
+#   3. Select your repo → Render will auto-detect render.yaml
+#   4. Set the env vars in the "euro-smart-env" group on Render Dashboard
+
+services:
+  # ── core-api: Main REST API (public) ──
+  - type: web
+    name: euro-core-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: starter # $7/month
+    region: singapore
+    branch: main
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - fromGroup: euro-smart-env
+    dockerCommand: node dist/apps/core-api/main.js
+
+  # ── socket-gateway: WebSocket server (public) ──
+  - type: web
+    name: euro-socket-gateway
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: starter
+    region: singapore
+    branch: main
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SOCKET_GATEWAY_PORT
+        value: "10000"
+      - fromGroup: euro-smart-env
+    dockerCommand: node dist/apps/socket-gateway/main.js
+
+  # ── iot-gateway: MQTT bridge (private – internal only) ──
+  - type: pserv
+    name: euro-iot-gateway
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: starter
+    region: singapore
+    branch: main
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: IOT_GATEWAY_PORT
+        value: "10000"
+      - fromGroup: euro-smart-env
+    dockerCommand: node dist/apps/iot-gateway/main.js
+
+  # ── worker-service: BullMQ job processor (background) ──
+  - type: worker
+    name: euro-worker-service
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: starter
+    region: singapore
+    branch: main
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - fromGroup: euro-smart-env
+    dockerCommand: node dist/apps/worker-service/main.js
+
+# ── Environment Variable Group ──
+# Create this group on Render Dashboard with your actual values:
+#
+# Group name: euro-smart-env
+#
+# Required variables:
+#   DATABASE_URL          = postgresql://user:pass@host:5432/dbname
+#   REDIS_HOST            = your-redis-host
+#   REDIS_PORT            = 6379
+#   REDIS_PASSWORD        = your-redis-password
+#   MQTT_BROKER_URL       = mqtt://your-emqx-host:1883
+#   MQTT_USERNAME         = your-mqtt-user
+#   MQTT_PASSWORD         = your-mqtt-pass
+#   JWT_SECRET            = your-jwt-secret
+#   JWT_REFRESH_SECRET    = your-jwt-refresh-secret
+#   APP_PORT              = 10000

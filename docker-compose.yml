@@ -1,0 +1,91 @@
+services:
+    postgres:
+        image: postgres:16-alpine
+        container_name: nestjs-postgres
+        restart: unless-stopped
+        ports:
+            - '5432:5432'
+        environment:
+            POSTGRES_USER: ${POSTGRES_USER:-postgres}
+            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-master123}
+            POSTGRES_DB: ${POSTGRES_DB:-postgres}
+        volumes:
+            - postgres_data:/var/lib/postgresql/data
+        networks:
+            - app-network
+        healthcheck:
+            test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-postgres}']
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 30s
+
+    redis:
+        image: redis:7-alpine
+        container_name: nestjs-redis
+        restart: unless-stopped
+        ports:
+            - '6379:6379'
+        volumes:
+            - redis_data:/data
+        networks:
+            - app-network
+        healthcheck:
+            test: ['CMD', 'redis-cli', 'ping']
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 10s
+        command: redis-server --appendonly yes
+
+    emqx:
+        image: emqx/emqx:5.8.5
+        container_name: smarthome_emqx
+        restart: always
+        ports:
+        - "1883:1883"   # Port cho MQTT (TCP) - Quan trọng nhất
+        - "8083:8083"   # Port cho WebSocket (nếu dùng Web App connect thẳng)
+        - "18083:18083" # Port Dashboard quản lý
+        environment:
+        - "EMQX_NODE_NAME=emqx@node1.emqx.io"
+        - "EMQX_DASHBOARD__DEFAULT_USERNAME=admin"
+        - "EMQX_DASHBOARD__DEFAULT_PASSWORD=public" # Mật khẩu đăng nhập Dashboard mặc định
+        volumes:
+        - ./docker/emqx/data:/opt/emqx/data
+        - ./docker/emqx/log:/opt/emqx/log
+
+    server:
+        build:
+            context: .
+            dockerfile: Dockerfile
+            cache_from:
+                - nestjs-app:latest
+        container_name: nestjs-app
+        restart: unless-stopped
+        ports:
+            - '3001:3001'
+        env_file:
+            - .env.docker
+        networks:
+            - app-network
+        volumes:
+            - .:/app
+            - /app/node_modules
+        depends_on:
+            postgres:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+
+networks:
+    app-network:
+        driver: bridge
+        name: nestjs-network
+
+volumes:
+    postgres_data:
+        driver: local
+        name: nestjs-postgres-data
+    redis_data:
+        driver: local
+        name: nestjs-redis-data

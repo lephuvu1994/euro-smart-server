@@ -1,0 +1,526 @@
+// schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// 1. ENUMS (Định nghĩa các loại dữ liệu cố định)
+// ==========================================
+
+enum UserRole {
+  ADMIN
+  USER
+}
+
+enum SharePermission {
+  ADMIN    // Toàn quyền
+  EDITOR   // Được điều khiển
+  VIEWER   // Chỉ xem
+}
+
+enum DeviceProtocol {
+  MQTT
+  ZIGBEE
+  GSM_4G
+  VIRTUAL
+}
+
+// Loại feature (nút bấm, cảm biến...)
+enum FeatureType {
+  BINARY    // Bật/Tắt (0/1)
+  DIMMER    // Thanh trượt (0-100)
+  SENSOR    // Chỉ đọc (Nhiệt độ, độ ẩm...)
+  TEXT      // Dạng chữ
+  COLOR     // Chỉnh màu (RGB/HEX)
+  CAMERA    // Stream
+  SHUTTER
+  BUTTON
+  CONFIG
+}
+
+enum DeviceFeatureCategory {
+  light
+  switch
+  sensor
+  camera
+  lock
+  curtain
+  climate
+}
+
+// ==========================================
+// 2. USER & AUTH (Người dùng & Phiên)
+// ==========================================
+
+model User {
+  id               String    @id @default(uuid()) @db.Uuid
+  firstName        String? @map("first_name")
+  lastName         String? @map("last_name")
+  email            String?   @unique
+  phone            String?   @unique
+  password         String
+  role             UserRole  @default(USER)
+  avatar           String?   @map("avatar")
+
+  // OTP
+  otpCode          String?   @map("otp_code")
+  otpExpire        DateTime? @map("otp_expire")
+  otpProvider      String?   @map("otp_provider")
+
+  // Vị trí (Cache nhanh)
+  lastLatitude         Float? @map("last_latitude")
+  lastLongitude        Float? @map("last_longitude")
+  lastAltitude         Float? @map("last_altitude")
+  lastAccuracy         Float? @map("last_accuracy")
+  lastLocationChanged DateTime? @map("last_location_changed")
+
+  // Quan hệ
+  locations        Location[]
+  ownedDevices    Device[]      @relation("UserInventory")
+  sharedDevices   DeviceShare[] @relation("SharedToUser")
+  ownedHomes      Home[]        @relation("UserHomes")
+  homeMemberships HomeMember[]
+  sessions         Session[]
+  calendars        Calendar[]
+  provisionTokens  ProvisionToken[]
+
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("t_user")
+}
+
+model Session {
+  id                 String   @id @default(uuid()) @db.Uuid
+  hashedRefreshToken String   @unique @map("hashed_refresh_token")
+  deviceName         String? @map("device_name")
+  ipAddress          String? @map("ip_address")
+  userAgent          String? @map("user_agent")
+  expiresAt          DateTime @map("expires_at")
+
+  userId             String   @db.Uuid @map("user_id")
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@map("t_session")
+}
+
+// ==========================================
+// 3. CATALOG & PARTNER (Quản lý nguồn hàng & License)
+// ==========================================
+
+// Công ty / Đối tác
+model Partner {
+  id          String   @id @default(uuid()) @db.Uuid
+  code        String   @unique // VD: "COMPANY_A"
+  name        String
+  isActive    Boolean  @default(true) @map("is_active")
+
+  quotas      LicenseQuota[]
+  hardwares   HardwareRegistry[]
+  devices     Device[]
+
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@map("t_partner")
+}
+
+// Khuôn mẫu thiết bị (Blueprint)
+model DeviceModel {
+  id          String   @id @default(uuid()) @db.Uuid
+  code        String   @unique // VD: "WIFI_SWITCH_4"
+  name        String   // VD: "Công tắc WiFi 4 nút"
+  description String?
+
+  // [BLUEPRINT] JSON quy định tính năng
+  // VD: [{ "code": "sw1", "type": "BINARY", "name": "Nút 1" }]
+  featuresConfig Json    @default("[]") @db.JsonB @map("features_config")
+
+  quotas      LicenseQuota[]
+  hardwares   HardwareRegistry[]
+  devices     Device[] // Quan hệ với các thiết bị thực tế đang chạy
+
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@map("t_device_model")
+}
+
+// Quản lý số lượng License
+model LicenseQuota {
+  id              String   @id @default(uuid()) @db.Uuid
+
+  partnerId       String   @db.Uuid @map("partner_id")
+  partner         Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  deviceModelId   String   @db.Uuid @map("device_model_id")
+  deviceModel     DeviceModel @relation(fields: [deviceModelId], references: [id], onDelete: Cascade)
+
+  maxQuantity     Int      @default(0) @map("max_quantity")
+  activatedCount  Int      @default(0) @map("activated_count")
+  licenseDays     Int      @default(90) @map("license_days")
+  isActive        Boolean  @default(true) @map("is_active")
+
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@unique([partnerId, deviceModelId])
+  @@map("t_license_quota")
+}
+
+// Sổ cái phần cứng (Chip vật lý)
+model HardwareRegistry {
+  id            String   @id @default(uuid()) @db.Uuid
+
+  // Định danh vật lý gốc (MAC Address / IMEI)
+  identifier          String   @unique
+
+  // Credentials kết nối MQTT (Cấp cho Chip)
+  deviceToken   String   @unique @map("device_token")
+  mqttUsername  String? @map("mqtt_username")
+  mqttPassword  String? @map("mqtt_password")
+  mqttBroker    String? @map("mqtt_broker")
+
+  // Thông tin quản lý
+  partnerId     String   @db.Uuid @map("partner_id")
+  partner       Partner  @relation(fields: [partnerId], references: [id])
+
+  deviceModelId String   @db.Uuid @map("device_model_id")
+  deviceModel   DeviceModel @relation(fields: [deviceModelId], references: [id])
+
+  // Link tới Device Logic (1-1): Khi User add vào App thì field này sẽ có dữ liệu
+  device        Device?
+
+  firmwareVer   String? @map("firmware_ver")
+  ipAddress     String? @map("ip_address")
+  isBanned      Boolean  @default(false) @map("is_banned")
+  activatedAt   DateTime @default(now()) @map("activated_at")
+
+  @@map("t_hardware_registry")
+}
+
+// ==========================================
+// 4. DEVICE INSTANCE (Thiết bị của User)
+// ==========================================
+
+model Device {
+  id           String   @id @default(uuid()) @db.Uuid
+
+  // Tên hiển thị trong App (User có thể đổi)
+  name         String
+
+  // 1. ĐỊNH DANH LOGIC (Dùng để giao tiếp API/MQTT Topic)
+  token        String         @unique @default(uuid())
+
+  // 2. ĐỊNH DANH VẬT LÝ & GIAO THỨC
+  identifier   String         // Copy từ HardwareRegistry sang hoặc tự nhập (nếu là Virtual)
+  protocol     DeviceProtocol @default(MQTT)
+
+  // 3. LIÊN KẾT MODEL (Để biết nó là loại gì)
+  deviceModelId String      @db.Uuid @map("device_model_id")
+  deviceModel     DeviceModel @relation(fields: [deviceModelId], references: [id])
+
+  // --- [NEW] LIÊN KẾT ĐỐI TÁC (Multi-tenancy) ---
+  // Thiết bị này thuộc quyền quản lý/phân phối của công ty nào?
+  partnerId   String   @db.Uuid @map("partner_id")
+  partner      Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  // 4. LIÊN KẾT PHẦN CỨNG (Nếu là thiết bị thật)
+  hardwareId  String?        @unique @db.Uuid @map("hardware_id")
+  hardware     HardwareRegistry? @relation(fields: [hardwareId], references: [id])
+
+  // Sở hữu
+  ownerId     String   @db.Uuid @map("owner_id")
+  owner        User     @relation("UserInventory", fields: [ownerId], references: [id])
+  sharedUsers DeviceShare[]
+
+  // Vị trí
+  homeId      String?  @db.Uuid @map("home_id")
+  home         Home?    @relation(fields: [homeId], references: [id], onDelete: SetNull)
+  roomId      String?  @db.Uuid @map("room_id")
+  room         Room?    @relation(fields: [roomId], references: [id], onDelete: SetNull)
+
+  // Kỹ thuật
+  serviceId   String?  @db.Uuid // Gladys service ID (Optional) @map("service_id")
+  service      Service? @relation(fields: [serviceId], references: [id])
+
+  // [OVERRIDE CONFIG]
+  // Dùng để ghi đè config của Model.
+  // VD: Modbus Slave ID riêng cho từng thiết bị lắp đặt
+  // { "modbus": { "slaveId": 2 }, "zigbee": { "endpoint": 1 } }
+  customConfig Json?   @db.JsonB @map("custom_config")
+
+  // Thứ tự hiển thị (Owner's sort order)
+  sortOrder    Int      @default(0) @map("sort_order")
+
+  // Dữ liệu runtime
+  features     DeviceFeature[]
+  params       DeviceParam[]
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Ràng buộc duy nhất: Một ID chỉ tồn tại duy nhất trong 1 protocol
+  @@unique([identifier, protocol])
+  @@index([identifier])
+  @@index([partnerId])
+  @@map("t_device")
+}
+
+model DeviceFeature {
+  id          String   @id @default(uuid()) @db.Uuid
+
+  // Mã code tính năng (VD: switch_1). Map từ JSON Config của Model
+  code        String
+  name        String   // Tên hiển thị (VD: Đèn trần)
+
+  // Metadata
+  category    DeviceFeatureCategory
+  type        FeatureType // BINARY, DIMMER...
+
+  min         Float?
+  max         Float?
+  unit        String?
+  readOnly   Boolean  @default(false) @map("read_only")
+
+  // Giá trị hiện tại (Runtime Value)
+  lastValue  Float?   // Dùng cho dạng số @map("last_value")
+  lastValueString String? // Dùng cho dạng text/color @map("last_value_string")
+
+  // Quan hệ
+  deviceId   String   @db.Uuid @map("device_id")
+  device      Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  // Lịch sử trạng thái
+  states      DeviceFeatureState[]
+  // 🔥 CỘT QUAN TRỌNG NHẤT
+  // Lưu: { "embedded_keys": ["start_hour"...], "command_key": "state" }
+  config    Json?    @default("{}")
+
+  // Mỗi thiết bị chỉ có 1 feature code duy nhất (VD: Device A chỉ có 1 nút 'switch_1')
+  @@unique([deviceId, code])
+  @@map("t_device_feature")
+}
+
+model DeviceFeatureState {
+  id         String   @id @default(uuid()) @db.Uuid
+  value      Float?
+  valueText String? @map("value_text")
+
+  featureId String   @db.Uuid @map("feature_id")
+  feature    DeviceFeature @relation(fields: [featureId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([featureId, createdAt(sort: Desc)])
+  @@map("t_device_feature_state")
+}
+
+model DeviceParam {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  value     String
+  deviceId String   @db.Uuid @map("device_id")
+  device    Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@map("t_device_param")
+}
+
+model DeviceShare {
+  id          String          @id @default(uuid()) @db.Uuid
+  deviceId   String          @db.Uuid @map("device_id")
+  device      Device          @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  userId     String          @db.Uuid @map("user_id")
+  user        User            @relation("SharedToUser", fields: [userId], references: [id], onDelete: Cascade)
+  permission  SharePermission @default(EDITOR)
+  sortOrder   Int             @default(0) @map("sort_order")
+  createdAt  DateTime        @default(now()) @map("created_at")
+
+  @@unique([deviceId, userId])
+  @@map("t_device_share")
+}
+
+// ==========================================
+// 5. HOME & ROOM (Nhà & Phòng)
+// ==========================================
+
+model Home {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  latitude  Float?
+  longitude Float?
+  radius    Int      @default(100)
+
+  ownerId  String   @db.Uuid @map("owner_id")
+  owner     User     @relation("UserHomes", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  members   HomeMember[]
+  floors    Floor[]
+  rooms     Room[]
+  devices   Device[]
+  scenes    Scene[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("t_home")
+}
+
+model Floor {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  sortOrder Int     @default(0) @map("sort_order")
+
+  homeId   String   @db.Uuid @map("home_id")
+  home      Home     @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  rooms     Room[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([homeId])
+  @@map("t_floor")
+}
+
+model HomeMember {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId   String   @db.Uuid @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  homeId   String   @db.Uuid @map("home_id")
+  home      Home     @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  role      String   @default("MEMBER")
+
+  @@unique([userId, homeId])
+  @@map("t_home_member")
+}
+
+model Room {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  homeId   String   @db.Uuid @map("home_id")
+  home      Home     @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  floorId  String?  @db.Uuid @map("floor_id")
+  floor     Floor?   @relation(fields: [floorId], references: [id], onDelete: SetNull)
+  devices   Device[]
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([floorId])
+  @@map("t_room")
+}
+
+// ==========================================
+// 6. MISC (Scene, Location, System...)
+// ==========================================
+
+model Service {
+  id      String   @id @default(uuid()) @db.Uuid
+  name    String   @unique
+  status  String?
+  devices Device[]
+  @@map("t_service")
+}
+
+model Scene {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  active      Boolean  @default(true)
+  triggers    Json     @default("[]")
+  actions     Json     @default("[]")
+  homeId     String   @db.Uuid @map("home_id")
+  home        Home     @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@map("t_scene")
+}
+
+model Location {
+  id        String   @id @default(uuid()) @db.Uuid
+  latitude  Float
+  longitude Float
+  accuracy  Float?
+  battery   Int?
+  userId   String   @db.Uuid @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("t_location")
+}
+
+model Calendar {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  userId     String   @db.Uuid @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events      CalendarEvent[]
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  @@map("t_calendar")
+}
+
+model CalendarEvent {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  start       DateTime
+  end         DateTime
+  allDay     Boolean  @default(false) @map("all_day")
+  calendarId String   @db.Uuid @map("calendar_id")
+  calendar    Calendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+  @@index([start, end])
+  @@map("t_calendar_event")
+}
+
+model SystemConfig {
+  key         String @id
+  value       String
+  description String?
+  @@map("t_system_config")
+}
+
+// ==========================================
+// 7. PROVISION TOKEN (Token-based device pairing)
+// ==========================================
+
+enum ProvisionTokenStatus {
+  PENDING
+  ACTIVATED
+  EXPIRED
+}
+
+model ProvisionToken {
+  id          String               @id @default(uuid()) @db.Uuid
+  token       String               @unique @default(uuid())
+
+  status      ProvisionTokenStatus @default(PENDING)
+
+  // User đang thực hiện pairing
+  userId      String               @db.Uuid @map("user_id")
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Device được tạo sau khi chip activate (null khi pending)
+  deviceId    String?              @db.Uuid @map("device_id")
+  deviceName  String?              // App gửi tên thiết bị lúc provision @map("device_name")
+
+  // MQTT broker info cho chip
+  mqttBroker  String? @map("mqtt_broker")
+
+  expiresAt   DateTime @map("expires_at")
+  createdAt   DateTime             @default(now()) @map("created_at")
+  activatedAt DateTime? @map("activated_at")
+
+  @@index([token])
+  @@index([userId])
+  @@map("t_provision_token")
+}

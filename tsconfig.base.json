@@ -13,8 +13,20 @@
     "lib": ["es2020", "dom"],
     "skipLibCheck": true,
     "skipDefaultLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
     "baseUrl": ".",
-    "paths": {}
+    "paths": {
+      "@euro-smart-server/common": ["libs/common/src/index.ts"],
+      "@euro-smart-server/database": ["libs/database/src/index.ts"],
+      "@euro-smart-server/redis-cache": ["libs/redis-cache/src/index.ts"],
+      "@app/common": ["libs/common/src/index.ts"],
+      "@app/common/*": ["libs/common/src/*"],
+      "@app/database": ["libs/database/src/index.ts"],
+      "@app/database/*": ["libs/database/src/*"],
+      "@app/redis-cache": ["libs/redis-cache/src/index.ts"],
+      "@app/redis-cache/*": ["libs/redis-cache/src/*"]
+    }
   },
   "exclude": ["node_modules", "tmp"]
 }

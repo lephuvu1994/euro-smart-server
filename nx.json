@@ -37,7 +37,12 @@
       "options": {
         "targetName": "test"
       },
-      "exclude": ["apps/core-api-e2e/**/*"]
+      "exclude": [
+        "apps/core-api-e2e/**/*",
+        "apps/iot-gateway-e2e/**/*",
+        "apps/socket-gateway-e2e/**/*",
+        "apps/worker-service-e2e/**/*"
+      ]
     }
   ]
 }

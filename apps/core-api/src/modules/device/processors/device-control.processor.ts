@@ -5,7 +5,7 @@ import { Job, Queue } from 'bullmq';
 import { Logger } from '@nestjs/common';
 import { APP_BULLMQ_QUEUES } from '@app/common';
 import { RedisService } from '@app/redis-cache';
-import { SocketGateway } from 'src/modules/socket/gateways/socket.gateway';
+// import { SocketGateway } from 'src/modules/socket/gateways/socket.gateway';
 import { IntegrationManager } from '../../integration/registry/integration.manager';
 import { DatabaseService } from '@app/database';
 import { DEVICE_JOBS } from '@app/common';

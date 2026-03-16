@@ -7,7 +7,7 @@ import { DatabaseModule } from '@app/database';
 import { RedisModule } from '@app/redis-cache';
 // import { SocketModule } from '../socket/socket.module';
 // import { IntegrationModule } from '../integration/integration.module';
-import { SceneModule } from '@euro-smart-server/modules/scene';
+import { SceneModule } from '../scene/scene.module';
 import { DeviceProvisioningService } from './services/device-provisioning.service';
 import { DeviceControlService } from './services/device-control.service';
 import { DeviceService } from './services/device.service';

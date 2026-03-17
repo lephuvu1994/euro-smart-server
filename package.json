@@ -4,6 +4,7 @@
   "license": "MIT",
   "scripts": {
     "prepare": "husky",
+    "postinstall": "prisma generate",
 
     "prebuild": "rimraf dist",
     "build": "nx run-many --target=build --all",

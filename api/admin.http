@@ -122,6 +122,57 @@ GET {{baseUrl}}/admin/options/device-models
 Authorization: Bearer {{loginAdmin.response.body.data.accessToken}}
 
 ###
+# ⚡ Cập nhật Device Model (featuresConfig, name...)
+# Dùng khi model đã tồn tại nhưng featuresConfig bị trống
+PUT {{baseUrl}}/admin/device-models/{{deviceModelCode}}
+Authorization: Bearer {{loginAdmin.response.body.data.accessToken}}
+Content-Type: application/json
+
+{
+    "name": "Công tắc WiFi 4 nút Pro",
+    "featuresConfig": [
+        {
+            "code": "shutter_main",
+            "name": "Điều khiển cửa",
+            "type": "SHUTTER",
+            "category": "curtain",
+            "read_only": false,
+            "command_suffix": "set",
+            "command_key": "state",
+            "values": ["OPEN", "CLOSE", "STOP"]
+        },
+        {
+            "code": "security_lock",
+            "name": "Khóa trẻ em",
+            "type": "BINARY",
+            "category": "lock",
+            "read_only": false,
+            "command_suffix": "set",
+            "command_key": "child_lock",
+            "values": []
+        },
+        {
+            "code": "sys_config",
+            "name": "Cấu hình hệ thống",
+            "type": "CONFIG",
+            "category": "switch",
+            "read_only": false,
+            "command_suffix": "config",
+            "embedded_keys": [
+                "req_open_clicks",
+                "req_close_clicks",
+                "def_open_clicks",
+                "def_close_clicks",
+                "time_mode",
+                "start_hour",
+                "end_hour"
+            ]
+        }
+    ]
+}
+
+
+###
 # Danh sách quota (raw)
 GET {{baseUrl}}/admin/quotas
 Authorization: Bearer {{loginAdmin.response.body.data.accessToken}}

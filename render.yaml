@@ -1,4 +1,4 @@
-# Render Blueprint – euro-smart-server monorepo
+# Render Blueprint – aurathink-server monorepo
 # All infrastructure (Postgres, Redis, EMQX) is external.
 # Only the 4 Node.js microservices run on Render.
 #
@@ -6,7 +6,7 @@
 #   1. Push this file to your repo
 #   2. Go to https://dashboard.render.com → New → Blueprint
 #   3. Select your repo → Render will auto-detect render.yaml
-#   4. Set the env vars in the "euro-smart-env" group on Render Dashboard
+#   4. Set the env vars in the "aurathink-env" group on Render Dashboard
 
 services:
   # ── core-api: Main REST API (public) ──
@@ -22,7 +22,7 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - fromGroup: euro-smart-env
+      - fromGroup: aurathink-env
     dockerCommand: node dist/apps/core-api/main.js
 
   # ── socket-gateway: WebSocket server (public) ──
@@ -39,7 +39,7 @@ services:
         value: production
       - key: SOCKET_GATEWAY_PORT
         value: "10000"
-      - fromGroup: euro-smart-env
+      - fromGroup: aurathink-env
     dockerCommand: node dist/apps/socket-gateway/main.js
 
   # ── iot-gateway: MQTT bridge (private – internal only) ──
@@ -56,7 +56,7 @@ services:
         value: production
       - key: IOT_GATEWAY_PORT
         value: "10000"
-      - fromGroup: euro-smart-env
+      - fromGroup: aurathink-env
     dockerCommand: node dist/apps/iot-gateway/main.js
 
   # ── worker-service: BullMQ job processor (background) ──
@@ -71,13 +71,13 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - fromGroup: euro-smart-env
+      - fromGroup: aurathink-env
     dockerCommand: node dist/apps/worker-service/main.js
 
 # ── Environment Variable Group ──
 # Create this group on Render Dashboard with your actual values:
 #
-# Group name: euro-smart-env
+# Group name: aurathink-env
 #
 # Required variables:
 #   DATABASE_URL          = postgresql://user:pass@host:5432/dbname

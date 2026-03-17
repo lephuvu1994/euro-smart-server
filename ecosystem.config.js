@@ -1,7 +1,7 @@
 /**
  * PM2 Ecosystem Configuration
  * ─────────────────────────────
- * Manages all 4 microservices in the euro-smart-server monorepo.
+ * Manages all 4 microservices in the aurathink-server monorepo.
  *
  * Usage:
  *   pm2 start ecosystem.config.js              # Start all services

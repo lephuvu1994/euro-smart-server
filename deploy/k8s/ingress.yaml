@@ -1,15 +1,15 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: euro-smart-ingress
-  namespace: euro-smart
+  name: aurathink-ingress
+  namespace: aurathink
   annotations:
     nginx.ingress.kubernetes.io/proxy-body-size: '10m'
     nginx.ingress.kubernetes.io/proxy-read-timeout: '300'
     nginx.ingress.kubernetes.io/proxy-send-timeout: '300'
     # WebSocket support for socket-gateway
     nginx.ingress.kubernetes.io/proxy-http-version: '1.1'
-    nginx.ingress.kubernetes.io/proxy-set-headers: 'euro-smart/custom-headers'
+    nginx.ingress.kubernetes.io/proxy-set-headers: 'aurathink/custom-headers'
     # Uncomment for cert-manager TLS
     # cert-manager.io/cluster-issuer: letsencrypt-prod
 spec:
@@ -19,7 +19,7 @@ spec:
   #   - hosts:
   #       - api.yourdomain.com
   #       - ws.yourdomain.com
-  #     secretName: euro-smart-tls
+  #     secretName: aurathink-tls
   rules:
     # ── REST API ──
     - host: api.yourdomain.com
@@ -49,7 +49,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: custom-headers
-  namespace: euro-smart
+  namespace: aurathink
 data:
   Upgrade: '$http_upgrade'
   Connection: 'upgrade'

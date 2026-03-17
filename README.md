@@ -1,4 +1,4 @@
-# Euro Smart Server
+# Aurathink Server
 
 <a alt="Nx logo" href="https://nx.dev" target="_blank" rel="noreferrer"><img src="https://raw.githubusercontent.com/nrwl/nx/master/images/nx-logo.png" width="45"></a>
 
@@ -25,7 +25,7 @@ Infrastructure (Docker internal):
    └── EMQX :1883/:8883  MQTT Broker (IoT devices)
 ```
 
-**Shared Libraries**: `@euro-smart-server/common` · `@euro-smart-server/database` · `@euro-smart-server/redis-cache`
+**Shared Libraries**: `@aurathink-server/common` · `@aurathink-server/database` · `@aurathink-server/redis-cache`
 
 ---
 
@@ -110,7 +110,7 @@ docker compose -f docker-compose.prod.yml up -d --no-deps core-api
 ## 📁 Cấu Trúc Dự Án
 
 ```
-euro-smart-server/
+aurathink-server/
 ├── apps/
 │   ├── core-api/           # REST API chính
 │   ├── socket-gateway/     # WebSocket server

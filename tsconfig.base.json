@@ -20,13 +20,13 @@
     "allowSyntheticDefaultImports": true,
     "baseUrl": ".",
     "paths": {
-      "@euro-smart-server/common": [
+      "@aurathink-server/common": [
         "libs/common/src/index.ts"
       ],
-      "@euro-smart-server/database": [
+      "@aurathink-server/database": [
         "libs/database/src/index.ts"
       ],
-      "@euro-smart-server/redis-cache": [
+      "@aurathink-server/redis-cache": [
         "libs/redis-cache/src/index.ts"
       ],
       "@app/common": [

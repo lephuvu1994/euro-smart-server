@@ -1,11 +1,11 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: euro-smart-config
-  namespace: euro-smart
+  name: aurathink-config
+  namespace: aurathink
 data:
   APP_ENV: "production"
-  APP_NAME: "eurosmart"
+  APP_NAME: "aurathink"
   APP_DEBUG: "false"
   APP_LOG_LEVEL: "info"
   HTTP_HOST: "0.0.0.0"

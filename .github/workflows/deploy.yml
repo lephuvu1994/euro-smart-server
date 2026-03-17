@@ -63,11 +63,14 @@ jobs:
     steps:
       - name: SSH Deploy to VPS
         uses: appleboy/ssh-action@v1.2.0
+        env:
+          ENV_PRODUCTION: ${{ secrets.ENV_PRODUCTION }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT || 22 }}
+          envs: ENV_PRODUCTION
           script: |
             set -e
             IMAGE="ghcr.io/${{ github.repository_owner }}/aurathink-server:latest"
@@ -85,7 +88,7 @@ jobs:
             git reset --hard FETCH_HEAD
 
             echo "==> Writing .env.production from secret..."
-            printf '%s' '${{ secrets.ENV_PRODUCTION }}' > /root/aurathink-server/.env.production
+            printf '%s\n' "$ENV_PRODUCTION" > /root/aurathink-server/.env.production
 
             echo "==> Running migrations..."
             docker run --rm \

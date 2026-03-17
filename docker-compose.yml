@@ -22,7 +22,7 @@ services:
 
   postgres:
     image: timescale/timescaledb:latest-pg16
-    container_name: euro-postgres
+    container_name: aurathink-postgres
     restart: unless-stopped
     ports:
       - '${POSTGRES_PORT:-5432}:5432'
@@ -48,7 +48,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: euro-redis
+    container_name: aurathink-redis
     restart: unless-stopped
     ports:
       - '${REDIS_PORT:-6379}:6379'
@@ -76,7 +76,7 @@ services:
 
   emqx:
     image: emqx/emqx:5.8.5
-    container_name: euro-emqx
+    container_name: aurathink-emqx
     restart: unless-stopped
     ports:
       - '1883:1883' # MQTT TCP
@@ -113,7 +113,7 @@ services:
       context: .
       dockerfile: Dockerfile
     image: aurathink-server:dev
-    container_name: euro-core-api
+    container_name: aurathink-core-api
     restart: unless-stopped
     ports:
       - '${HTTP_PORT:-3001}:${HTTP_PORT:-3001}'
@@ -147,7 +147,7 @@ services:
 
   socket-gateway:
     image: aurathink-server:dev
-    container_name: euro-socket-gateway
+    container_name: aurathink-socket-gateway
     restart: unless-stopped
     ports:
       - '${SOCKET_GATEWAY_PORT:-3002}:${SOCKET_GATEWAY_PORT:-3002}'
@@ -164,7 +164,7 @@ services:
 
   iot-gateway:
     image: aurathink-server:dev
-    container_name: euro-iot-gateway
+    container_name: aurathink-iot-gateway
     restart: unless-stopped
     ports:
       - '${IOT_GATEWAY_PORT:-3003}:${IOT_GATEWAY_PORT:-3003}'
@@ -183,7 +183,7 @@ services:
 
   worker-service:
     image: aurathink-server:dev
-    container_name: euro-worker-service
+    container_name: aurathink-worker-service
     restart: unless-stopped
     env_file:
       - .env.docker
@@ -201,7 +201,7 @@ services:
   # ─────────────────────────────────────────────
   migrate:
     image: aurathink-server:dev
-    container_name: euro-migrate
+    container_name: aurathink-migrate
     restart: 'no'
     env_file:
       - .env.docker
@@ -223,10 +223,10 @@ networks:
 
 volumes:
   postgres_data:
-    name: euro-postgres-data
+    name: aurathink-postgres-data
   redis_data:
-    name: euro-redis-data
+    name: aurathink-redis-data
   emqx_data:
-    name: euro-emqx-data
+    name: aurathink-emqx-data
   emqx_log:
-    name: euro-emqx-log
+    name: aurathink-emqx-log

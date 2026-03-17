@@ -107,13 +107,9 @@ services:
     ports:
       - '${HTTP_PORT:-3001}:${HTTP_PORT:-3001}'
     env_file:
-      - .env
+      - .env.docker
     environment:
       NODE_ENV: development
-      # Override hosts để trỏ vào containers
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-master123}@postgres:5432/${POSTGRES_DB:-eurosmart}?schema=public
-      REDIS_HOST: redis
-      MQTT_HOST: mqtt://emqx
     command: ['node', 'dist/apps/core-api/main.js']
     depends_on:
       postgres:
@@ -138,11 +134,9 @@ services:
     ports:
       - '${SOCKET_GATEWAY_PORT:-3002}:${SOCKET_GATEWAY_PORT:-3002}'
     env_file:
-      - .env
+      - .env.docker
     environment:
       NODE_ENV: development
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-master123}@postgres:5432/${POSTGRES_DB:-eurosmart}?schema=public
-      REDIS_HOST: redis
     command: ['node', 'dist/apps/socket-gateway/main.js']
     depends_on:
       core-api:
@@ -157,12 +151,9 @@ services:
     ports:
       - '${IOT_GATEWAY_PORT:-3003}:${IOT_GATEWAY_PORT:-3003}'
     env_file:
-      - .env
+      - .env.docker
     environment:
       NODE_ENV: development
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-master123}@postgres:5432/${POSTGRES_DB:-eurosmart}?schema=public
-      REDIS_HOST: redis
-      MQTT_HOST: mqtt://emqx
     command: ['node', 'dist/apps/iot-gateway/main.js']
     depends_on:
       core-api:
@@ -177,11 +168,9 @@ services:
     container_name: euro-worker-service
     restart: unless-stopped
     env_file:
-      - .env
+      - .env.docker
     environment:
       NODE_ENV: development
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-master123}@postgres:5432/${POSTGRES_DB:-eurosmart}?schema=public
-      REDIS_HOST: redis
     command: ['node', 'dist/apps/worker-service/main.js']
     depends_on:
       core-api:
@@ -197,9 +186,7 @@ services:
     container_name: euro-migrate
     restart: 'no'
     env_file:
-      - .env
-    environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-master123}@postgres:5432/${POSTGRES_DB:-eurosmart}?schema=public
+      - .env.docker
     command: ['npx', 'prisma', 'migrate', 'deploy']
     depends_on:
       postgres:

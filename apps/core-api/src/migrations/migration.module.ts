@@ -5,6 +5,7 @@ import { ConfigModule } from '@nestjs/config';
 import { DatabaseModule } from '@app/database';
 import { configs } from '@app/common';
 import { HelperModule } from '@app/common/helper/helper.module';
+import { CustomLoggerModule } from '@app/common/logger/logger.module';
 import { AdminMigrationSeed } from './admin.seed';
 
 @Module({
@@ -16,6 +17,7 @@ import { AdminMigrationSeed } from './admin.seed';
       envFilePath: ['.env'],
       expandVariables: true,
     }),
+    CustomLoggerModule,
     DatabaseModule,
     HelperModule,
     CommandModule,
@@ -24,3 +26,4 @@ import { AdminMigrationSeed } from './admin.seed';
   exports: [AdminMigrationSeed],
 })
 export class MigrationModule {}
+

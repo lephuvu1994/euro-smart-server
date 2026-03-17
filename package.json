@@ -5,22 +5,18 @@
   "scripts": {
     "prepare": "husky",
     "postinstall": "prisma generate",
-
     "prebuild": "rimraf dist",
     "build": "nx run-many --target=build --all",
     "build:core-api": "nx build core-api",
     "build:iot-gateway": "nx build iot-gateway",
     "build:socket-gateway": "nx build socket-gateway",
     "build:worker-service": "nx build worker-service",
-
     "start": "node dist/apps/core-api/main",
-
     "dev": "dotenv -e .env.local -- nx run-many --target=serve --all --parallel",
     "dev:core-api": "dotenv -e .env.local -- nx serve core-api",
     "dev:iot-gateway": "dotenv -e .env.local -- nx serve iot-gateway",
     "dev:socket-gateway": "dotenv -e .env.local -- nx serve socket-gateway",
     "dev:worker-service": "dotenv -e .env.local -- nx serve worker-service",
-
     "generate": "dotenv -e .env.local -- prisma generate",
     "migrate": "dotenv -e .env.local -- prisma migrate dev",
     "migrate:deploy": "dotenv -e .env.local -- prisma migrate deploy",
@@ -29,10 +25,8 @@
     "studio": "dotenv -e .env.local -- prisma studio",
     "seed:admin": "dotenv -e .env.local -- cross-env TS_NODE_PROJECT=apps/core-api/tsconfig.app.json ts-node --transpile-only -r tsconfig-paths/register apps/core-api/src/cli.ts seed:admin",
     "seed:admin:prod": "dotenv -e .env.production -- cross-env TS_NODE_PROJECT=apps/core-api/tsconfig.app.json ts-node --transpile-only -r tsconfig-paths/register apps/core-api/src/cli.ts seed:admin",
-
     "update:package": "npx npm-check-updates -u",
     "make-badges": "istanbul-badges-readme",
-
     "lint": "nx run-many --target=lint --all",
     "lint:fix": "nx run-many --target=lint --all --fix",
     "format": "prettier --write \"{apps,libs,test}/**/*.ts\"",

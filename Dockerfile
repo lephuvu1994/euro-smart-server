@@ -7,15 +7,15 @@ WORKDIR /app
 
 COPY package.json yarn.lock .yarnrc.yml ./
 
+# Copy prisma schema BEFORE yarn install
+# Required because postinstall runs 'prisma generate' which needs schema.prisma
+COPY prisma ./prisma/
+
 # Enable Yarn 4
 RUN corepack enable && corepack prepare yarn@4.9.2 --activate
 
-# Install deps (node_modules mode)
+# Install deps — postinstall will run prisma generate automatically
 RUN yarn install --immutable
-
-# Copy prisma schema and generate client
-COPY prisma ./prisma/
-RUN yarn generate
 
 # Copy source code
 COPY . .
@@ -32,19 +32,16 @@ ENV NODE_ENV=production
 
 WORKDIR /app
 
-# Copy prisma client (generated) and engine
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+# Copy ALL node_modules from builder
+# Avoids cascade dependency issues (pino-pretty → colorette → ..., @prisma/client → .prisma/client)
+# Packages loaded dynamically (pino transport, prisma engine) need their full dep tree
+COPY --from=builder /app/node_modules ./node_modules
 
-# Copy prisma migrations (for migrate deploy)
+# Copy prisma migrations
 COPY --from=builder /app/prisma ./prisma
 
-# Copy built dist — each app has its own generated package.json
+# Copy built dist
 COPY --from=builder /app/dist ./dist
-
-# Install production dependencies per service (using generated package.json)
-# We use core-api's generated package.json as the base since it has the most deps
-RUN cd dist/apps/core-api && npm install --omit=dev 2>/dev/null || true
 
 EXPOSE 3001 3002 3003 3004
 

@@ -27,7 +27,7 @@ services:
 
   postgres:
     image: timescale/timescaledb:latest-pg16
-    container_name: euro-postgres-prod
+    container_name: aurathink-postgres-prod
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
@@ -60,7 +60,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: euro-redis-prod
+    container_name: aurathink-redis-prod
     restart: unless-stopped
     command: >
       redis-server --maxmemory-policy noeviction
@@ -89,7 +89,7 @@ services:
 
   emqx:
     image: emqx/emqx:5.8.5
-    container_name: euro-emqx-prod
+    container_name: aurathink-emqx-prod
     restart: unless-stopped
     ports:
       - '1883:1883' # MQTT TCP — IoT devices kết nối
@@ -136,7 +136,7 @@ services:
       context: .
       dockerfile: Dockerfile
     image: aurathink-server:${APP_VERSION:-latest}
-    container_name: euro-migrate-prod
+    container_name: aurathink-migrate-prod
     restart: 'no'
     env_file:
       - .env
@@ -159,7 +159,7 @@ services:
       context: .
       dockerfile: Dockerfile
     image: aurathink-server:${APP_VERSION:-latest}
-    container_name: euro-core-api-prod
+    container_name: aurathink-core-api-prod
     restart: unless-stopped
     env_file:
       - .env
@@ -209,7 +209,7 @@ services:
 
   socket-gateway:
     image: aurathink-server:${APP_VERSION:-latest}
-    container_name: euro-socket-gateway-prod
+    container_name: aurathink-socket-gateway-prod
     restart: unless-stopped
     env_file:
       - .env
@@ -240,7 +240,7 @@ services:
 
   iot-gateway:
     image: aurathink-server:${APP_VERSION:-latest}
-    container_name: euro-iot-gateway-prod
+    container_name: aurathink-iot-gateway-prod
     restart: unless-stopped
     env_file:
       - .env
@@ -275,7 +275,7 @@ services:
 
   worker-service:
     image: aurathink-server:${APP_VERSION:-latest}
-    container_name: euro-worker-service-prod
+    container_name: aurathink-worker-service-prod
     restart: unless-stopped
     env_file:
       - .env

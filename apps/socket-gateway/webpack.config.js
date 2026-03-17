@@ -9,6 +9,14 @@ module.exports = {
       devtoolModuleFilenameTemplate: '[absolute-resource-path]',
     }),
   },
+  externals: [
+    ({ request }, callback) => {
+      if (request === '@prisma/client' || request?.startsWith('.prisma/')) {
+        return callback(null, `commonjs ${request}`);
+      }
+      callback();
+    },
+  ],
   plugins: [
     new NxAppWebpackPlugin({
       target: 'node',

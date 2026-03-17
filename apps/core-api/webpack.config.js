@@ -9,6 +9,19 @@ module.exports = {
       devtoolModuleFilenameTemplate: '[absolute-resource-path]',
     }),
   },
+  // ──────────────────────────────────────────────
+  // Prisma MUST be external — webpack cannot bundle
+  // @prisma/client because $Enums and the query engine
+  // are loaded at runtime from node_modules.
+  // ──────────────────────────────────────────────
+  externals: [
+    ({ request }, callback) => {
+      if (request === '@prisma/client' || request?.startsWith('.prisma/')) {
+        return callback(null, `commonjs ${request}`);
+      }
+      callback();
+    },
+  ],
   plugins: [
     new NxAppWebpackPlugin({
       target: 'node',

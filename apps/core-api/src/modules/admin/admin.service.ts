@@ -134,6 +134,20 @@ export class AdminService {
     });
   }
 
+  async updateDeviceModel(code: string, data: CreateDeviceModelDto) {
+    const existing = await this.db.deviceModel.findUnique({ where: { code } });
+    if (!existing) throw new HttpException('Device Model not found', HttpStatus.NOT_FOUND);
+
+    return this.db.deviceModel.update({
+      where: { code },
+      data: {
+        ...(data.name && { name: data.name }),
+        ...(data.description !== undefined && { description: data.description }),
+        ...(data.featuresConfig !== undefined && { featuresConfig: data.featuresConfig }),
+      },
+    });
+  }
+
   // ──────────────────────────────────────────────
   // QUOTAS
   // ──────────────────────────────────────────────

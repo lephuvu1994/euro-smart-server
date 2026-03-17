@@ -62,6 +62,12 @@ export class AdminController {
     return this.adminService.createDeviceModel(body);
   }
 
+  @Put('device-models/:code')
+  @ApiOperation({ summary: 'Update Device Model (name, featuresConfig...)', description: 'Dùng khi cần cập nhật featuresConfig cho model đã tồn tại.' })
+  updateDeviceModel(@Param('code') code: string, @Body() body: CreateDeviceModelDto) {
+    return this.adminService.updateDeviceModel(code, body);
+  }
+
   @Get('options/device-models')
   @ApiOperation({ summary: 'Get Device Models for Dropdown' })
   getDeviceModelOptions() {

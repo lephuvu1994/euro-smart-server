@@ -2,7 +2,7 @@
 # ADMIN – Partner, Device Model, Quota, MQTT Config
 # ==========================================
 # Chạy request "Login Admin" trước để có accessToken
-@baseUrl = https://nestjs-smarthome.onrender.com/v1
+@baseUrl = http://localhost:3001/v1
 @adminEmail = vulewenlian94@gmail.com
 @adminPassword = Aa123456789@
 @companyCode = BKTech

@@ -61,14 +61,14 @@ jobs:
   # GitHub Secrets cần tạo:
   #
   #   Chung:
-  #     ENV_PRODUCTION   — nội dung file .env.production (dùng chung cả 2 VPS)
-  #     GH_PAT           — GitHub PAT để git pull
+  #     ENV_PRODUCTION   — nội dung file .env (dùng chung cả 2 VPS)
+  #     GH_PAT           — GitHub PAT (read:packages + repo)
   #
   #   VPS1:
-  #     VPS1_HOST, VPS1_USER, VPS1_SSH_KEY, VPS1_PORT (optional, default 22)
+  #     VPS1_HOST, VPS1_USER, VPS1_SSH_KEY, VPS1_PORT
   #
   #   VPS2:
-  #     VPS2_HOST, VPS2_USER, VPS2_SSH_KEY, VPS2_PORT (optional, default 22)
+  #     VPS2_HOST, VPS2_USER, VPS2_SSH_KEY, VPS2_PORT
 
   deploy-vps1:
     name: Deploy → VPS1
@@ -80,49 +80,52 @@ jobs:
         uses: appleboy/ssh-action@v1.2.0
         env:
           ENV_PRODUCTION: ${{ secrets.ENV_PRODUCTION }}
+          GH_PAT: ${{ secrets.GH_PAT }}
         with:
           host: ${{ secrets.VPS1_HOST }}
           username: ${{ secrets.VPS1_USER }}
           key: ${{ secrets.VPS1_SSH_KEY }}
           port: ${{ secrets.VPS1_PORT || 22 }}
-          envs: ENV_PRODUCTION
+          envs: ENV_PRODUCTION,GH_PAT
           script: |
             set -e
             IMAGE="ghcr.io/${{ github.repository_owner }}/aurathink-server:latest"
 
             echo "==> [VPS1] Login to ghcr.io..."
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io \
-              -u ${{ github.actor }} --password-stdin
+            echo "$GH_PAT" | docker login ghcr.io \
+              -u ${{ github.repository_owner }} --password-stdin
 
             echo "==> [VPS1] Pulling new image: $IMAGE"
             docker pull $IMAGE
 
             echo "==> [VPS1] Updating repo..."
             cd ~/aurathink-server
-            git fetch https://${{ secrets.GH_PAT }}@github.com/lephuvu1994/euro-smart-server.git main
+            git fetch https://${GH_PAT}@github.com/lephuvu1994/euro-smart-server.git main
             git reset --hard FETCH_HEAD
 
-            echo "==> [VPS1] Writing .env.production from secret..."
-            printf '%s\n' "$ENV_PRODUCTION" > /root/aurathink-server/.env.production
+            echo "==> [VPS1] Writing .env from secret..."
+            printf '%s\n' "$ENV_PRODUCTION" > /root/aurathink-server/.env
 
             echo "==> [VPS1] Running migrations..."
             docker run --rm \
-              --env-file /root/aurathink-server/.env.production \
+              --env-file /root/aurathink-server/.env \
+              -e REDIS_HOST=redis \
+              -e MQTT_HOST=mqtt://emqx \
               --network aurathink-prod-network \
               $IMAGE \
               npx prisma migrate deploy
 
             echo "==> [VPS1] Restarting services..."
             IMAGE=$IMAGE docker compose -f /root/aurathink-server/docker-compose.prod.yml up -d \
-              --no-build \
+              --no-build --force-recreate \
               core-api iot-gateway socket-gateway worker-service
 
             echo "==> [VPS1] Cleaning up old images..."
             docker image prune -f
 
-            echo "==> [VPS1] Health check..."
-            sleep 8
-            curl -sf http://localhost:3001/health/live || echo "WARNING: health check failed"
+            echo "==> [VPS1] Health check (wait 30s)..."
+            sleep 30
+            curl -sf http://127.0.0.1/health || echo "WARNING: health check failed"
 
             echo "==> [VPS1] Deploy done! SHA: ${{ github.sha }}"
 
@@ -136,48 +139,51 @@ jobs:
         uses: appleboy/ssh-action@v1.2.0
         env:
           ENV_PRODUCTION: ${{ secrets.ENV_PRODUCTION }}
+          GH_PAT: ${{ secrets.GH_PAT }}
         with:
           host: ${{ secrets.VPS2_HOST }}
           username: ${{ secrets.VPS2_USER }}
           key: ${{ secrets.VPS2_SSH_KEY }}
           port: ${{ secrets.VPS2_PORT || 22 }}
-          envs: ENV_PRODUCTION
+          envs: ENV_PRODUCTION,GH_PAT
           script: |
             set -e
             IMAGE="ghcr.io/${{ github.repository_owner }}/aurathink-server:latest"
 
             echo "==> [VPS2] Login to ghcr.io..."
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io \
-              -u ${{ github.actor }} --password-stdin
+            echo "$GH_PAT" | docker login ghcr.io \
+              -u ${{ github.repository_owner }} --password-stdin
 
             echo "==> [VPS2] Pulling new image: $IMAGE"
             docker pull $IMAGE
 
             echo "==> [VPS2] Updating repo..."
             cd ~/aurathink-server
-            git fetch https://${{ secrets.GH_PAT }}@github.com/lephuvu1994/euro-smart-server.git main
+            git fetch https://${GH_PAT}@github.com/lephuvu1994/euro-smart-server.git main
             git reset --hard FETCH_HEAD
 
-            echo "==> [VPS2] Writing .env.production from secret..."
-            printf '%s\n' "$ENV_PRODUCTION" > /root/aurathink-server/.env.production
+            echo "==> [VPS2] Writing .env from secret..."
+            printf '%s\n' "$ENV_PRODUCTION" > /root/aurathink-server/.env
 
             echo "==> [VPS2] Running migrations..."
             docker run --rm \
-              --env-file /root/aurathink-server/.env.production \
+              --env-file /root/aurathink-server/.env \
+              -e REDIS_HOST=redis \
+              -e MQTT_HOST=mqtt://emqx \
               --network aurathink-prod-network \
               $IMAGE \
               npx prisma migrate deploy
 
             echo "==> [VPS2] Restarting services..."
             IMAGE=$IMAGE docker compose -f /root/aurathink-server/docker-compose.prod.yml up -d \
-              --no-build \
+              --no-build --force-recreate \
               core-api iot-gateway socket-gateway worker-service
 
             echo "==> [VPS2] Cleaning up old images..."
             docker image prune -f
 
-            echo "==> [VPS2] Health check..."
-            sleep 8
-            curl -sf http://localhost:3001/health/live || echo "WARNING: health check failed"
+            echo "==> [VPS2] Health check (wait 30s)..."
+            sleep 30
+            curl -sf http://127.0.0.1/health || echo "WARNING: health check failed"
 
             echo "==> [VPS2] Deploy done! SHA: ${{ github.sha }}"

@@ -88,13 +88,13 @@ jobs:
 
             echo "==> Running migrations..."
             docker run --rm \
-              --env-file .env.production \
+              --env-file /root/aurathink-server/.env.production \
               --network aurathink-prod-network \
               $IMAGE \
               npx prisma migrate deploy
 
             echo "==> Restarting services..."
-            IMAGE=$IMAGE docker compose -f docker-compose.prod.yml up -d \
+            IMAGE=$IMAGE docker compose -f /root/aurathink-server/docker-compose.prod.yml up -d \
               --no-build \
               core-api iot-gateway socket-gateway worker-service
 

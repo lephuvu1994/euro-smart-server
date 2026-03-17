@@ -2,80 +2,110 @@
 
 <a alt="Nx logo" href="https://nx.dev" target="_blank" rel="noreferrer"><img src="https://raw.githubusercontent.com/nrwl/nx/master/images/nx-logo.png" width="45"></a>
 
-NX Monorepo cho hệ thống Smart Home — gồm 4 microservices chạy trên NestJS.
+NX Monorepo cho hệ thống **Smart Home IoT** — 4 microservices NestJS, deploy bằng **Docker Compose**.
+
+---
 
 ## 📋 Kiến Trúc
 
-| Service | Port | Mô tả |
-|---------|------|--------|
-| **core-api** | 3001 | REST API chính |
-| **socket-gateway** | 3002 | WebSocket server (real-time) |
-| **iot-gateway** | 3003 | MQTT bridge (IoT devices) |
-| **worker-service** | 3004 | BullMQ job processor |
+```
+Internet
+   │
+   ▼
+[Nginx :80/:443]  ← SSL, reverse proxy, rate limiting
+   ├─► /api/        → core-api :3001     REST API chính
+   ├─► /socket.io/  → socket-gateway :3002  WebSocket real-time
+   └─► /iot/        → iot-gateway :3003  HTTP IoT endpoint
+                          ↓
+                  worker-service :3004   BullMQ jobs (internal)
 
-**Shared Libraries**: `@euro-smart-server/common`, `@euro-smart-server/database`, `@euro-smart-server/redis-cache`
+Infrastructure (Docker internal):
+   ├── PostgreSQL   Database
+   ├── Redis        Cache + BullMQ + Pub/Sub
+   └── EMQX :1883/:8883  MQTT Broker (IoT devices)
+```
 
-## 🚀 Quick Start
+**Shared Libraries**: `@euro-smart-server/common` · `@euro-smart-server/database` · `@euro-smart-server/redis-cache`
+
+---
+
+## 🚀 Quick Start (Local Dev)
 
 ```bash
-# Cài dependencies
+# 1. Cài dependencies
 corepack enable && corepack prepare yarn@4.9.2 --activate
 yarn install --immutable
 
-# Cấu hình
-cp .env.example .env   # Chỉnh sửa .env
+# 2. Cấu hình
+cp .env.example .env   # ✏️ Chỉnh sửa .env
 
-# Generate Prisma client
+# 3. Generate Prisma client
 yarn generate
 
-# Chạy development (tất cả services)
-yarn dev
+# 4. Chạy với Docker (recommended — có sẵn Postgres, Redis, EMQX)
+docker compose build
+docker compose run --rm migrate
+docker compose up -d
 
-# Chạy từng service
+# Hoặc chạy từng service local (cần infra sẵn)
 yarn dev:core-api
-yarn dev:iot-gateway
 yarn dev:socket-gateway
+yarn dev:iot-gateway
 yarn dev:worker-service
 ```
 
-## 🔨 Build
+---
+
+## 🔨 Build & Test
 
 ```bash
-yarn build                    # Build tất cả
-yarn build:core-api           # Build 1 service
+yarn build          # Build tất cả services
+yarn build:core-api # Build 1 service
+
+yarn test           # Chạy tests
+yarn lint           # Lint
+yarn format         # Format code
 ```
 
-## 🧪 Test & Lint
-
-```bash
-yarn test                     # Chạy tests
-yarn lint                     # Lint
-yarn format                   # Format code
-```
+---
 
 ## 🗃️ Database
 
 ```bash
-yarn generate                 # Generate Prisma client
-yarn migrate                  # Tạo migration (dev)
-yarn migrate:prod             # Apply migration (production)
-yarn studio                   # Prisma Studio GUI
-yarn seed:admin               # Seed admin user
+yarn generate       # Generate Prisma client
+yarn migrate        # Tạo migration (dev)
+yarn migrate:prod   # Apply migration (production)
+yarn studio         # Prisma Studio GUI
+yarn seed:admin     # Seed admin user
 ```
 
-## 🚀 Deployment
+---
 
-Hỗ trợ deploy trên nhiều nền tảng:
+## 🐳 Deployment (Docker Compose)
 
-| Nền tảng | Config file | Hướng dẫn |
-|----------|-------------|-----------|
-| **PM2** | `ecosystem.config.js` | [deploy/pm2/README.md](deploy/pm2/README.md) |
-| **Docker** | `docker-compose.prod.yml` | [deploy/README.md](deploy/README.md) |
-| **Kubernetes** | `deploy/k8s/*.yaml` | [deploy/k8s/README.md](deploy/k8s/README.md) |
-| **VPS (systemd)** | `deploy/vps/*.service` | [deploy/vps/README.md](deploy/vps/README.md) |
-| **Render** | `render.yaml` | [deploy/README.md](deploy/README.md) |
+Hệ thống deploy hoàn toàn bằng **Docker Compose** — phù hợp từ single VPS đến khi cần nâng lên Kubernetes.
 
-👉 **Xem hướng dẫn đầy đủ**: [deploy/README.md](deploy/README.md)
+| File | Dùng khi |
+|------|----------|
+| `docker-compose.yml` | Local development (full infra + services) |
+| `docker-compose.prod.yml` | Production (Nginx + full stack) |
+| `deploy/docker/nginx.conf` | Nginx reverse proxy config |
+
+```bash
+# Production — lần đầu
+cp .env.example .env && nano .env
+docker compose -f docker-compose.prod.yml build
+docker compose -f docker-compose.prod.yml run --rm migrate
+docker compose -f docker-compose.prod.yml up -d
+
+# Cập nhật code
+git pull && docker compose -f docker-compose.prod.yml build
+docker compose -f docker-compose.prod.yml up -d --no-deps core-api
+```
+
+👉 **Hướng dẫn đầy đủ**: [deploy/README.md](deploy/README.md)
+
+---
 
 ## 📁 Cấu Trúc Dự Án
 
@@ -91,13 +121,12 @@ euro-smart-server/
 │   ├── database/           # Prisma database module
 │   └── redis-cache/        # Redis cache module
 ├── prisma/                 # Schema & migrations
-├── deploy/                 # Deployment configs
-│   ├── k8s/                # Kubernetes manifests
-│   ├── pm2/                # PM2 guide
-│   └── vps/                # systemd + nginx
-├── ecosystem.config.js     # PM2 config
-├── docker-compose.yml      # Docker dev
-├── docker-compose.prod.yml # Docker production
-├── render.yaml             # Render Blueprint
-└── Dockerfile              # Multi-stage build
+├── deploy/
+│   ├── docker/             # Nginx config + SSL
+│   │   └── nginx.conf
+│   └── README.md           # Hướng dẫn deploy Docker Compose
+├── docker-compose.yml      # Dev: full infra + 4 services
+├── docker-compose.prod.yml # Production: Nginx + full stack
+├── Dockerfile              # Multi-stage build
+└── .env.example            # Template biến môi trường
 ```

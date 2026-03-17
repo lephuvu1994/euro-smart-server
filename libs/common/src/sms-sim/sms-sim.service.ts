@@ -6,12 +6,10 @@ import { SerialPort } from 'serialport';
 @Injectable()
 export class SmsSimService implements OnModuleInit {
   private readonly logger = new Logger(SmsSimService.name);
-  private modem: any;
+  private modem: any = null;
   private isModemReady = false;
 
-  constructor(private readonly configService: ConfigService) {
-    this.modem = gsm.Modem();
-  }
+  constructor(private readonly configService: ConfigService) {}
 
   async onModuleInit() {
     const port = this.configService.get<string>('sms.simPort');
@@ -21,6 +19,9 @@ export class SmsSimService implements OnModuleInit {
     }
 
     try {
+      // Lazy init modem — only when SIM_PORT is configured
+      this.modem = gsm.Modem();
+
       // 1. Kiểm tra xem port có tồn tại không trước khi mở
       const ports = await SerialPort.list();
       const portExists = ports.some((p) => p.path === port);

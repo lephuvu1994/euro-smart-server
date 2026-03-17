@@ -1,5 +1,5 @@
 import { registerAs } from '@nestjs/config';
 
 export default registerAs('sms', () => ({
-  simPort: process.env.SIM_PORT || '/dev/ttyUSB0',
+  simPort: process.env.SIM_PORT || '',
 }));

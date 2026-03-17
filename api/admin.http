@@ -130,6 +130,7 @@ Content-Type: application/json
 
 {
     "name": "Công tắc WiFi 4 nút Pro",
+    "code": "1001",
     "featuresConfig": [
         {
             "code": "shutter_main",

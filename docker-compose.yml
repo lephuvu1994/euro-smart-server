@@ -1,91 +1,227 @@
+# ══════════════════════════════════════════════════════════════════
+# EURO SMART SERVER — Docker Compose (Development)
+# ══════════════════════════════════════════════════════════════════
+# Bao gồm toàn bộ infrastructure + 4 microservices.
+# Dùng cho môi trường local development.
+#
+# Khởi chạy:
+#   docker compose up -d
+#   docker compose logs -f
+#   docker compose down
+#
+# Hot-reload (mount source):
+#   docker compose up -d server (nếu dùng nodemon/ts-node)
+# ══════════════════════════════════════════════════════════════════
+
+name: euro-smart-dev
+
 services:
-    postgres:
-        image: postgres:16-alpine
-        container_name: nestjs-postgres
-        restart: unless-stopped
-        ports:
-            - '5432:5432'
-        environment:
-            POSTGRES_USER: ${POSTGRES_USER:-postgres}
-            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-master123}
-            POSTGRES_DB: ${POSTGRES_DB:-postgres}
-        volumes:
-            - postgres_data:/var/lib/postgresql/data
-        networks:
-            - app-network
-        healthcheck:
-            test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-postgres}']
-            interval: 10s
-            timeout: 5s
-            retries: 5
-            start_period: 30s
 
-    redis:
-        image: redis:7-alpine
-        container_name: nestjs-redis
-        restart: unless-stopped
-        ports:
-            - '6379:6379'
-        volumes:
-            - redis_data:/data
-        networks:
-            - app-network
-        healthcheck:
-            test: ['CMD', 'redis-cli', 'ping']
-            interval: 10s
-            timeout: 5s
-            retries: 5
-            start_period: 10s
-        command: redis-server --appendonly yes
+  # ─────────────────────────────────────────────
+  # INFRASTRUCTURE
+  # ─────────────────────────────────────────────
 
-    emqx:
-        image: emqx/emqx:5.8.5
-        container_name: smarthome_emqx
-        restart: always
-        ports:
-        - "1883:1883"   # Port cho MQTT (TCP) - Quan trọng nhất
-        - "8083:8083"   # Port cho WebSocket (nếu dùng Web App connect thẳng)
-        - "18083:18083" # Port Dashboard quản lý
-        environment:
-        - "EMQX_NODE_NAME=emqx@node1.emqx.io"
-        - "EMQX_DASHBOARD__DEFAULT_USERNAME=admin"
-        - "EMQX_DASHBOARD__DEFAULT_PASSWORD=public" # Mật khẩu đăng nhập Dashboard mặc định
-        volumes:
-        - ./docker/emqx/data:/opt/emqx/data
-        - ./docker/emqx/log:/opt/emqx/log
+  postgres:
+    image: postgres:16-alpine
+    container_name: euro-postgres
+    restart: unless-stopped
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-master123}
+      POSTGRES_DB: ${POSTGRES_DB:-eurosmart}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - euro-network
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-eurosmart}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
-    server:
-        build:
-            context: .
-            dockerfile: Dockerfile
-            cache_from:
-                - nestjs-app:latest
-        container_name: nestjs-app
-        restart: unless-stopped
-        ports:
-            - '3001:3001'
-        env_file:
-            - .env.docker
-        networks:
-            - app-network
-        volumes:
-            - .:/app
-            - /app/node_modules
-        depends_on:
-            postgres:
-                condition: service_healthy
-            redis:
-                condition: service_healthy
+  redis:
+    image: redis:7-alpine
+    container_name: euro-redis
+    restart: unless-stopped
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD:-}
+    volumes:
+      - redis_data:/data
+    networks:
+      - euro-network
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD:-}', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  emqx:
+    image: emqx/emqx:5.8.5
+    container_name: euro-emqx
+    restart: unless-stopped
+    ports:
+      - '1883:1883'       # MQTT TCP
+      - '8083:8083'       # MQTT over WebSocket
+      - '8084:8084'       # MQTT over WSS (TLS)
+      - '8883:8883'       # MQTT TLS
+      - '18083:18083'     # Dashboard Web UI
+    environment:
+      EMQX_NODE_NAME: 'emqx@node1.emqx.io'
+      EMQX_DASHBOARD__DEFAULT_USERNAME: ${EMQX_DASHBOARD_USER:-admin}
+      EMQX_DASHBOARD__DEFAULT_PASSWORD: ${EMQX_DASHBOARD_PASS:-admin123}
+      # Tắt anonymous access — bắt buộc xác thực
+      EMQX_AUTHENTICATION__1__MECHANISM: password_based
+      EMQX_AUTHENTICATION__1__BACKEND: built_in_database
+      EMQX_AUTHENTICATION__1__USER_ID_TYPE: username
+    volumes:
+      - emqx_data:/opt/emqx/data
+      - emqx_log:/opt/emqx/log
+    networks:
+      - euro-network
+    healthcheck:
+      test: ['CMD', 'emqx', 'ping']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ─────────────────────────────────────────────
+  # APPLICATION SERVICES
+  # ─────────────────────────────────────────────
+
+  core-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: euro-smart-server:dev
+    container_name: euro-core-api
+    restart: unless-stopped
+    ports:
+      - '${HTTP_PORT:-3001}:${HTTP_PORT:-3001}'
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: development
+      # Override hosts để trỏ vào containers
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-master123}@postgres:5432/${POSTGRES_DB:-eurosmart}?schema=public
+      REDIS_HOST: redis
+      MQTT_HOST: mqtt://emqx
+    command: ['node', 'dist/apps/core-api/main.js']
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      emqx:
+        condition: service_healthy
+    networks:
+      - euro-network
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:${HTTP_PORT:-3001}/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  socket-gateway:
+    image: euro-smart-server:dev
+    container_name: euro-socket-gateway
+    restart: unless-stopped
+    ports:
+      - '${SOCKET_GATEWAY_PORT:-3002}:${SOCKET_GATEWAY_PORT:-3002}'
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-master123}@postgres:5432/${POSTGRES_DB:-eurosmart}?schema=public
+      REDIS_HOST: redis
+    command: ['node', 'dist/apps/socket-gateway/main.js']
+    depends_on:
+      core-api:
+        condition: service_healthy
+    networks:
+      - euro-network
+
+  iot-gateway:
+    image: euro-smart-server:dev
+    container_name: euro-iot-gateway
+    restart: unless-stopped
+    ports:
+      - '${IOT_GATEWAY_PORT:-3003}:${IOT_GATEWAY_PORT:-3003}'
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-master123}@postgres:5432/${POSTGRES_DB:-eurosmart}?schema=public
+      REDIS_HOST: redis
+      MQTT_HOST: mqtt://emqx
+    command: ['node', 'dist/apps/iot-gateway/main.js']
+    depends_on:
+      core-api:
+        condition: service_healthy
+      emqx:
+        condition: service_healthy
+    networks:
+      - euro-network
+
+  worker-service:
+    image: euro-smart-server:dev
+    container_name: euro-worker-service
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-master123}@postgres:5432/${POSTGRES_DB:-eurosmart}?schema=public
+      REDIS_HOST: redis
+    command: ['node', 'dist/apps/worker-service/main.js']
+    depends_on:
+      core-api:
+        condition: service_healthy
+    networks:
+      - euro-network
+
+  # ─────────────────────────────────────────────
+  # DATABASE MIGRATION (run once then exit)
+  # ─────────────────────────────────────────────
+  migrate:
+    image: euro-smart-server:dev
+    container_name: euro-migrate
+    restart: 'no'
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-master123}@postgres:5432/${POSTGRES_DB:-eurosmart}?schema=public
+    command: ['npx', 'prisma', 'migrate', 'deploy']
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - euro-network
+
+# ─────────────────────────────────────────────
+# NETWORKS & VOLUMES
+# ─────────────────────────────────────────────
 
 networks:
-    app-network:
-        driver: bridge
-        name: nestjs-network
+  euro-network:
+    driver: bridge
+    name: euro-smart-network
 
 volumes:
-    postgres_data:
-        driver: local
-        name: nestjs-postgres-data
-    redis_data:
-        driver: local
-        name: nestjs-redis-data
+  postgres_data:
+    name: euro-postgres-data
+  redis_data:
+    name: euro-redis-data
+  emqx_data:
+    name: euro-emqx-data
+  emqx_log:
+    name: euro-emqx-log

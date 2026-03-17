@@ -1,4 +1,4 @@
-name: Deploy to Production VPS
+name: Deploy to Production
 
 on:
   push:
@@ -15,7 +15,7 @@ jobs:
 
     permissions:
       contents: read
-      packages: write  # Required to push to ghcr.io
+      packages: write # Required to push to ghcr.io
 
     outputs:
       image: ${{ steps.meta.outputs.tags }}

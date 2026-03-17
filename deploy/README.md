@@ -1,608 +1,504 @@
-# 🚀 Hướng Dẫn Deploy – Euro Smart Server
+# 🚀 Hướng Dẫn Deploy – Euro Smart Server (Docker Compose)
 
-Tài liệu này hướng dẫn deploy toàn bộ hệ thống **euro-smart-server** lên các nền tảng khác nhau.
+Hệ thống **euro-smart-server** là một IoT smarthome backend dạng microservices, được deploy hoàn toàn bằng **Docker Compose**.
 
-## 📋 Tổng Quan Hệ Thống
-
-| Service | Port | Mô tả |
-|---------|------|--------|
-| **core-api** | 3001 | REST API chính (HTTP) |
-| **socket-gateway** | 3002 | WebSocket server (real-time) |
-| **iot-gateway** | 3003 | MQTT bridge (IoT devices) |
-| **worker-service** | 3004 | BullMQ job processor (background tasks) |
-
-**Hạ tầng bên ngoài** (không deploy chung):
-- PostgreSQL — Database
-- Redis — Cache + BullMQ + Pub/Sub
-- EMQX — MQTT Broker
+> **Lộ trình**: Docker Compose → Kubernetes (khi cần scale lớn hơn)
 
 ---
 
-## 🔧 Bước Chung (Tất Cả Nền Tảng)
+## 📋 Tổng Quan Hệ Thống
 
-### 1. Chuẩn bị source code
+```
+Internet
+   │
+   ▼
+[Nginx :80/:443]  ← Reverse proxy, SSL termination, rate limiting
+   │
+   ├─► /api/        → [core-api :3001]        REST API chính
+   ├─► /socket.io/  → [socket-gateway :3002]  WebSocket real-time
+   └─► /iot/        → [iot-gateway :3003]     HTTP endpoint IoT
+                                ↓
+                       [worker-service :3004]  BullMQ jobs (no HTTP)
+
+Infrastructure (chạy trong cùng compose):
+   ├── PostgreSQL :5432    Database
+   ├── Redis :6379         Cache + BullMQ + Pub/Sub (không expose ra ngoài)
+   └── EMQX :1883/:8883   MQTT Broker (IoT devices kết nối trực tiếp)
+```
+
+| Service | Port (internal) | Expose ra ngoài |
+|---------|----------------|-----------------|
+| **core-api** | 3001 | Qua Nginx `/api/` |
+| **socket-gateway** | 3002 | Qua Nginx `/socket.io/` |
+| **iot-gateway** | 3003 | Qua Nginx `/iot/` |
+| **worker-service** | 3004 | Không |
+| **PostgreSQL** | 5432 | ❌ Không |
+| **Redis** | 6379 | ❌ Không |
+| **EMQX MQTT** | 1883, 8883 | ✅ IoT devices |
+| **EMQX Dashboard** | 18083 | ✅ (giới hạn firewall) |
+| **Nginx HTTP** | 80 | ✅ (redirect HTTPS) |
+| **Nginx HTTPS** | 443 | ✅ |
+
+---
+
+## 📁 Cấu Trúc Files
+
+```
+euro-smart-server/
+├── Dockerfile                    # Multi-stage build image
+├── docker-compose.yml            # Dev: full infra + services
+├── docker-compose.prod.yml       # Production: full stack
+├── .env.example                  # Template biến môi trường
+├── deploy/
+│   └── docker/
+│       ├── nginx.conf            # Nginx reverse proxy config
+│       └── ssl/                  # SSL certs (tạo tay hoặc Certbot)
+│           ├── fullchain.pem
+│           └── privkey.pem
+```
+
+---
+
+## 🟢 Development (Local)
+
+### Yêu cầu
+- Docker Desktop 4.x+ (hoặc Docker Engine 24+ + Compose v2)
+- 4GB RAM trống
+
+### Khởi chạy
+
+```bash
+# 1. Clone & chuẩn bị env
+git clone https://github.com/lephuvu1994/euro-smart-server.git
+cd euro-smart-server
+cp .env.example .env
+# ✏️ Chỉnh sửa .env (xem phần Cấu Hình Env bên dưới)
+
+# 2. Build image
+docker compose build
+
+# 3. Chạy database migration (lần đầu)
+docker compose run --rm migrate
+
+# 4. Start tất cả services
+docker compose up -d
+
+# 5. Xem logs
+docker compose logs -f
+docker compose logs -f core-api   # logs 1 service
+```
+
+### Kiểm tra trạng thái
+
+```bash
+docker compose ps            # Xem trạng thái tất cả containers
+docker compose top           # Xem processes
+```
+
+### URLs khi dev
+
+| Endpoint | URL |
+|----------|-----|
+| REST API | http://localhost:3001/api/v1 |
+| Health check | http://localhost:3001/health |
+| WebSocket | ws://localhost:3002 |
+| IoT Gateway | http://localhost:3003 |
+| EMQX Dashboard | http://localhost:18083 |
+
+### Dừng & dọn dẹp
+
+```bash
+docker compose down              # Dừng, giữ volumes
+docker compose down -v           # Dừng + xoá tất cả data
+docker compose down --rmi local  # Dừng + xoá image local
+```
+
+---
+
+## 🐳 Production
+
+### Yêu cầu
+
+- VPS/Server tối thiểu: **2 vCPU, 4GB RAM**
+- Đề xuất: **4 vCPU, 8GB RAM** cho hệ thống 1K-10K devices
+- Docker Engine 24+ và Compose v2
+- Domain + DNS đã trỏ về IP server
+- Mở ports trên firewall: **80, 443, 1883, 8883, 18083**
+
+### Bước 1: Cài Docker trên VPS
+
+```bash
+# Ubuntu/Debian
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+# Đăng xuất & đăng nhập lại để áp dụng group
+
+# Kiểm tra
+docker --version
+docker compose version
+```
+
+### Bước 2: Clone code & cấu hình
 
 ```bash
 git clone https://github.com/lephuvu1994/euro-smart-server.git
 cd euro-smart-server
 cp .env.example .env
-# ✏️ Chỉnh sửa .env với thông tin thật (DB, Redis, MQTT, JWT, Mail...)
+nano .env   # Điền tất cả giá trị thật (xem phần Biến Môi Trường bên dưới)
 ```
 
-### 2. Cài đặt & Build
+### Bước 3: SSL Certificate
+
+**Cách A — Self-signed (test nhanh, không dùng cho production thật):**
 
 ```bash
-# Cài Yarn 4
-corepack enable && corepack prepare yarn@4.9.2 --activate
-
-# Cài dependencies
-yarn install --immutable
-
-# Generate Prisma client
-yarn generate
-
-# Build tất cả services
-yarn build
-
-# Chạy database migration
-yarn migrate:prod
+mkdir -p deploy/docker/ssl
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout deploy/docker/ssl/privkey.pem \
+  -out deploy/docker/ssl/fullchain.pem \
+  -subj "/CN=your-domain.com"
 ```
 
----
-
-## 🟢 Option 1: Deploy bằng PM2
-
-> **Phù hợp**: VPS đơn lẻ, dễ quản lý, hỗ trợ zero-downtime reload.
-
-### Cài đặt PM2
+**Cách B — Let's Encrypt (recommended, miễn phí):**
 
 ```bash
-npm install -g pm2
+# Cài certbot
+sudo apt install -y certbot
+
+# Tạm thời dừng Nginx nếu đang chạy trên port 80
+# Lấy cert (standalone mode)
+sudo certbot certonly --standalone \
+  -d your-domain.com \
+  -d api.your-domain.com \
+  --email admin@your-domain.com \
+  --agree-tos
+
+# Copy certs vào thư mục deploy
+mkdir -p deploy/docker/ssl
+sudo cp /etc/letsencrypt/live/your-domain.com/fullchain.pem deploy/docker/ssl/
+sudo cp /etc/letsencrypt/live/your-domain.com/privkey.pem deploy/docker/ssl/
+sudo chown $USER:$USER deploy/docker/ssl/*.pem
 ```
 
-### Khởi động
+**Auto-renew Let's Encrypt:**
 
 ```bash
-# Start tất cả services
-pm2 start ecosystem.config.js --env production
-
-# Auto-start khi reboot
-pm2 save
-pm2 startup
+# Thêm vào crontab
+(crontab -l 2>/dev/null; echo "0 3 * * * certbot renew --quiet && \
+  cp /etc/letsencrypt/live/your-domain.com/fullchain.pem /path/to/euro-smart-server/deploy/docker/ssl/ && \
+  cp /etc/letsencrypt/live/your-domain.com/privkey.pem /path/to/euro-smart-server/deploy/docker/ssl/ && \
+  docker compose -f /path/to/euro-smart-server/docker-compose.prod.yml exec nginx nginx -s reload") | crontab -
 ```
 
-### Các lệnh thường dùng
+### Bước 4: Cấu hình Nginx domain
 
 ```bash
-pm2 status                       # Xem trạng thái
-pm2 logs                         # Xem log tất cả
-pm2 logs core-api                # Xem log 1 service
-pm2 reload all                   # Reload zero-downtime
-pm2 restart core-api             # Restart 1 service
-pm2 monit                        # Dashboard real-time
-pm2 stop all && pm2 delete all   # Dừng & xoá tất cả
+# ✏️ Mở file và thay "your-domain.com" bằng domain thật
+nano deploy/docker/nginx.conf
+# Tìm dòng: server_name your-domain.com;
+# Sửa thành: server_name api.yourdomain.com;
 ```
 
-### Cập nhật code
-
-```bash
-git pull origin main
-yarn install --immutable
-yarn generate && yarn build
-yarn migrate:prod
-pm2 reload ecosystem.config.js --env production
-```
-
-### Log rotation
-
-```bash
-pm2 install pm2-logrotate
-pm2 set pm2-logrotate:max_size 50M
-pm2 set pm2-logrotate:retain 7
-pm2 set pm2-logrotate:compress true
-```
-
-📖 Chi tiết: [deploy/pm2/README.md](pm2/README.md)
-
----
-
-## 🐳 Option 2: Deploy bằng Docker
-
-> **Phù hợp**: Môi trường cần container isolation, CI/CD pipelines.
-
-### Development (có cả infrastructure)
-
-```bash
-# Khởi chạy Postgres + Redis + EMQX + Server
-docker compose up -d
-```
-
-### Production (chỉ 4 services, infrastructure bên ngoài)
+### Bước 5: Build & Deploy
 
 ```bash
 # Build image
-docker build -t euro-smart-server:latest .
+docker compose -f docker-compose.prod.yml build
 
-# Chạy tất cả services
-docker compose -f docker-compose.prod.yml --env-file .env up -d
+# Chạy database migration
+docker compose -f docker-compose.prod.yml run --rm migrate
 
-# Xem logs
-docker compose -f docker-compose.prod.yml logs -f
+# Start toàn bộ stack
+docker compose -f docker-compose.prod.yml up -d
 
-# Dừng
-docker compose -f docker-compose.prod.yml down
+# Theo dõi logs khởi động
+docker compose -f docker-compose.prod.yml logs -f --tail=50
 ```
 
-### Chạy từng service riêng lẻ
+### Bước 6: Kiểm tra
 
 ```bash
-# Chỉ chạy core-api
-docker run -d --name core-api \
-  --env-file .env \
-  -e NODE_ENV=production \
-  -p 3001:3001 \
-  euro-smart-server:latest \
-  node dist/apps/core-api/main.js
+# Kiểm tra tất cả containers running
+docker compose -f docker-compose.prod.yml ps
 
-# Chỉ chạy socket-gateway
-docker run -d --name socket-gateway \
-  --env-file .env \
-  -e NODE_ENV=production \
-  -p 3002:3002 \
-  euro-smart-server:latest \
-  node dist/apps/socket-gateway/main.js
-```
+# Test API
+curl https://your-domain.com/health
+curl https://your-domain.com/api/v1
 
-### Cập nhật
-
-```bash
-docker compose -f docker-compose.prod.yml down
-docker build -t euro-smart-server:latest .
-docker compose -f docker-compose.prod.yml --env-file .env up -d
+# Test MQTT (cần cài mosquitto-clients)
+mosquitto_pub -h your-domain.com -p 1883 \
+  -u smarthome-server -P your-mqtt-password \
+  -t "test/ping" -m "hello"
 ```
 
 ---
 
-## ☸️ Option 3: Deploy bằng Kubernetes (K8s)
-
-> **Phù hợp**: Hệ thống lớn, cần auto-scaling, high availability.
-
-### Chuẩn bị
+## 🔄 Cập Nhật Code
 
 ```bash
-# Build & push Docker image lên registry
-docker build -t your-registry/euro-smart-server:latest .
-docker push your-registry/euro-smart-server:latest
-
-# ✏️ Sửa image name trong các file deploy/k8s/*.yaml
-```
-
-### Deploy toàn bộ
-
-```bash
-# Tạo namespace
-kubectl apply -f deploy/k8s/namespace.yaml
-
-# Tạo secrets (⚠️ chỉnh sửa secret.yaml trước!)
-kubectl apply -f deploy/k8s/secret.yaml
-
-# Tạo config
-kubectl apply -f deploy/k8s/configmap.yaml
-
-# Deploy 4 services
-kubectl apply -f deploy/k8s/core-api.yaml
-kubectl apply -f deploy/k8s/socket-gateway.yaml
-kubectl apply -f deploy/k8s/iot-gateway.yaml
-kubectl apply -f deploy/k8s/worker-service.yaml
-
-# Setup Ingress (⚠️ chỉnh sửa domain trước!)
-kubectl apply -f deploy/k8s/ingress.yaml
-```
-
-Hoặc deploy một lệnh:
-```bash
-kubectl apply -f deploy/k8s/
-```
-
-### Kiểm tra
-
-```bash
-kubectl get pods -n euro-smart          # Xem pods
-kubectl get svc -n euro-smart           # Xem services
-kubectl get hpa -n euro-smart           # Xem auto-scaling
-kubectl logs -f deploy/core-api -n euro-smart  # Xem logs
-```
-
-### Chạy migration
-
-```bash
-kubectl run db-migrate --rm -it \
-  --image=your-registry/euro-smart-server:latest \
-  --namespace=euro-smart \
-  --env="DATABASE_URL=postgresql://user:pass@host:5432/db" \
-  -- npx prisma migrate deploy
-```
-
-### Cập nhật
-
-```bash
-docker build -t your-registry/euro-smart-server:v2 .
-docker push your-registry/euro-smart-server:v2
-
-# Rolling update (zero-downtime)
-kubectl set image deployment/core-api \
-  core-api=your-registry/euro-smart-server:v2 -n euro-smart
-kubectl set image deployment/socket-gateway \
-  socket-gateway=your-registry/euro-smart-server:v2 -n euro-smart
-kubectl set image deployment/iot-gateway \
-  iot-gateway=your-registry/euro-smart-server:v2 -n euro-smart
-kubectl set image deployment/worker-service \
-  worker-service=your-registry/euro-smart-server:v2 -n euro-smart
-```
-
-### Tính năng K8s
-
-- ✅ **HPA Auto-scaling**: `core-api` tự scale 2→10 pods theo CPU/Memory
-- ✅ **Health probes**: Liveness + Readiness cho mỗi service
-- ✅ **Rolling updates**: Deploy không downtime
-- ✅ **Ingress**: Nginx routing cho API + WebSocket
-
-📖 Chi tiết: [deploy/k8s/README.md](k8s/README.md)
-
----
-
-## 🖥️ Option 4: Deploy trên VPS (systemd + Nginx)
-
-> **Phù hợp**: VPS truyền thống, không cần Docker/K8s, quản lý bằng systemd.
-
-### Setup tự động
-
-```bash
-chmod +x deploy/vps/setup.sh
-sudo ./deploy/vps/setup.sh
-```
-
-Script sẽ tự động:
-- Cài Node.js 22, Nginx
-- Tạo user `node` cho app
-- Copy systemd service files
-- Cấu hình Nginx reverse proxy
-
-### Setup thủ công
-
-#### Bước 1: Cài đặt
-
-```bash
-# Node.js 22
-curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-sudo apt-get install -y nodejs nginx
-
-# Yarn 4
-sudo corepack enable && corepack prepare yarn@4.9.2 --activate
-```
-
-#### Bước 2: Clone & Build
-
-```bash
-sudo git clone <repo-url> /opt/euro-smart-server
-cd /opt/euro-smart-server
-sudo cp .env.example .env
-sudo nano .env  # Chỉnh sửa
-sudo yarn install --immutable
-sudo yarn generate && sudo yarn build
-sudo yarn migrate:prod
-```
-
-#### Bước 3: Cài systemd services
-
-```bash
-sudo cp deploy/vps/euro-*.service /etc/systemd/system/
-sudo systemctl daemon-reload
-
-# Bật & khởi động tất cả services
-sudo systemctl enable --now euro-core-api
-sudo systemctl enable --now euro-socket-gateway
-sudo systemctl enable --now euro-iot-gateway
-sudo systemctl enable --now euro-worker-service
-```
-
-#### Bước 4: Cấu hình Nginx
-
-```bash
-sudo cp deploy/vps/nginx.conf /etc/nginx/sites-available/euro-smart
-sudo ln -s /etc/nginx/sites-available/euro-smart /etc/nginx/sites-enabled/
-sudo rm -f /etc/nginx/sites-enabled/default
-# ✏️ Chỉnh server_name trong nginx config
-sudo nginx -t && sudo systemctl reload nginx
-```
-
-#### Bước 5: SSL (Let's Encrypt)
-
-```bash
-sudo apt install certbot python3-certbot-nginx
-sudo certbot --nginx -d api.yourdomain.com -d ws.yourdomain.com
-```
-
-### Quản lý services
-
-```bash
-sudo systemctl status euro-core-api       # Xem trạng thái
-sudo systemctl restart euro-core-api      # Restart
-sudo systemctl stop euro-core-api         # Dừng
-journalctl -u euro-core-api -f            # Xem live logs
-journalctl -u euro-core-api --since "1h ago"  # Logs 1 giờ gần nhất
-```
-
-### Cập nhật
-
-```bash
-cd /opt/euro-smart-server
+cd /path/to/euro-smart-server
 git pull origin main
-yarn install --immutable
-yarn generate && yarn build
-yarn migrate:prod
-sudo systemctl restart euro-core-api euro-socket-gateway euro-iot-gateway euro-worker-service
-```
 
-📖 Chi tiết: [deploy/vps/README.md](vps/README.md)
+# Build image mới
+docker compose -f docker-compose.prod.yml build
 
----
+# Chạy migration nếu có thay đổi schema
+docker compose -f docker-compose.prod.yml run --rm migrate
 
-## 🌐 Option 5: Deploy trên Render
+# Rolling restart (zero-downtime từng service)
+docker compose -f docker-compose.prod.yml up -d --no-deps core-api
+docker compose -f docker-compose.prod.yml up -d --no-deps socket-gateway
+docker compose -f docker-compose.prod.yml up -d --no-deps iot-gateway
+docker compose -f docker-compose.prod.yml up -d --no-deps worker-service
 
-> **Phù hợp**: PaaS managed, không cần quản lý server, auto-deploy từ Git.
-
-### Bước thực hiện
-
-1. Push code lên GitHub
-2. Vào [dashboard.render.com](https://dashboard.render.com) → **New** → **Blueprint**
-3. Chọn repo → Render tự detect `render.yaml`
-4. Tạo **Environment Group** tên `euro-smart-env` và điền các biến:
-
-```
-DATABASE_URL          = postgresql://user:pass@host:5432/db
-REDIS_HOST            = your-redis-host
-REDIS_PORT            = 6379
-REDIS_PASSWORD        = your-redis-password
-MQTT_BROKER_URL       = mqtt://your-emqx-host:1883
-MQTT_USERNAME         = admin
-MQTT_PASSWORD         = password
-JWT_SECRET            = your-jwt-secret
-JWT_REFRESH_SECRET    = your-jwt-refresh-secret
-APP_PORT              = 10000
-```
-
-5. Deploy! Render sẽ auto-build và deploy 4 services.
-
-📖 Config file: [render.yaml](../render.yaml)
-
----
-
-## ⚙️ Cấu Hình Scale – Các Giá Trị Có Thể Điều Chỉnh
-
-Khi hệ thống cần nâng cấp (nhiều user, nhiều device, traffic cao hơn), các giá trị sau có thể điều chỉnh.
-
-### 1. PM2 (`ecosystem.config.js`)
-
-| Giá trị | Mặc định | Mô tả | Khi nào tăng |
-|---------|----------|-------|-------------|
-| `instances` (core-api) | `'max'` | Số process chạy song song. `'max'` = số CPU cores. Đặt số cụ thể như `4` nếu muốn giới hạn | Khi API chịu nhiều request đồng thời, tăng thêm CPU cores cho server |
-| `instances` (socket-gateway) | `1` | Chỉ chạy 1 instance vì WebSocket giữ state per-process | **Không nên tăng** trừ khi dùng Redis adapter cho Socket.IO |
-| `instances` (iot-gateway) | `1` | Chỉ chạy 1 instance vì MQTT client là single connection | **Không nên tăng** — mỗi instance tạo 1 MQTT connection riêng |
-| `instances` (worker-service) | `1` | Số worker xử lý BullMQ jobs | Khi queue bị backlog (jobs chờ xử lý quá nhiều), tăng lên 2-4 |
-| `max_memory_restart` | `512M` / `384M` | Tự restart khi process dùng quá nhiều RAM | Tăng lên `1G` nếu xử lý payload lớn hoặc nhiều connections |
-| `kill_timeout` | `5000` / `10000` | Thời gian chờ (ms) để process shutdown gracefully | Tăng nếu có long-running requests hoặc jobs cần hoàn thành |
-| `listen_timeout` | `10000` | Thời gian chờ (ms) app sẵn sàng sau khi start | Tăng nếu app khởi động chậm (kết nối DB xa, migrations) |
-| `exec_mode` | `cluster` / `fork` | `cluster` = multi-process load balancing; `fork` = single process | `core-api` dùng cluster; socket/iot/worker dùng fork |
-
-**Ví dụ scale cho server 8 CPU, 16GB RAM:**
-
-```js
-// ecosystem.config.js
-{
-  name: 'core-api',
-  instances: 6,               // Dùng 6/8 cores (để lại 2 cho OS + services khác)
-  max_memory_restart: '1G',   // Tăng RAM limit
-  kill_timeout: 10000,
-},
-{
-  name: 'worker-service',
-  instances: 2,               // 2 workers xử lý song song
-  max_memory_restart: '512M',
-}
+# Hoặc restart tất cả cùng lúc (có ~5s downtime)
+docker compose -f docker-compose.prod.yml up -d
 ```
 
 ---
 
-### 2. Docker (`docker-compose.prod.yml`)
+## ⚙️ Biến Môi Trường – Giải Thích
 
-| Giá trị | Mặc định | Mô tả | Khi nào tăng |
-|---------|----------|-------|-------------|
-| `deploy.resources.limits.memory` | `512M` / `384M` | Giới hạn RAM tối đa container được dùng. Vượt quá → bị kill | Tăng khi service cần xử lý data lớn hoặc nhiều concurrent connections |
-| `deploy.resources.limits.cpus` | `'1.0'` / `'0.5'` | Giới hạn CPU cores. `'1.0'` = 1 core, `'0.5'` = nửa core | Tăng cho `core-api` khi traffic cao |
-| `deploy.resources.reservations.memory` | `256M` / `128M` | RAM tối thiểu được đảm bảo cho container | Tăng khi cần đảm bảo performance ổn định |
-| `deploy.resources.reservations.cpus` | `'0.25'` | CPU tối thiểu được đảm bảo | Tăng cho services quan trọng |
-| `deploy.replicas` (thêm mới) | `1` | Số container chạy song song (cần thêm load balancer) | Tăng `core-api` replicas khi cần horizontal scaling |
-| `healthcheck.interval` | `30s` | Tần suất kiểm tra health | Giảm xuống `10s` nếu cần phát hiện lỗi nhanh hơn |
-| `healthcheck.timeout` | `10s` | Thời gian chờ health check response | Tăng nếu service response chậm dưới load |
-| `healthcheck.retries` | `3` | Số lần fail liên tiếp trước khi restart | Tăng lên `5` để tránh restart nhầm khi load spike |
+> **Quan trọng**: Trong Docker Compose, các service liên lạc nhau qua **tên service** (không dùng `localhost`).
+> - Database: `postgres` (không phải `localhost`)
+> - Redis: `redis`
+> - MQTT: `mqtt://emqx`
 
-**Ví dụ scale cho production:**
+### Bắt buộc thay đổi trước khi chạy production
+
+| Biến | Ví dụ | Mô tả |
+|------|-------|-------|
+| `POSTGRES_PASSWORD` | `Str0ngP@ss!` | Mật khẩu PostgreSQL |
+| `REDIS_PASSWORD` | `R3d!sP@ss` | Mật khẩu Redis |
+| `EMQX_DASHBOARD_PASS` | `Em@xP@ss!` | Mật khẩu EMQX Dashboard |
+| `MQTT_PASS` | `Mqtt@P@ss!` | Mật khẩu MQTT client |
+| `AUTH_ACCESS_TOKEN_SECRET` | `$(openssl rand -base64 32)` | JWT access secret |
+| `AUTH_REFRESH_TOKEN_SECRET` | `$(openssl rand -base64 32)` | JWT refresh secret |
+| `APP_CORS_ORIGINS` | `https://yourdomain.com` | Domain frontend |
+| `ADMIN_EMAIL` | `admin@yourdomain.com` | Email admin |
+| `ADMIN_PASSWORD` | `Admin@Secure123!` | Password admin |
+
+### Tạo secrets ngẫu nhiên
+
+```bash
+# JWT secrets
+echo "AUTH_ACCESS_TOKEN_SECRET=$(openssl rand -base64 32)"
+echo "AUTH_REFRESH_TOKEN_SECRET=$(openssl rand -base64 32)"
+
+# Database password
+openssl rand -base64 24
+```
+
+---
+
+## 📊 Cấu Hình Scale
+
+### Mặc định (2 vCPU, 4GB)
+
+Phù hợp: **< 1,000 devices, < 100 users đồng thời**
+
+| Service | Memory limit | CPU limit |
+|---------|-------------|-----------|
+| core-api | 512M | 1.0 core |
+| socket-gateway | 384M | 0.5 core |
+| iot-gateway | 384M | 0.5 core |
+| worker-service | 384M | 0.5 core |
+| PostgreSQL | 1G | 1.0 core |
+| Redis | 384M | 0.5 core |
+| EMQX | 512M | 1.0 core |
+
+### Scale up (chỉnh trong `docker-compose.prod.yml`)
 
 ```yaml
-# docker-compose.prod.yml
+# Ví dụ: server 8 vCPU, 16GB RAM — 10K devices
 core-api:
   deploy:
-    replicas: 3                    # 3 instances + load balancer
     resources:
       limits:
-        memory: 1G                 # Tăng RAM
-        cpus: '2.0'               # Tăng CPU
+        memory: 1G
+        cpus: '2.0'
       reservations:
         memory: 512M
         cpus: '0.5'
 ```
 
----
-
-### 3. Kubernetes (`deploy/k8s/*.yaml`)
-
-#### Deployment
-
-| Giá trị | File | Mặc định | Mô tả | Khi nào tăng |
-|---------|------|----------|-------|-------------|
-| `spec.replicas` | core-api | `2` | Số pods chạy đồng thời. Load được chia đều qua Service | Tăng lên `3-5` khi traffic tăng |
-| `spec.replicas` | socket-gw | `1` | WebSocket cần sticky sessions | Cần cấu hình thêm sticky session trước khi scale |
-| `spec.replicas` | worker-svc | `1` | Số worker pods | Tăng lên `2-3` khi BullMQ queue bị backlog |
-| `resources.requests.memory` | tất cả | `128Mi-256Mi` | RAM tối thiểu scheduler cần đảm bảo khi đặt pod lên node | Tăng nếu pods bị OOMKilled thường xuyên |
-| `resources.limits.memory` | tất cả | `384Mi-512Mi` | RAM tối đa pod được dùng. Vượt → OOMKilled | Tăng khi xử lý payload lớn |
-| `resources.requests.cpu` | tất cả | `100m-250m` | CPU tối thiểu (1000m = 1 core) | Tăng cho services xử lý nặng |
-| `resources.limits.cpu` | tất cả | `500m-1000m` | CPU tối đa pod được dùng | Tăng khi cần burst performance |
-| `terminationGracePeriodSeconds` | tất cả | `30` / `60` | Thời gian (giây) K8s chờ pod shutdown trước khi force kill | Tăng nếu có long-running requests/jobs |
-| `strategy.rollingUpdate.maxSurge` | tất cả | `1` | Số pods dư ra khi rolling update | Tăng để update nhanh hơn |
-| `strategy.rollingUpdate.maxUnavailable` | tất cả | `0` | Số pods được phép unavailable khi update. `0` = zero downtime | Giữ `0` cho production |
-
-#### HPA (Horizontal Pod Autoscaler) — `core-api.yaml`
-
-| Giá trị | Mặc định | Mô tả | Khi nào điều chỉnh |
-|---------|----------|-------|-------------------|
-| `minReplicas` | `2` | Số pods tối thiểu luôn chạy | Tăng lên `3` nếu cần high availability (chịu được 1 node down) |
-| `maxReplicas` | `10` | Số pods tối đa khi auto-scale | Tăng lên `20-50` cho traffic lớn (đảm bảo cluster đủ resources) |
-| `cpu.averageUtilization` | `70` | Ngưỡng CPU trung bình (%). Vượt qua → thêm pods | Giảm xuống `50` nếu muốn scale sớm hơn (reactive), tăng `80` nếu muốn tiết kiệm |
-| `memory.averageUtilization` | `80` | Ngưỡng Memory trung bình (%). Vượt qua → thêm pods | Giảm nếu app bị OOM khi memory spike |
-
-#### Probes (Health checks)
-
-| Giá trị | Mặc định | Mô tả | Khi nào điều chỉnh |
-|---------|----------|-------|-------------------|
-| `livenessProbe.initialDelaySeconds` | `15-30` | Thời gian chờ trước khi bắt đầu kiểm tra liveness | Tăng nếu app mất thời gian khởi động (migrations, warmup) |
-| `livenessProbe.periodSeconds` | `30` | Tần suất kiểm tra (giây) | Giảm xuống `10` nếu cần phát hiện crash nhanh |
-| `livenessProbe.failureThreshold` | `3` | Số lần fail trước khi restart pod | Tăng lên `5` để tránh restart nhầm |
-| `readinessProbe.initialDelaySeconds` | `10` | Thời gian chờ trước khi nhận traffic | Tăng nếu app cần warmup cache |
-| `readinessProbe.periodSeconds` | `10` | Tần suất kiểm tra readiness | Giữ nhỏ (`5-10`) để traffic routing nhanh |
-
-**Ví dụ scale cho 100K+ devices:**
-
 ```yaml
-# core-api.yaml
-spec:
-  replicas: 5
-  template:
-    spec:
-      containers:
-        - resources:
-            requests:
-              memory: '512Mi'
-              cpu: '500m'
-            limits:
-              memory: '1Gi'
-              cpu: '2000m'
+# Chạy nhiều worker để xử lý BullMQ jobs song song
+worker-service:
+  deploy:
+    replicas: 2   # ← Thêm dòng này
+    resources:
+      limits:
+        memory: 512M
+        cpus: '1.0'
+```
+
+### Lộ trình lên Kubernetes
+
+Khi cần scale vượt khả năng 1 server (> 10K devices đồng thời):
+
+1. Đẩy image lên registry: `docker build -t registry.io/euro-smart-server:v1 . && docker push ...`
+2. Tạo K8s Deployment từ `deploy/k8s/` (xem thêm nếu cần)
+3. Điểm khác biệt cần cấu hình thêm:
+   - `core-api`: thêm Redis session store
+   - `socket-gateway`: thêm Socket.IO Redis Adapter
+   - Database: dùng managed DB (Cloud SQL, RDS) thay vì container
+
 ---
-# HPA
-spec:
-  minReplicas: 3
-  maxReplicas: 20
-  metrics:
-    - type: Resource
-      resource:
-        name: cpu
-        target:
-          type: Utilization
-          averageUtilization: 60    # Scale sớm hơn
+
+## 🔧 Quản Lý & Monitoring
+
+### Xem logs
+
+```bash
+# Tất cả services
+docker compose -f docker-compose.prod.yml logs -f
+
+# Một service cụ thể
+docker compose -f docker-compose.prod.yml logs -f core-api
+
+# 100 dòng cuối
+docker compose -f docker-compose.prod.yml logs --tail=100 core-api
+```
+
+### Truy cập shell container
+
+```bash
+# Vào container core-api
+docker exec -it euro-core-api-prod sh
+
+# Chạy Prisma Studio (xem DB qua UI)
+docker exec -it euro-core-api-prod npx prisma studio
+```
+
+### Xem resource usage
+
+```bash
+docker stats                        # Real-time CPU/RAM/Network
+docker compose -f docker-compose.prod.yml top   # Processes
+```
+
+### Restart service
+
+```bash
+# Restart một service (giữ container name, không rebuild)
+docker compose -f docker-compose.prod.yml restart core-api
+
+# Dùng khi thay đổi config (rebuild container)
+docker compose -f docker-compose.prod.yml up -d --force-recreate core-api
+```
+
+### Backup & Restore Database
+
+```bash
+# Backup
+docker exec euro-postgres-prod pg_dump \
+  -U $POSTGRES_USER $POSTGRES_DB \
+  > backup-$(date +%Y%m%d-%H%M%S).sql
+
+# Restore
+cat backup.sql | docker exec -i euro-postgres-prod psql \
+  -U $POSTGRES_USER $POSTGRES_DB
 ```
 
 ---
 
-### 4. VPS systemd (`deploy/vps/*.service`)
+## 🔐 Bảo Mật Production Checklist
 
-| Giá trị | Mặc định | Mô tả | Khi nào điều chỉnh |
-|---------|----------|-------|-------------------|
-| `MemoryMax` | `512M` / `384M` | Giới hạn RAM tối đa cho process. Vượt quá → bị kill bởi systemd | Tăng lên `1G` - `2G` khi cần xử lý nhiều connections |
-| `CPUQuota` | `100%` / `50%` | Giới hạn CPU. `100%` = 1 core, `200%` = 2 cores | Tăng cho `core-api` khi chịu nhiều request |
-| `RestartSec` | `5` | Thời gian chờ (giây) trước khi restart sau crash | Tăng lên `10-30` nếu muốn tránh restart loop khi DB chưa sẵn sàng |
-| `TimeoutStopSec` | `30` / `60` | Thời gian chờ (giây) cho graceful shutdown | Tăng nếu có long-running requests/jobs |
-| `LimitNOFILE` (thêm mới) | `65536` | Số file descriptors tối đa (mỗi connection = 1 fd) | Thêm khi có >10K concurrent connections |
+- [ ] ❌ Không commit `.env` vào Git (đã có trong `.gitignore`)
+- [ ] 🔑 Thay toàn bộ passwords/secrets trong `.env`
+- [ ] 🌐 Thay `APP_CORS_ORIGINS=*` bằng domain thật
+- [ ] 🔒 Cấu hình Firewall: chỉ mở `80, 443, 1883, 8883`
+- [ ] 🔒 Port `18083` (EMQX Dashboard) — chỉ mở cho IP admin
+- [ ] 🔒 Port `5432, 6379` — KHÔNG mở ra ngoài (chỉ internal)
+- [ ] 🔒 SSL/HTTPS — dùng Let's Encrypt (miễn phí)
+- [ ] 📝 EMQX — thêm user MQTT riêng, bật authentication
+- [ ] 📝 PostgreSQL — tạo user riêng (không dùng `postgres` superuser)
+- [ ] 🔄 Đặt lịch auto-renew SSL cert
 
-**Ví dụ thêm config cho high-traffic:**
+### Thiết lập Firewall (Ubuntu/ufw)
 
-```ini
-# euro-core-api.service - thêm vào [Service]
-MemoryMax=2G
-CPUQuota=200%
-LimitNOFILE=65536
-LimitNPROC=4096
+```bash
+sudo ufw allow 22/tcp     # SSH
+sudo ufw allow 80/tcp     # HTTP (redirect HTTPS)
+sudo ufw allow 443/tcp    # HTTPS
+sudo ufw allow 1883/tcp   # MQTT plain (IoT devices)
+sudo ufw allow 8883/tcp   # MQTT TLS (IoT devices bảo mật)
+# sudo ufw allow 18083/tcp  # EMQX Dashboard (chỉ mở nếu cần)
+sudo ufw enable
+sudo ufw status
+```
+
+### Tạo MQTT User cho IoT Devices (EMQX)
+
+```bash
+# Truy cập EMQX Dashboard: http://your-server:18083
+# Menu: Authentication → Password-Based → Users → Add
+
+# Hoặc dùng EMQX CLI:
+docker exec euro-emqx-prod emqx_ctl users add \
+  --username smarthome-device \
+  --password DeviceP@ss123
 ```
 
 ---
 
-### 5. Nginx (`deploy/vps/nginx.conf`)
+## 🆘 Troubleshooting
 
-| Giá trị | Mặc định | Mô tả | Khi nào điều chỉnh |
-|---------|----------|-------|-------------------|
-| `limit_req_zone rate` | `30r/s` | Rate limit: số request/giây mỗi IP | Tăng lên `100r/s` - `500r/s` cho API có nhiều client |
-| `limit_req burst` | `50` | Cho phép burst thêm N request vượt rate limit | Tăng lên `100-200` cho API có traffic spike |
-| `keepalive` (upstream) | `32` | Số connections giữ sẵn đến backend | Tăng lên `64-128` khi traffic cao |
-| `client_max_body_size` | `10m` | Kích thước tối đa request body | Tăng lên `50m` nếu cho phép upload file lớn |
-| `proxy_read_timeout` | `60s` | Thời gian chờ response từ backend | Tăng cho API xử lý lâu (report, export) |
-| `proxy_read_timeout` (WS) | `86400s` | Timeout cho WebSocket connections (24h) | Giữ nguyên hoặc tăng cho long-lived connections |
-| `worker_processes` (thêm) | `auto` | Số Nginx worker processes | Thêm vào đầu nginx.conf: `worker_processes auto;` |
-| `worker_connections` (thêm) | `1024` | Số connections mỗi worker | Thêm: `events { worker_connections 4096; }` cho >10K connections |
+### Container không start
 
-**Ví dụ Nginx config cho high-traffic:**
+```bash
+# Xem log lỗi
+docker compose -f docker-compose.prod.yml logs core-api
 
-```nginx
-# Thêm vào đầu nginx.conf
-worker_processes auto;
-events {
-    worker_connections 4096;
-    multi_accept on;
-}
+# Kiểm tra health containers
+docker compose -f docker-compose.prod.yml ps
 
-# Tăng rate limit
-limit_req_zone $binary_remote_addr zone=api_limit:20m rate=100r/s;
+# Xem events
+docker events --since 5m
+```
 
-# Tăng upstream keepalive
-upstream core_api {
-    server 127.0.0.1:3001;
-    keepalive 128;
-}
+### Lỗi kết nối Database
+
+```bash
+# Test connection từ core-api đến postgres
+docker exec euro-core-api-prod sh -c \
+  'wget -qO- http://localhost:3001/health'
+
+# Test postgres trực tiếp
+docker exec euro-postgres-prod psql \
+  -U $POSTGRES_USER -d $POSTGRES_DB -c "SELECT 1"
+```
+
+### Lỗi MQTT connection
+
+```bash
+# Xem EMQX logs
+docker compose -f docker-compose.prod.yml logs emqx
+
+# Test MQTT từ trong container
+docker exec euro-iot-gateway-prod sh -c \
+  'nc -zv emqx 1883 && echo "MQTT OK"'
+```
+
+### Out of Memory
+
+```bash
+# Xem memory usage
+docker stats --no-stream
+
+# Tăng limit trong docker-compose.prod.yml
+# limits: memory: 1G  ← tăng giá trị này
 ```
 
 ---
 
-### 📋 Bảng Tham Chiếu Nhanh Theo Quy Mô
+## 📚 Tham Khảo
 
-| Quy mô | Devices | Users | core-api instances | Memory/instance | Worker instances |
-|---------|---------|-------|--------------------|-----------------|-----------------|
-| **Nhỏ** | <1K | <100 | 1-2 | 256M-512M | 1 |
-| **Vừa** | 1K-10K | 100-1K | 2-4 | 512M-1G | 1-2 |
-| **Lớn** | 10K-100K | 1K-10K | 4-8 | 1G-2G | 2-4 |
-| **Rất lớn** | 100K+ | 10K+ | 8-20 (K8s HPA) | 2G-4G | 4-8 |
-
-> **Lưu ý**: Khi scale ngang (nhiều instances), cần đảm bảo:
-> - Redis dùng làm session store nếu `core-api` cluster mode
-> - Socket.IO dùng Redis Adapter khi scale `socket-gateway`
-> - BullMQ tự phân phối jobs — chỉ cần tăng `worker-service` instances
-
----
-
-## 📊 So Sánh Các Phương Pháp Deploy
-
-| Tiêu chí | PM2 | Docker | K8s | VPS (systemd) | Render |
-|-----------|-----|--------|-----|----------------|--------|
-| **Độ phức tạp** | ⭐ Thấp | ⭐⭐ TB | ⭐⭐⭐ Cao | ⭐ Thấp | ⭐ Thấp |
-| **Auto-scaling** | ❌ | ❌ | ✅ | ❌ | ✅ (trả phí) |
-| **Zero-downtime** | ✅ | ✅ | ✅ | ⚠️ Thủ công | ✅ |
-| **Monitoring** | ✅ PM2 | ⚠️ Cần thêm | ✅ Built-in | ⚠️ journalctl | ✅ Built-in |
-| **Chi phí** | 💰 VPS | 💰 VPS | 💰💰 Cluster | 💰 VPS | 💰💰 PaaS |
-| **Phù hợp** | Dev nhỏ | MVP/Startup | Enterprise | Server cá nhân | Quick deploy |
-
----
-
-## 🔐 Lưu Ý Bảo Mật
-
-1. **Không commit `.env`** — luôn dùng `.env.example` làm template
-2. **Đổi JWT secrets** — tạo mới bằng `openssl rand -base64 32`
-3. **Hạn chế CORS** — thay `*` bằng domain thật trong production
-4. **SSL/TLS** — luôn dùng HTTPS cho production
-5. **Firewall** — chỉ mở ports cần thiết (80, 443)
+| File | Mô tả |
+|------|-------|
+| [`docker-compose.yml`](../docker-compose.yml) | Dev compose config |
+| [`docker-compose.prod.yml`](../docker-compose.prod.yml) | Production compose config |
+| [`deploy/docker/nginx.conf`](docker/nginx.conf) | Nginx reverse proxy |
+| [`Dockerfile`](../Dockerfile) | Multi-stage Docker build |
+| [`.env.example`](../.env.example) | Template biến môi trường |

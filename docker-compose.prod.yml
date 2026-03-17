@@ -1,27 +1,181 @@
-# Docker Compose – Production
-# ─────────────────────────────
-# Runs all 4 microservices as separate containers.
-# Infrastructure (Postgres, Redis, EMQX) is managed externally.
+# ══════════════════════════════════════════════════════════════════
+# EURO SMART SERVER — Docker Compose (Production)
+# ══════════════════════════════════════════════════════════════════
+# Infrastructure (Postgres, Redis, EMQX) chạy cùng trong compose.
+# Nginx reverse proxy expose port 80/443 ra ngoài.
 #
-# Usage:
-#   docker compose -f docker-compose.prod.yml --env-file .env up -d
-#   docker compose -f docker-compose.prod.yml logs -f
-#   docker compose -f docker-compose.prod.yml down
+# Khởi chạy lần đầu:
+#   cp .env.example .env && nano .env
+#   docker compose -f docker-compose.prod.yml build
+#   docker compose -f docker-compose.prod.yml up migrate   # chạy DB migration
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Cập nhật:
+#   docker compose -f docker-compose.prod.yml build
+#   docker compose -f docker-compose.prod.yml up -d --no-deps core-api socket-gateway iot-gateway worker-service
+#
+# Logs:
+#   docker compose -f docker-compose.prod.yml logs -f --tail=100
+# ══════════════════════════════════════════════════════════════════
+
+name: euro-smart-prod
 
 services:
+
+  # ─────────────────────────────────────────────
+  # INFRASTRUCTURE
+  # ─────────────────────────────────────────────
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: euro-postgres-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-eurosmart}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - euro-internal
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB:-eurosmart}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+    # ⚠️ Không expose port Postgres ra ngoài host trong production
+
+  redis:
+    image: redis:7-alpine
+    container_name: euro-redis-prod
+    restart: unless-stopped
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - euro-internal
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD}', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+
+  emqx:
+    image: emqx/emqx:5.8.5
+    container_name: euro-emqx-prod
+    restart: unless-stopped
+    ports:
+      - '1883:1883'       # MQTT TCP — IoT devices kết nối
+      - '8883:8883'       # MQTT TLS — bảo mật
+      - '8083:8083'       # MQTT WebSocket
+      - '18083:18083'     # Dashboard — nên giới hạn firewall
+    environment:
+      EMQX_NODE_NAME: 'emqx@node1.emqx.io'
+      EMQX_DASHBOARD__DEFAULT_USERNAME: ${EMQX_DASHBOARD_USER:-admin}
+      EMQX_DASHBOARD__DEFAULT_PASSWORD: ${EMQX_DASHBOARD_PASS:?EMQX_DASHBOARD_PASS is required}
+      # Cấu hình authentication
+      EMQX_AUTHENTICATION__1__MECHANISM: password_based
+      EMQX_AUTHENTICATION__1__BACKEND: built_in_database
+      EMQX_AUTHENTICATION__1__USER_ID_TYPE: username
+      EMQX_AUTHENTICATION__1__PASSWORD_HASH_ALGORITHM__NAME: bcrypt
+      # Performance tuning
+      EMQX_BROKER__SHARED_SUBSCRIPTION: 'true'
+      EMQX_LOG__CONSOLE__LEVEL: warning
+    volumes:
+      - emqx_data:/opt/emqx/data
+      - emqx_log:/opt/emqx/log
+    networks:
+      - euro-internal
+    healthcheck:
+      test: ['CMD', 'emqx', 'ping']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+
+  # ─────────────────────────────────────────────
+  # DATABASE MIGRATION (chạy 1 lần rồi thoát)
+  # ─────────────────────────────────────────────
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: euro-smart-server:${APP_VERSION:-latest}
+    container_name: euro-migrate-prod
+    restart: 'no'
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-eurosmart}?schema=public
+    command: ['npx', 'prisma', 'migrate', 'deploy']
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - euro-internal
+
+  # ─────────────────────────────────────────────
+  # APPLICATION SERVICES
+  # ─────────────────────────────────────────────
+
   core-api:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: euro-core-api
+    image: euro-smart-server:${APP_VERSION:-latest}
+    container_name: euro-core-api-prod
     restart: unless-stopped
-    ports:
-      - '${HTTP_PORT:-3001}:${HTTP_PORT:-3001}'
     env_file:
       - .env
     environment:
-      - NODE_ENV=production
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-eurosmart}?schema=public
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      MQTT_HOST: mqtt://emqx
+      MQTT_PORT: '1883'
     command: ['node', 'dist/apps/core-api/main.js']
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      emqx:
+        condition: service_healthy
+    networks:
+      - euro-internal
     healthcheck:
       test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:${HTTP_PORT:-3001}/health']
       interval: 30s
@@ -36,20 +190,29 @@ services:
         reservations:
           memory: 256M
           cpus: '0.25'
+    logging:
+      driver: json-file
+      options:
+        max-size: '50m'
+        max-file: '5'
 
   socket-gateway:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: euro-socket-gateway
+    image: euro-smart-server:${APP_VERSION:-latest}
+    container_name: euro-socket-gateway-prod
     restart: unless-stopped
-    ports:
-      - '${SOCKET_GATEWAY_PORT:-3002}:${SOCKET_GATEWAY_PORT:-3002}'
     env_file:
       - .env
     environment:
-      - NODE_ENV=production
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-eurosmart}?schema=public
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
     command: ['node', 'dist/apps/socket-gateway/main.js']
+    depends_on:
+      core-api:
+        condition: service_healthy
+    networks:
+      - euro-internal
     deploy:
       resources:
         limits:
@@ -57,21 +220,34 @@ services:
           cpus: '0.5'
         reservations:
           memory: 128M
-          cpus: '0.25'
+          cpus: '0.1'
+    logging:
+      driver: json-file
+      options:
+        max-size: '30m'
+        max-file: '5'
 
   iot-gateway:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: euro-iot-gateway
+    image: euro-smart-server:${APP_VERSION:-latest}
+    container_name: euro-iot-gateway-prod
     restart: unless-stopped
-    ports:
-      - '${IOT_GATEWAY_PORT:-3003}:${IOT_GATEWAY_PORT:-3003}'
     env_file:
       - .env
     environment:
-      - NODE_ENV=production
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-eurosmart}?schema=public
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
+      MQTT_HOST: mqtt://emqx
+      MQTT_PORT: '1883'
     command: ['node', 'dist/apps/iot-gateway/main.js']
+    depends_on:
+      core-api:
+        condition: service_healthy
+      emqx:
+        condition: service_healthy
+    networks:
+      - euro-internal
     deploy:
       resources:
         limits:
@@ -79,19 +255,30 @@ services:
           cpus: '0.5'
         reservations:
           memory: 128M
-          cpus: '0.25'
+          cpus: '0.1'
+    logging:
+      driver: json-file
+      options:
+        max-size: '30m'
+        max-file: '5'
 
   worker-service:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: euro-worker-service
+    image: euro-smart-server:${APP_VERSION:-latest}
+    container_name: euro-worker-service-prod
     restart: unless-stopped
     env_file:
       - .env
     environment:
-      - NODE_ENV=production
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-eurosmart}?schema=public
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
     command: ['node', 'dist/apps/worker-service/main.js']
+    depends_on:
+      core-api:
+        condition: service_healthy
+    networks:
+      - euro-internal
     deploy:
       resources:
         limits:
@@ -99,4 +286,63 @@ services:
           cpus: '0.5'
         reservations:
           memory: 128M
-          cpus: '0.25'
+          cpus: '0.1'
+    logging:
+      driver: json-file
+      options:
+        max-size: '30m'
+        max-file: '5'
+
+  # ─────────────────────────────────────────────
+  # NGINX REVERSE PROXY
+  # ─────────────────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: euro-nginx-prod
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./deploy/docker/nginx.conf:/etc/nginx/nginx.conf:ro
+      # SSL certificates — mount từ host sau khi có cert
+      - ${SSL_CERT_PATH:-./deploy/docker/ssl}:/etc/nginx/ssl:ro
+      # ACME challenge cho certbot
+      - certbot_webroot:/var/www/certbot:ro
+    depends_on:
+      core-api:
+        condition: service_healthy
+    networks:
+      - euro-internal
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost/health']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: '20m'
+        max-file: '5'
+
+# ─────────────────────────────────────────────
+# NETWORKS & VOLUMES
+# ─────────────────────────────────────────────
+
+networks:
+  euro-internal:
+    driver: bridge
+    name: euro-smart-prod-network
+    # Chỉ expose qua nginx, các service không bind port ra host
+
+volumes:
+  postgres_data:
+    name: euro-prod-postgres-data
+  redis_data:
+    name: euro-prod-redis-data
+  emqx_data:
+    name: euro-prod-emqx-data
+  emqx_log:
+    name: euro-prod-emqx-log
+  certbot_webroot:
+    name: euro-prod-certbot-webroot

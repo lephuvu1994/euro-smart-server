@@ -105,6 +105,8 @@ jobs:
 
             echo "==> [VPS1] Writing .env from secret..."
             printf '%s\n' "$ENV_PRODUCTION" > /root/aurathink-server/.env
+            # Strip surrounding quotes from values (Docker env_file reads them literally)
+            sed -i 's/="\(.*\)"/=\1/g' /root/aurathink-server/.env
 
             echo "==> [VPS1] Running migrations..."
             docker run --rm \
@@ -164,6 +166,8 @@ jobs:
 
             echo "==> [VPS2] Writing .env from secret..."
             printf '%s\n' "$ENV_PRODUCTION" > /root/aurathink-server/.env
+            # Strip surrounding quotes from values (Docker env_file reads them literally)
+            sed -i 's/="\(.*\)"/=\1/g' /root/aurathink-server/.env
 
             echo "==> [VPS2] Running migrations..."
             docker run --rm \

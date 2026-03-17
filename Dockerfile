@@ -1,14 +1,17 @@
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 # Install dependencies needed for native modules (argon2, serialport)
 RUN apk add --no-cache python3 make g++
 
 WORKDIR /app
 
-COPY package.json yarn.lock ./
+COPY package.json yarn.lock .yarnrc.yml ./
 
-# Install all deps (including devDependencies for build)
-RUN yarn install --frozen-lockfile --network-timeout 100000
+# Enable Yarn 4
+RUN corepack enable && corepack prepare yarn@4.9.2 --activate
+
+# Install deps (node_modules mode)
+RUN yarn install --immutable
 
 # Copy prisma schema and generate client
 COPY prisma ./prisma/
@@ -21,7 +24,7 @@ COPY . .
 RUN yarn build
 
 # ── Production stage ──
-FROM node:20-alpine AS production
+FROM node:22-alpine AS production
 
 RUN apk add --no-cache tini
 

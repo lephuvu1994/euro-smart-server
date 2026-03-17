@@ -23,7 +23,7 @@ export class AdminMigrationSeed {
     // 1. Cấu hình thông tin Admin mặc định (Nên lấy từ .env để bảo mật)
     const adminEmail = process.env.ADMIN_EMAIL || 'vulewenlian94@gmail.com';
     const adminPassword = process.env.ADMIN_PASSWORD || 'Aa123456789@';
-    const adminPhone = '0988777666';
+    const adminPhone = process.env.ADMIN_PHONE_NUMBER || '0333250994';
 
     try {
       // 2. Kiểm tra xem Admin đã tồn tại chưa

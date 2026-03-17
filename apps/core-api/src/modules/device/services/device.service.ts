@@ -104,11 +104,11 @@ export class DeviceService {
     };
   }
 
-  async getDeviceDetail(deviceToken: string, userId: string) {
-    // 1. Lấy thông tin tĩnh từ Database
-    const device = await this.db.device.findUnique({
+  async getDeviceDetail(deviceId: string, userId: string) {
+    // 1. Lấy thông tin tĩnh từ Database (tìm by device ID)
+    const device = await this.db.device.findFirst({
       where: {
-        token: deviceToken,
+        id: deviceId,
         ownerId: userId, // Bảo mật: Chỉ chủ sở hữu mới được xem
       },
       include: {

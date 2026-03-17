@@ -75,11 +75,13 @@ export class DeviceProvisioningService {
           });
         }
 
-        const modelConfig = (model.featuresConfig as any) || {};
-        const featuresToCreate = (modelConfig.features || []).map((f) => {
+        // featuresConfig là array trực tiếp (từ DeviceModel)
+        const rawFeatures = Array.isArray(model.featuresConfig) ? model.featuresConfig : [];
+        const featuresToCreate = rawFeatures.map((f: any) => {
           const featureMetaConfig = {
-            commandKey: f.commandKey || null,
-            embeddedKeys: f.embeddedKeys || [],
+            commandKey: f.command_key || f.commandKey || null,
+            commandSuffix: f.command_suffix || f.commandSuffix || null,
+            embeddedKeys: f.embedded_keys || f.embeddedKeys || [],
             values: f.values || [],
           };
 
@@ -87,7 +89,7 @@ export class DeviceProvisioningService {
             code: f.code,
             name: f.name,
             type: f.type,
-            readOnly: f.readOnly || false,
+            readOnly: f.read_only ?? f.readOnly ?? false,
             category: f.category || 'switch',
             lastValue: null,
             lastValueString: '{}',

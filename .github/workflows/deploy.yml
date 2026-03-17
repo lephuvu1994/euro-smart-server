@@ -55,58 +55,129 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  deploy:
-    name: Deploy to VPS
+  # ─────────────────────────────────────────────
+  # Deploy to ALL VPS servers in parallel
+  # ─────────────────────────────────────────────
+  # GitHub Secrets cần tạo:
+  #
+  #   Chung:
+  #     ENV_PRODUCTION   — nội dung file .env.production (dùng chung cả 2 VPS)
+  #     GH_PAT           — GitHub PAT để git pull
+  #
+  #   VPS1:
+  #     VPS1_HOST, VPS1_USER, VPS1_SSH_KEY, VPS1_PORT (optional, default 22)
+  #
+  #   VPS2:
+  #     VPS2_HOST, VPS2_USER, VPS2_SSH_KEY, VPS2_PORT (optional, default 22)
+
+  deploy-vps1:
+    name: Deploy → VPS1
     runs-on: ubuntu-latest
     needs: build-and-push
 
     steps:
-      - name: SSH Deploy to VPS
+      - name: SSH Deploy to VPS1
         uses: appleboy/ssh-action@v1.2.0
         env:
           ENV_PRODUCTION: ${{ secrets.ENV_PRODUCTION }}
         with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_PORT || 22 }}
+          host: ${{ secrets.VPS1_HOST }}
+          username: ${{ secrets.VPS1_USER }}
+          key: ${{ secrets.VPS1_SSH_KEY }}
+          port: ${{ secrets.VPS1_PORT || 22 }}
           envs: ENV_PRODUCTION
           script: |
             set -e
             IMAGE="ghcr.io/${{ github.repository_owner }}/aurathink-server:latest"
 
-            echo "==> Login to ghcr.io..."
+            echo "==> [VPS1] Login to ghcr.io..."
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io \
               -u ${{ github.actor }} --password-stdin
 
-            echo "==> Pulling new image: $IMAGE"
+            echo "==> [VPS1] Pulling new image: $IMAGE"
             docker pull $IMAGE
 
-            echo "==> Updating repo..."
+            echo "==> [VPS1] Updating repo..."
             cd ~/aurathink-server
             git fetch https://${{ secrets.GH_PAT }}@github.com/lephuvu1994/euro-smart-server.git main
             git reset --hard FETCH_HEAD
 
-            echo "==> Writing .env.production from secret..."
+            echo "==> [VPS1] Writing .env.production from secret..."
             printf '%s\n' "$ENV_PRODUCTION" > /root/aurathink-server/.env.production
 
-            echo "==> Running migrations..."
+            echo "==> [VPS1] Running migrations..."
             docker run --rm \
               --env-file /root/aurathink-server/.env.production \
               --network aurathink-prod-network \
               $IMAGE \
               npx prisma migrate deploy
 
-            echo "==> Restarting services..."
+            echo "==> [VPS1] Restarting services..."
             IMAGE=$IMAGE docker compose -f /root/aurathink-server/docker-compose.prod.yml up -d \
               --no-build \
               core-api iot-gateway socket-gateway worker-service
 
-            echo "==> Cleaning up old images..."
+            echo "==> [VPS1] Cleaning up old images..."
             docker image prune -f
 
-            echo "==> Health check..."
+            echo "==> [VPS1] Health check..."
             sleep 8
             curl -sf http://localhost:3001/health/live || echo "WARNING: health check failed"
 
-            echo "==> Deploy done! SHA: ${{ github.sha }}"
+            echo "==> [VPS1] Deploy done! SHA: ${{ github.sha }}"
+
+  deploy-vps2:
+    name: Deploy → VPS2
+    runs-on: ubuntu-latest
+    needs: build-and-push
+
+    steps:
+      - name: SSH Deploy to VPS2
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          ENV_PRODUCTION: ${{ secrets.ENV_PRODUCTION }}
+        with:
+          host: ${{ secrets.VPS2_HOST }}
+          username: ${{ secrets.VPS2_USER }}
+          key: ${{ secrets.VPS2_SSH_KEY }}
+          port: ${{ secrets.VPS2_PORT || 22 }}
+          envs: ENV_PRODUCTION
+          script: |
+            set -e
+            IMAGE="ghcr.io/${{ github.repository_owner }}/aurathink-server:latest"
+
+            echo "==> [VPS2] Login to ghcr.io..."
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io \
+              -u ${{ github.actor }} --password-stdin
+
+            echo "==> [VPS2] Pulling new image: $IMAGE"
+            docker pull $IMAGE
+
+            echo "==> [VPS2] Updating repo..."
+            cd ~/aurathink-server
+            git fetch https://${{ secrets.GH_PAT }}@github.com/lephuvu1994/euro-smart-server.git main
+            git reset --hard FETCH_HEAD
+
+            echo "==> [VPS2] Writing .env.production from secret..."
+            printf '%s\n' "$ENV_PRODUCTION" > /root/aurathink-server/.env.production
+
+            echo "==> [VPS2] Running migrations..."
+            docker run --rm \
+              --env-file /root/aurathink-server/.env.production \
+              --network aurathink-prod-network \
+              $IMAGE \
+              npx prisma migrate deploy
+
+            echo "==> [VPS2] Restarting services..."
+            IMAGE=$IMAGE docker compose -f /root/aurathink-server/docker-compose.prod.yml up -d \
+              --no-build \
+              core-api iot-gateway socket-gateway worker-service
+
+            echo "==> [VPS2] Cleaning up old images..."
+            docker image prune -f
+
+            echo "==> [VPS2] Health check..."
+            sleep 8
+            curl -sf http://localhost:3001/health/live || echo "WARNING: health check failed"
+
+            echo "==> [VPS2] Deploy done! SHA: ${{ github.sha }}"

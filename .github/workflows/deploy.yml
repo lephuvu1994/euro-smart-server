@@ -83,7 +83,8 @@ jobs:
 
             echo "==> Updating repo..."
             cd ~/aurathink-server
-            git pull https://${{ secrets.GH_PAT }}@github.com/lephuvu1994/euro-smart-server.git main
+            git fetch https://${{ secrets.GH_PAT }}@github.com/lephuvu1994/euro-smart-server.git main
+            git reset --hard FETCH_HEAD
 
             echo "==> Running migrations..."
             docker run --rm \

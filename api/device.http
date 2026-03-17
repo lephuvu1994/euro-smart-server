@@ -2,9 +2,9 @@
 # DEVICE – Đăng ký thiết bị, danh sách, điều khiển
 # ==========================================
 # Chạy "Login User" trước để có accessToken
-@baseUrl = https://nestjs-smarthome.onrender.com/v1
-@userEmail = cursor2@test.com
-@userPassword = Password@123!
+@baseUrl = http://localhost:3001/v1
+@userEmail = vulewenlian942@gmail.com
+@userPassword = Vu31101994@
 @macAddress = AA:BB:CC:11:22:33
 @deviceModelCode = 1001
 @companyCode = BKTech
@@ -47,7 +47,7 @@ Authorization: Bearer {{loginUser.response.body.data.accessToken}}
 
 ###
 # Lấy chi tiết một thiết bị (theo id)
-GET {{baseUrl}}/devices/{{deviceId}}
+GET {{baseUrl}}/devices/{{getDevices.response.body.data.data[0].id}}
 Authorization: Bearer {{loginUser.response.body.data.accessToken}}
 
 ###

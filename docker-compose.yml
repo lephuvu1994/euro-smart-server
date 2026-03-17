@@ -16,7 +16,6 @@
 name: euro-smart-dev
 
 services:
-
   # ─────────────────────────────────────────────
   # INFRASTRUCTURE
   # ─────────────────────────────────────────────
@@ -36,7 +35,11 @@ services:
     networks:
       - euro-network
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-eurosmart}']
+      test:
+        [
+          'CMD-SHELL',
+          'pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-eurosmart}',
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -49,7 +52,7 @@ services:
     ports:
       - '${REDIS_PORT:-6379}:6379'
     command: >
-      redis-server
+      redis-server --maxmemory-policy noeviction
       --appendonly yes
       --requirepass ${REDIS_PASSWORD:-}
     volumes:
@@ -68,11 +71,11 @@ services:
     container_name: euro-emqx
     restart: unless-stopped
     ports:
-      - '1883:1883'       # MQTT TCP
-      - '8083:8083'       # MQTT over WebSocket
-      - '8084:8084'       # MQTT over WSS (TLS)
-      - '8883:8883'       # MQTT TLS
-      - '18083:18083'     # Dashboard Web UI
+      - '1883:1883' # MQTT TCP
+      - '8083:8083' # MQTT over WebSocket
+      - '8084:8084' # MQTT over WSS (TLS)
+      - '8883:8883' # MQTT TLS
+      - '18083:18083' # Dashboard Web UI
     environment:
       EMQX_NODE_NAME: 'emqx@node1.emqx.io'
       EMQX_DASHBOARD__DEFAULT_USERNAME: ${EMQX_DASHBOARD_USER:-admin}
@@ -121,7 +124,14 @@ services:
     networks:
       - euro-network
     healthcheck:
-      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:${HTTP_PORT:-3001}/health']
+      test:
+        [
+          'CMD',
+          'wget',
+          '--spider',
+          '-q',
+          'http://localhost:${HTTP_PORT:-3001}/health',
+        ]
       interval: 30s
       timeout: 10s
       retries: 3

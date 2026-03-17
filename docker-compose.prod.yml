@@ -21,7 +21,6 @@
 name: euro-smart-prod
 
 services:
-
   # ─────────────────────────────────────────────
   # INFRASTRUCTURE
   # ─────────────────────────────────────────────
@@ -39,7 +38,11 @@ services:
     networks:
       - euro-internal
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB:-eurosmart}']
+      test:
+        [
+          'CMD-SHELL',
+          'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB:-eurosmart}',
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -59,7 +62,7 @@ services:
     container_name: euro-redis-prod
     restart: unless-stopped
     command: >
-      redis-server
+      redis-server --maxmemory-policy noeviction
       --appendonly yes
       --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
       --maxmemory 256mb
@@ -88,10 +91,10 @@ services:
     container_name: euro-emqx-prod
     restart: unless-stopped
     ports:
-      - '1883:1883'       # MQTT TCP — IoT devices kết nối
-      - '8883:8883'       # MQTT TLS — bảo mật
-      - '8083:8083'       # MQTT WebSocket
-      - '18083:18083'     # Dashboard — nên giới hạn firewall
+      - '1883:1883' # MQTT TCP — IoT devices kết nối
+      - '8883:8883' # MQTT TLS — bảo mật
+      - '8083:8083' # MQTT WebSocket
+      - '18083:18083' # Dashboard — nên giới hạn firewall
     environment:
       EMQX_NODE_NAME: 'emqx@node1.emqx.io'
       EMQX_DASHBOARD__DEFAULT_USERNAME: ${EMQX_DASHBOARD_USER:-admin}
@@ -177,7 +180,14 @@ services:
     networks:
       - euro-internal
     healthcheck:
-      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:${HTTP_PORT:-3001}/health']
+      test:
+        [
+          'CMD',
+          'wget',
+          '--spider',
+          '-q',
+          'http://localhost:${HTTP_PORT:-3001}/health',
+        ]
       interval: 30s
       timeout: 10s
       retries: 3

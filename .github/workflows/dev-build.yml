@@ -20,19 +20,22 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.head_ref }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node-version }}
 
-      # 👇 THÊM BƯỚC NÀY VÀO
-      - name: Enable Corepack
-        run: corepack enable
+      # Enable Corepack + activate Yarn 4.9.3 (matches packageManager in package.json)
+      - name: Enable Corepack & Yarn 4.9.3
+        run: |
+          corepack enable
+          corepack prepare yarn@4.9.3 --activate
+          yarn --version
 
       - name: Get yarn cache directory path
         id: yarn-cache-dir-path
@@ -40,7 +43,7 @@ jobs:
 
       # 2. Cache lại folder đó
       - name: Cache yarn dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: yarn-cache
         with:
           path: ${{ steps.yarn-cache-dir-path.outputs.dir }}

@@ -1,6 +1,6 @@
-# 🚀 Hướng Dẫn Deploy – Euro Smart Server (Docker Compose)
+# 🚀 Hướng Dẫn Deploy – Aurathink Server (Docker Compose)
 
-Hệ thống **euro-smart-server** là một IoT smarthome backend dạng microservices, được deploy hoàn toàn bằng **Docker Compose**.
+Hệ thống **aurathink-server** là một IoT smarthome backend dạng microservices, được deploy hoàn toàn bằng **Docker Compose**.
 
 > **Lộ trình**: Docker Compose → Kubernetes (khi cần scale lớn hơn)
 
@@ -44,7 +44,7 @@ Infrastructure (chạy trong cùng compose):
 ## 📁 Cấu Trúc Files
 
 ```
-euro-smart-server/
+aurathink-server/
 ├── Dockerfile                    # Multi-stage build image
 ├── docker-compose.yml            # Dev: full infra + services
 ├── docker-compose.prod.yml       # Production: full stack
@@ -69,8 +69,8 @@ euro-smart-server/
 
 ```bash
 # 1. Clone & chuẩn bị env
-git clone https://github.com/lephuvu1994/euro-smart-server.git
-cd euro-smart-server
+git clone https://github.com/lephuvu1994/aurathink-server.git
+cd aurathink-server
 cp .env.example .env
 # ✏️ Chỉnh sửa .env (xem phần Cấu Hình Env bên dưới)
 
@@ -141,8 +141,8 @@ docker compose version
 ### Bước 2: Clone code & cấu hình
 
 ```bash
-git clone https://github.com/lephuvu1994/euro-smart-server.git
-cd euro-smart-server
+git clone https://github.com/lephuvu1994/aurathink-server.git
+cd aurathink-server
 cp .env.example .env
 nano .env   # Điền tất cả giá trị thật (xem phần Biến Môi Trường bên dưới)
 ```
@@ -185,9 +185,9 @@ sudo chown $USER:$USER deploy/docker/ssl/*.pem
 ```bash
 # Thêm vào crontab
 (crontab -l 2>/dev/null; echo "0 3 * * * certbot renew --quiet && \
-  cp /etc/letsencrypt/live/your-domain.com/fullchain.pem /path/to/euro-smart-server/deploy/docker/ssl/ && \
-  cp /etc/letsencrypt/live/your-domain.com/privkey.pem /path/to/euro-smart-server/deploy/docker/ssl/ && \
-  docker compose -f /path/to/euro-smart-server/docker-compose.prod.yml exec nginx nginx -s reload") | crontab -
+  cp /etc/letsencrypt/live/your-domain.com/fullchain.pem /path/to/aurathink-server/deploy/docker/ssl/ && \
+  cp /etc/letsencrypt/live/your-domain.com/privkey.pem /path/to/aurathink-server/deploy/docker/ssl/ && \
+  docker compose -f /path/to/aurathink-server/docker-compose.prod.yml exec nginx nginx -s reload") | crontab -
 ```
 
 ### Bước 4: Cấu hình Nginx domain
@@ -236,7 +236,7 @@ mosquitto_pub -h your-domain.com -p 1883 \
 ## 🔄 Cập Nhật Code
 
 ```bash
-cd /path/to/euro-smart-server
+cd /path/to/aurathink-server
 git pull origin main
 
 # Build image mới
@@ -337,7 +337,7 @@ worker-service:
 
 Khi cần scale vượt khả năng 1 server (> 10K devices đồng thời):
 
-1. Đẩy image lên registry: `docker build -t registry.io/euro-smart-server:v1 . && docker push ...`
+1. Đẩy image lên registry: `docker build -t registry.io/aurathink-server:v1 . && docker push ...`
 2. Tạo K8s Deployment từ `deploy/k8s/` (xem thêm nếu cần)
 3. Điểm khác biệt cần cấu hình thêm:
    - `core-api`: thêm Redis session store

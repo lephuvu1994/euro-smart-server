@@ -10,10 +10,10 @@
 
 ```bash
 # Build
-docker build -t your-registry/euro-smart-server:latest .
+docker build -t your-registry/aurathink-server:latest .
 
 # Push
-docker push your-registry/euro-smart-server:latest
+docker push your-registry/aurathink-server:latest
 ```
 
 > **Note**: Update `image:` in all deployment YAML files to match your registry.
@@ -50,24 +50,24 @@ kubectl apply -f deploy/k8s/
 
 ```bash
 # Check all pods are running
-kubectl get pods -n euro-smart
+kubectl get pods -n aurathink
 
 # Check services
-kubectl get svc -n euro-smart
+kubectl get svc -n aurathink
 
 # View logs
-kubectl logs -f deployment/core-api -n euro-smart
+kubectl logs -f deployment/core-api -n aurathink
 
 # Check HPA status
-kubectl get hpa -n euro-smart
+kubectl get hpa -n aurathink
 ```
 
 ## Run Migrations
 
 ```bash
 kubectl run db-migrate --rm -it \
-  --image=your-registry/euro-smart-server:latest \
-  --namespace=euro-smart \
+  --image=your-registry/aurathink-server:latest \
+  --namespace=aurathink \
   --env="DATABASE_URL=your-database-url" \
   -- npx prisma migrate deploy
 ```
@@ -76,19 +76,19 @@ kubectl run db-migrate --rm -it \
 
 ```bash
 # Build, push, then rolling update
-docker build -t your-registry/euro-smart-server:v2 .
-docker push your-registry/euro-smart-server:v2
-kubectl set image deployment/core-api core-api=your-registry/euro-smart-server:v2 -n euro-smart
-kubectl set image deployment/socket-gateway socket-gateway=your-registry/euro-smart-server:v2 -n euro-smart
-kubectl set image deployment/iot-gateway iot-gateway=your-registry/euro-smart-server:v2 -n euro-smart
-kubectl set image deployment/worker-service worker-service=your-registry/euro-smart-server:v2 -n euro-smart
+docker build -t your-registry/aurathink-server:v2 .
+docker push your-registry/aurathink-server:v2
+kubectl set image deployment/core-api core-api=your-registry/aurathink-server:v2 -n aurathink
+kubectl set image deployment/socket-gateway socket-gateway=your-registry/aurathink-server:v2 -n aurathink
+kubectl set image deployment/iot-gateway iot-gateway=your-registry/aurathink-server:v2 -n aurathink
+kubectl set image deployment/worker-service worker-service=your-registry/aurathink-server:v2 -n aurathink
 ```
 
 ## Scaling
 
 ```bash
 # Manual scaling
-kubectl scale deployment core-api --replicas=5 -n euro-smart
+kubectl scale deployment core-api --replicas=5 -n aurathink
 
 # HPA handles auto-scaling for core-api (min: 2, max: 10)
 ```

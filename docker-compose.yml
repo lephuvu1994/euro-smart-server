@@ -1,5 +1,5 @@
 # ══════════════════════════════════════════════════════════════════
-# EURO SMART SERVER — Docker Compose (Development)
+# AURATHINK SERVER — Docker Compose (Development)
 # ══════════════════════════════════════════════════════════════════
 # Bao gồm toàn bộ infrastructure + 4 microservices.
 # Dùng cho môi trường local development.
@@ -13,7 +13,7 @@
 #   docker compose up -d server (nếu dùng nodemon/ts-node)
 # ══════════════════════════════════════════════════════════════════
 
-name: euro-smart-dev
+name: aurathink-dev
 
 services:
   # ─────────────────────────────────────────────
@@ -29,7 +29,7 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-master123}
-      POSTGRES_DB: ${POSTGRES_DB:-eurosmart}
+      POSTGRES_DB: ${POSTGRES_DB:-aurathink}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./deploy/docker/timescaledb-init.sql:/docker-entrypoint-initdb.d/01_timescale.sql:ro
@@ -39,7 +39,7 @@ services:
       test:
         [
           'CMD-SHELL',
-          'pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-eurosmart}',
+          'pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-aurathink}',
         ]
       interval: 10s
       timeout: 5s
@@ -112,7 +112,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: euro-smart-server:dev
+    image: aurathink-server:dev
     container_name: euro-core-api
     restart: unless-stopped
     ports:
@@ -146,7 +146,7 @@ services:
       start_period: 30s
 
   socket-gateway:
-    image: euro-smart-server:dev
+    image: aurathink-server:dev
     container_name: euro-socket-gateway
     restart: unless-stopped
     ports:
@@ -163,7 +163,7 @@ services:
       - euro-network
 
   iot-gateway:
-    image: euro-smart-server:dev
+    image: aurathink-server:dev
     container_name: euro-iot-gateway
     restart: unless-stopped
     ports:
@@ -182,7 +182,7 @@ services:
       - euro-network
 
   worker-service:
-    image: euro-smart-server:dev
+    image: aurathink-server:dev
     container_name: euro-worker-service
     restart: unless-stopped
     env_file:
@@ -200,7 +200,7 @@ services:
   # DATABASE MIGRATION (run once then exit)
   # ─────────────────────────────────────────────
   migrate:
-    image: euro-smart-server:dev
+    image: aurathink-server:dev
     container_name: euro-migrate
     restart: 'no'
     env_file:
@@ -219,7 +219,7 @@ services:
 networks:
   euro-network:
     driver: bridge
-    name: euro-smart-network
+    name: aurathink-network
 
 volumes:
   postgres_data:

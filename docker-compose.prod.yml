@@ -1,5 +1,5 @@
 # ══════════════════════════════════════════════════════════════════
-# EURO SMART SERVER — Docker Compose (Production)
+# AURATHINK SERVER — Docker Compose (Production)
 # ══════════════════════════════════════════════════════════════════
 # Infrastructure (Postgres, Redis, EMQX) chạy cùng trong compose.
 # Nginx reverse proxy expose port 80/443 ra ngoài.
@@ -18,7 +18,7 @@
 #   docker compose -f docker-compose.prod.yml logs -f --tail=100
 # ══════════════════════════════════════════════════════════════════
 
-name: euro-smart-prod
+name: aurathink-prod
 
 services:
   # ─────────────────────────────────────────────
@@ -32,7 +32,7 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-      POSTGRES_DB: ${POSTGRES_DB:-eurosmart}
+      POSTGRES_DB: ${POSTGRES_DB:-aurathink}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./deploy/docker/timescaledb-init.sql:/docker-entrypoint-initdb.d/01_timescale.sql:ro
@@ -42,7 +42,7 @@ services:
       test:
         [
           'CMD-SHELL',
-          'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB:-eurosmart}',
+          'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB:-aurathink}',
         ]
       interval: 10s
       timeout: 5s
@@ -135,14 +135,14 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: euro-smart-server:${APP_VERSION:-latest}
+    image: aurathink-server:${APP_VERSION:-latest}
     container_name: euro-migrate-prod
     restart: 'no'
     env_file:
       - .env
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-eurosmart}?schema=public
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-aurathink}?schema=public
     command: ['npx', 'prisma', 'migrate', 'deploy']
     depends_on:
       postgres:
@@ -158,14 +158,14 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: euro-smart-server:${APP_VERSION:-latest}
+    image: aurathink-server:${APP_VERSION:-latest}
     container_name: euro-core-api-prod
     restart: unless-stopped
     env_file:
       - .env
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-eurosmart}?schema=public
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-aurathink}?schema=public
       REDIS_HOST: redis
       REDIS_PORT: '6379'
       MQTT_HOST: mqtt://emqx
@@ -208,14 +208,14 @@ services:
         max-file: '5'
 
   socket-gateway:
-    image: euro-smart-server:${APP_VERSION:-latest}
+    image: aurathink-server:${APP_VERSION:-latest}
     container_name: euro-socket-gateway-prod
     restart: unless-stopped
     env_file:
       - .env
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-eurosmart}?schema=public
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-aurathink}?schema=public
       REDIS_HOST: redis
       REDIS_PORT: '6379'
     command: ['node', 'dist/apps/socket-gateway/main.js']
@@ -239,14 +239,14 @@ services:
         max-file: '5'
 
   iot-gateway:
-    image: euro-smart-server:${APP_VERSION:-latest}
+    image: aurathink-server:${APP_VERSION:-latest}
     container_name: euro-iot-gateway-prod
     restart: unless-stopped
     env_file:
       - .env
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-eurosmart}?schema=public
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-aurathink}?schema=public
       REDIS_HOST: redis
       REDIS_PORT: '6379'
       MQTT_HOST: mqtt://emqx
@@ -274,14 +274,14 @@ services:
         max-file: '5'
 
   worker-service:
-    image: euro-smart-server:${APP_VERSION:-latest}
+    image: aurathink-server:${APP_VERSION:-latest}
     container_name: euro-worker-service-prod
     restart: unless-stopped
     env_file:
       - .env
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-eurosmart}?schema=public
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-aurathink}?schema=public
       REDIS_HOST: redis
       REDIS_PORT: '6379'
     command: ['node', 'dist/apps/worker-service/main.js']
@@ -343,7 +343,7 @@ services:
 networks:
   euro-internal:
     driver: bridge
-    name: euro-smart-prod-network
+    name: aurathink-prod-network
     # Chỉ expose qua nginx, các service không bind port ra host
 
 volumes:

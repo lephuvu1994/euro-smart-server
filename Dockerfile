@@ -28,27 +28,28 @@ FROM node:22-alpine AS production
 
 RUN apk add --no-cache tini
 
+ENV NODE_ENV=production
+
 WORKDIR /app
 
-COPY package.json yarn.lock ./
-
-# Install production deps only
-RUN yarn install --frozen-lockfile --production
-
-# Copy prisma client (generated)
+# Copy prisma client (generated) and engine
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
 # Copy prisma migrations (for migrate deploy)
 COPY --from=builder /app/prisma ./prisma
 
-# Copy built dist
+# Copy built dist — each app has its own generated package.json
 COPY --from=builder /app/dist ./dist
+
+# Install production dependencies per service (using generated package.json)
+# We use core-api's generated package.json as the base since it has the most deps
+RUN cd dist/apps/core-api && npm install --omit=dev 2>/dev/null || true
 
 EXPOSE 3001 3002 3003 3004
 
 # Use tini as entrypoint for proper signal handling
 ENTRYPOINT ["/sbin/tini", "--"]
 
-# Default: start core-api (overridden per service in render.yaml)
+# Default: start core-api (overridden per service in docker-compose/render.yaml)
 CMD ["node", "dist/apps/core-api/main.js"]

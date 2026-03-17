@@ -10,6 +10,14 @@ async function bootstrap(): Promise<void> {
   const port = process.env.WORKER_SERVICE_PORT || 3004;
   await app.listen(port);
   logger.log(`[worker-service] running on port ${port}`);
-  app.enableShutdownHooks();
+
+  // Graceful shutdown for production (PM2, K8s, Docker send SIGTERM)
+  const shutdown = async (signal: string) => {
+    logger.log(`[worker-service] ${signal} received, shutting down gracefully...`);
+    await app.close();
+    process.exit(0);
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }
 bootstrap();

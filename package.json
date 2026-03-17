@@ -22,9 +22,12 @@
 
     "generate": "dotenv -e .env.local -- prisma generate",
     "migrate": "dotenv -e .env.local -- prisma migrate dev",
-    "migrate:prod": "prisma migrate deploy",
+    "migrate:deploy": "dotenv -e .env.local -- prisma migrate deploy",
+    "migrate:prod": "dotenv -e .env.production -- prisma migrate deploy",
+    "migrate:docker": "dotenv -e .env.docker -- prisma migrate deploy",
     "studio": "dotenv -e .env.local -- prisma studio",
     "seed:admin": "dotenv -e .env.local -- cross-env TS_NODE_PROJECT=apps/core-api/tsconfig.app.json ts-node --transpile-only -r tsconfig-paths/register apps/core-api/src/cli.ts seed:admin",
+    "seed:admin:prod": "dotenv -e .env.production -- cross-env TS_NODE_PROJECT=apps/core-api/tsconfig.app.json ts-node --transpile-only -r tsconfig-paths/register apps/core-api/src/cli.ts seed:admin",
 
     "update:package": "npx npm-check-updates -u",
     "make-badges": "istanbul-badges-readme",

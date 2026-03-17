@@ -1,0 +1,17 @@
+node_modules
+dist
+.git
+.github
+.nx
+.vscode
+.husky
+.yarn
+*.md
+*.log
+coverage
+tmp
+docker
+deploy
+.env
+.env.*
+!.env.example

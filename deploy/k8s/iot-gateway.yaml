@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iot-gateway
+  namespace: euro-smart
+  labels:
+    app: iot-gateway
+    app.kubernetes.io/part-of: euro-smart-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: iot-gateway
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: iot-gateway
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: iot-gateway
+          image: euro-smart-server:latest
+          command: ['node', 'dist/apps/iot-gateway/main.js']
+          ports:
+            - containerPort: 3003
+              name: http
+          envFrom:
+            - configMapRef:
+                name: euro-smart-config
+            - secretRef:
+                name: euro-smart-secrets
+          resources:
+            requests:
+              memory: '128Mi'
+              cpu: '100m'
+            limits:
+              memory: '384Mi'
+              cpu: '500m'
+          livenessProbe:
+            tcpSocket:
+              port: 3003
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            tcpSocket:
+              port: 3003
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: iot-gateway
+  namespace: euro-smart
+  labels:
+    app: iot-gateway
+spec:
+  selector:
+    app: iot-gateway
+  ports:
+    - port: 3003
+      targetPort: 3003
+      name: http
+  type: ClusterIP

@@ -1,101 +1,103 @@
-# EuroSmartServer
+# Euro Smart Server
 
 <a alt="Nx logo" href="https://nx.dev" target="_blank" rel="noreferrer"><img src="https://raw.githubusercontent.com/nrwl/nx/master/images/nx-logo.png" width="45"></a>
 
-✨ Your new, shiny [Nx workspace](https://nx.dev) is ready ✨.
+NX Monorepo cho hệ thống Smart Home — gồm 4 microservices chạy trên NestJS.
 
-[Learn more about this workspace setup and its capabilities](https://nx.dev/nx-api/nest?utm_source=nx_project&amp;utm_medium=readme&amp;utm_campaign=nx_projects) or run `npx nx graph` to visually explore what was created. Now, let's get you up to speed!
+## 📋 Kiến Trúc
 
-## Run tasks
+| Service | Port | Mô tả |
+|---------|------|--------|
+| **core-api** | 3001 | REST API chính |
+| **socket-gateway** | 3002 | WebSocket server (real-time) |
+| **iot-gateway** | 3003 | MQTT bridge (IoT devices) |
+| **worker-service** | 3004 | BullMQ job processor |
 
-To run the dev server for your app, use:
+**Shared Libraries**: `@euro-smart-server/common`, `@euro-smart-server/database`, `@euro-smart-server/redis-cache`
 
-```sh
-npx nx serve core-api
+## 🚀 Quick Start
+
+```bash
+# Cài dependencies
+corepack enable && corepack prepare yarn@4.9.2 --activate
+yarn install --immutable
+
+# Cấu hình
+cp .env.example .env   # Chỉnh sửa .env
+
+# Generate Prisma client
+yarn generate
+
+# Chạy development (tất cả services)
+yarn dev
+
+# Chạy từng service
+yarn dev:core-api
+yarn dev:iot-gateway
+yarn dev:socket-gateway
+yarn dev:worker-service
 ```
 
-To create a production bundle:
+## 🔨 Build
 
-```sh
-npx nx build core-api
+```bash
+yarn build                    # Build tất cả
+yarn build:core-api           # Build 1 service
 ```
 
-To see all available targets to run for a project, run:
+## 🧪 Test & Lint
 
-```sh
-npx nx show project core-api
+```bash
+yarn test                     # Chạy tests
+yarn lint                     # Lint
+yarn format                   # Format code
 ```
 
-These targets are either [inferred automatically](https://nx.dev/concepts/inferred-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) or defined in the `project.json` or `package.json` files.
+## 🗃️ Database
 
-[More about running tasks in the docs &raquo;](https://nx.dev/features/run-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-## Add new projects
-
-While you could add new projects to your workspace manually, you might want to leverage [Nx plugins](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) and their [code generation](https://nx.dev/features/generate-code?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) feature.
-
-Use the plugin's generator to create new projects.
-
-To generate a new application, use:
-
-```sh
-npx nx g @nx/nest:app demo
+```bash
+yarn generate                 # Generate Prisma client
+yarn migrate                  # Tạo migration (dev)
+yarn migrate:prod             # Apply migration (production)
+yarn studio                   # Prisma Studio GUI
+yarn seed:admin               # Seed admin user
 ```
 
-To generate a new library, use:
+## 🚀 Deployment
 
-```sh
-npx nx g @nx/node:lib mylib
+Hỗ trợ deploy trên nhiều nền tảng:
+
+| Nền tảng | Config file | Hướng dẫn |
+|----------|-------------|-----------|
+| **PM2** | `ecosystem.config.js` | [deploy/pm2/README.md](deploy/pm2/README.md) |
+| **Docker** | `docker-compose.prod.yml` | [deploy/README.md](deploy/README.md) |
+| **Kubernetes** | `deploy/k8s/*.yaml` | [deploy/k8s/README.md](deploy/k8s/README.md) |
+| **VPS (systemd)** | `deploy/vps/*.service` | [deploy/vps/README.md](deploy/vps/README.md) |
+| **Render** | `render.yaml` | [deploy/README.md](deploy/README.md) |
+
+👉 **Xem hướng dẫn đầy đủ**: [deploy/README.md](deploy/README.md)
+
+## 📁 Cấu Trúc Dự Án
+
 ```
-
-You can use `npx nx list` to get a list of installed plugins. Then, run `npx nx list <plugin-name>` to learn about more specific capabilities of a particular plugin. Alternatively, [install Nx Console](https://nx.dev/getting-started/editor-setup?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) to browse plugins and generators in your IDE.
-
-[Learn more about Nx plugins &raquo;](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) | [Browse the plugin registry &raquo;](https://nx.dev/plugin-registry?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-## Set up CI!
-
-### Step 1
-
-To connect to Nx Cloud, run the following command:
-
-```sh
-npx nx connect
+euro-smart-server/
+├── apps/
+│   ├── core-api/           # REST API chính
+│   ├── socket-gateway/     # WebSocket server
+│   ├── iot-gateway/        # MQTT bridge
+│   └── worker-service/     # BullMQ worker
+├── libs/
+│   ├── common/             # Shared utilities, config, auth, i18n
+│   ├── database/           # Prisma database module
+│   └── redis-cache/        # Redis cache module
+├── prisma/                 # Schema & migrations
+├── deploy/                 # Deployment configs
+│   ├── k8s/                # Kubernetes manifests
+│   ├── pm2/                # PM2 guide
+│   └── vps/                # systemd + nginx
+├── ecosystem.config.js     # PM2 config
+├── docker-compose.yml      # Docker dev
+├── docker-compose.prod.yml # Docker production
+├── render.yaml             # Render Blueprint
+└── Dockerfile              # Multi-stage build
 ```
-
-Connecting to Nx Cloud ensures a [fast and scalable CI](https://nx.dev/ci/intro/why-nx-cloud?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) pipeline. It includes features such as:
-
-- [Remote caching](https://nx.dev/ci/features/remote-cache?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Task distribution across multiple machines](https://nx.dev/ci/features/distribute-task-execution?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Automated e2e test splitting](https://nx.dev/ci/features/split-e2e-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Task flakiness detection and rerunning](https://nx.dev/ci/features/flaky-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-### Step 2
-
-Use the following command to configure a CI workflow for your workspace:
-
-```sh
-npx nx g ci-workflow
-```
-
-[Learn more about Nx on CI](https://nx.dev/ci/intro/ci-with-nx#ready-get-started-with-your-provider?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-## Install Nx Console
-
-Nx Console is an editor extension that enriches your developer experience. It lets you run tasks, generate code, and improves code autocompletion in your IDE. It is available for VSCode and IntelliJ.
-
-[Install Nx Console &raquo;](https://nx.dev/getting-started/editor-setup?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-## Useful links
-
-Learn more:
-
-- [Learn more about this workspace setup](https://nx.dev/nx-api/nest?utm_source=nx_project&amp;utm_medium=readme&amp;utm_campaign=nx_projects)
-- [Learn about Nx on CI](https://nx.dev/ci/intro/ci-with-nx?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Releasing Packages with Nx release](https://nx.dev/features/manage-releases?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [What are Nx plugins?](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-And join the Nx community:
-- [Discord](https://go.nx.dev/community)
-- [Follow us on X](https://twitter.com/nxdevtools) or [LinkedIn](https://www.linkedin.com/company/nrwl)
-- [Our Youtube channel](https://www.youtube.com/@nxdevtools)
-- [Our blog](https://nx.dev/blog?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)

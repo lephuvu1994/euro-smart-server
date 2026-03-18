@@ -2,27 +2,31 @@
 
 <a alt="Nx logo" href="https://nx.dev" target="_blank" rel="noreferrer"><img src="https://raw.githubusercontent.com/nrwl/nx/master/images/nx-logo.png" width="45"></a>
 
-NX Monorepo cho hệ thống **Smart Home IoT** — 4 microservices NestJS, deploy bằng **Docker Compose**.
+NX Monorepo cho hệ thống **Smart Home IoT** — 4 microservices NestJS, deploy HA trên **2 VPS** với Docker Compose + Tailscale VPN.
 
 ---
 
 ## 📋 Kiến Trúc
 
 ```
-Internet
-   │
-   ▼
-[Nginx :80/:443]  ← SSL, reverse proxy, rate limiting
-   ├─► /api/        → core-api :3001     REST API chính
-   ├─► /socket.io/  → socket-gateway :3002  WebSocket real-time
-   └─► /iot/        → iot-gateway :3003  HTTP IoT endpoint
-                          ↓
-                  worker-service :3004   BullMQ jobs (internal)
-
-Infrastructure (Docker internal):
-   ├── PostgreSQL   Database
-   ├── Redis        Cache + BullMQ + Pub/Sub
-   └── EMQX :1883/:8883  MQTT Broker (IoT devices)
+                     Internet
+            HTTPS (443) │  MQTTS (8883)
+              ┌─────────▼──────────────┐
+              │  VPS2 "Mặt tiền"      │
+              │  Nginx (TLS) → HAProxy │
+              │   ├─ core-api :3001   │
+              │   ├─ socket-gw :3002  │
+              │   └─ EMQX Node 1     │
+              └──────────┬─────────────┘
+                         │ Tailscale VPN
+              ┌──────────▼─────────────┐
+              │  VPS1 "Hậu cung"      │
+              │  PostgreSQL + Timescale│
+              │  Redis                 │
+              │  iot-gateway :3003     │
+              │  worker-service :3004  │
+              │  EMQX Node 2 (cluster) │
+              └────────────────────────┘
 ```
 
 **Shared Libraries**: `@aurathink-server/common` · `@aurathink-server/database` · `@aurathink-server/redis-cache`
@@ -81,29 +85,37 @@ yarn seed:admin     # Seed admin user
 
 ---
 
-## 🐳 Deployment (Docker Compose)
+## 🐳 Deployment
 
-Hệ thống deploy hoàn toàn bằng **Docker Compose** — phù hợp từ single VPS đến khi cần nâng lên Kubernetes.
+### CI/CD (GitHub Actions)
 
-| File | Dùng khi |
+Push `main` → tự động build Docker image → push `ghcr.io` → deploy song song 2 VPS.
+
+| File | Mục đích |
 |------|----------|
-| `docker-compose.yml` | Local development (full infra + services) |
-| `docker-compose.prod.yml` | Production (Nginx + full stack) |
-| `deploy/docker/nginx.conf` | Nginx reverse proxy config |
+| `docker-compose.prod.yml` | Base config (all services) |
+| `docker-compose.vps1.yml` | Override: VPS1 Hậu cung (DB + IoT + Worker) |
+| `docker-compose.vps2.yml` | Override: VPS2 Mặt tiền (API + Socket + HAProxy) |
+| `deploy/haproxy/haproxy.cfg` | HAProxy LB: MQTTS 8883, WS sticky, API round-robin |
+| `.github/workflows/deploy.yml` | CI/CD dual VPS deploy |
+
+### Deploy thủ công (Single Node)
 
 ```bash
-# Production — lần đầu
-cp .env.example .env && nano .env
-docker compose -f docker-compose.prod.yml build
-docker compose -f docker-compose.prod.yml run --rm migrate
 docker compose -f docker-compose.prod.yml up -d
-
-# Cập nhật code
-git pull && docker compose -f docker-compose.prod.yml build
-docker compose -f docker-compose.prod.yml up -d --no-deps core-api
 ```
 
-👉 **Hướng dẫn đầy đủ**: [deploy/README.md](deploy/README.md)
+### Deploy HA (2 VPS)
+
+```bash
+# VPS1 (Hậu cung)
+docker compose -f docker-compose.prod.yml -f docker-compose.vps1.yml up -d
+
+# VPS2 (Mặt tiền)
+docker compose -f docker-compose.prod.yml -f docker-compose.vps2.yml --profile loadbalancer up -d
+```
+
+👉 **Chi tiết đầy đủ**: [INFRASTRUCTURE.md](INFRASTRUCTURE.md) · [deploy/README.md](deploy/README.md)
 
 ---
 
@@ -112,21 +124,24 @@ docker compose -f docker-compose.prod.yml up -d --no-deps core-api
 ```
 aurathink-server/
 ├── apps/
-│   ├── core-api/           # REST API chính
-│   ├── socket-gateway/     # WebSocket server
-│   ├── iot-gateway/        # MQTT bridge
-│   └── worker-service/     # BullMQ worker
+│   ├── core-api/               # REST API chính
+│   ├── socket-gateway/         # WebSocket server + RedisIoAdapter
+│   ├── iot-gateway/            # MQTT bridge
+│   └── worker-service/         # BullMQ worker
 ├── libs/
-│   ├── common/             # Shared utilities, config, auth, i18n
-│   ├── database/           # Prisma database module
-│   └── redis-cache/        # Redis cache module
-├── prisma/                 # Schema & migrations
+│   ├── common/                 # Shared utilities, config, auth, i18n
+│   ├── database/               # Prisma database module
+│   └── redis-cache/            # Redis cache module
+├── prisma/                     # Schema & migrations
 ├── deploy/
-│   ├── docker/             # Nginx config + SSL
-│   │   └── nginx.conf
-│   └── README.md           # Hướng dẫn deploy Docker Compose
-├── docker-compose.yml      # Dev: full infra + 4 services
-├── docker-compose.prod.yml # Production: Nginx + full stack
-├── Dockerfile              # Multi-stage build
-└── .env.example            # Template biến môi trường
+│   ├── docker/                 # Nginx config + SSL
+│   ├── haproxy/                # HAProxy load balancer config
+│   └── scripts/                # Deployment scripts (MQTT cert, etc.)
+├── docker-compose.yml          # Dev: full infra + 4 services
+├── docker-compose.prod.yml     # Production: base config
+├── docker-compose.vps1.yml     # HA: VPS1 Hậu cung override
+├── docker-compose.vps2.yml     # HA: VPS2 Mặt tiền override
+├── Dockerfile                  # Multi-stage build
+├── INFRASTRUCTURE.md           # Full infra documentation
+└── .env.production.example     # Template biến môi trường production
 ```

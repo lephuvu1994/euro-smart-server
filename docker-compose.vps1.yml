@@ -1,0 +1,37 @@
+# ══════════════════════════════════════════════════════════════
+# VPS1 "Hậu cung" — Override
+# ══════════════════════════════════════════════════════════════
+# Chạy: postgres, redis, emqx, iot-gateway, worker-service
+# Tắt: core-api, socket-gateway, nginx, haproxy
+#
+# Usage:
+#   docker compose -f docker-compose.prod.yml -f docker-compose.vps1.yml up -d
+# ══════════════════════════════════════════════════════════════
+
+services:
+  # ── Giữ nguyên ──
+  postgres:
+    # Bind Tailscale IP cho VPS2 kết nối
+    ports:
+      - '100.117.220.15:5432:5432'
+
+  redis:
+    ports:
+      - '100.117.220.15:6379:6379'
+
+  emqx:
+    environment:
+      EMQX_NODE_NAME: 'emqx@100.117.220.15'
+
+  # ── Tắt service không cần trên VPS1 ──
+  core-api:
+    profiles: ['disabled']
+
+  socket-gateway:
+    profiles: ['disabled']
+
+  nginx:
+    profiles: ['disabled']
+
+  haproxy:
+    profiles: ['disabled']

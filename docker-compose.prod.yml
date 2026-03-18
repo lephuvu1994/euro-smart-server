@@ -56,7 +56,9 @@ services:
         reservations:
           memory: 256M
           cpus: '0.25'
-    # ⚠️ Không expose port Postgres ra ngoài host trong production
+    # GĐ2: Expose cho VPS2 qua Tailscale
+    ports:
+      - '${TAILSCALE_IP:-127.0.0.1}:5432:5432'
 
   redis:
     image: redis:7-alpine
@@ -85,6 +87,9 @@ services:
         reservations:
           memory: 128M
           cpus: '0.1'
+    # GĐ2: Expose cho VPS2 qua Tailscale
+    ports:
+      - '${TAILSCALE_IP:-127.0.0.1}:6379:6379'
 
   emqx:
     image: emqx/emqx:5.8.5
@@ -92,7 +97,7 @@ services:
     restart: unless-stopped
     ports:
       - '1883:1883' # MQTT TCP — IoT devices kết nối
-      - '8883:8883' # MQTT TLS — bảo mật
+      # 8883 MQTTS → handled by HAProxy TLS termination
       - '8083:8083' # MQTT WebSocket
       - '18083:18083' # Dashboard — nên giới hạn firewall
       - '4370:4370' # Erlang distribution (cluster)
@@ -310,7 +315,7 @@ services:
         max-file: '5'
 
   # ─────────────────────────────────────────────
-  # HAPROXY LOAD BALANCER (VPS1 only)
+  # HAPROXY LOAD BALANCER (GĐ2: VPS2 Mặt tiền)
   # ─────────────────────────────────────────────
   haproxy:
     image: haproxy:2.9-alpine
@@ -319,6 +324,7 @@ services:
     network_mode: host
     volumes:
       - ./deploy/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - ${SSL_CERT_PATH:-./deploy/docker/ssl}:/etc/haproxy/certs:ro
     healthcheck:
       test: ['CMD', 'haproxy', '-c', '-f', '/usr/local/etc/haproxy/haproxy.cfg']
       interval: 30s

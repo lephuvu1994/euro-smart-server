@@ -95,8 +95,14 @@ services:
       - '8883:8883' # MQTT TLS — bảo mật
       - '8083:8083' # MQTT WebSocket
       - '18083:18083' # Dashboard — nên giới hạn firewall
+      - '4370:4370' # Erlang distribution (cluster)
+      - '5370:5370' # EMQX cluster RPC
     environment:
-      EMQX_NODE_NAME: 'emqx@node1.emqx.io'
+      # Cluster config — EMQX_NODE_NAME set via .env.production per VPS
+      EMQX_NODE_NAME: ${EMQX_NODE_NAME:-emqx@127.0.0.1}
+      EMQX_CLUSTER__DISCOVERY_STRATEGY: static
+      EMQX_CLUSTER__STATIC__SEEDS: '["emqx@100.117.220.15","emqx@100.85.73.41"]'
+      # Dashboard
       EMQX_DASHBOARD__DEFAULT_USERNAME: ${EMQX_DASHBOARD_USER:-admin}
       EMQX_DASHBOARD__DEFAULT_PASSWORD: ${EMQX_DASHBOARD_PASS:?EMQX_DASHBOARD_PASS is required}
       # Cấu hình authentication
@@ -118,6 +124,7 @@ services:
           'CMD-SHELL',
           'curl -sf http://localhost:18083/status || exit 1',
         ]
+
       interval: 30s
       timeout: 10s
       retries: 5
@@ -303,6 +310,29 @@ services:
         max-file: '5'
 
   # ─────────────────────────────────────────────
+  # HAPROXY LOAD BALANCER (VPS1 only)
+  # ─────────────────────────────────────────────
+  haproxy:
+    image: haproxy:2.9-alpine
+    container_name: aurathink-haproxy-prod
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./deploy/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    healthcheck:
+      test: ['CMD', 'haproxy', '-c', '-f', '/usr/local/etc/haproxy/haproxy.cfg']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: '20m'
+        max-file: '5'
+    profiles:
+      - loadbalancer
+
+  # ─────────────────────────────────────────────
   # NGINX REVERSE PROXY
   # ─────────────────────────────────────────────
   nginx:
@@ -333,6 +363,7 @@ services:
       options:
         max-size: '20m'
         max-file: '5'
+
 
 # ─────────────────────────────────────────────
 # NETWORKS & VOLUMES

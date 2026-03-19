@@ -90,7 +90,6 @@ jobs:
 
             echo "==> [VPS1] Writing .env..."
             printf '%s\n' "$ENV_PRODUCTION" > .env
-            sed -i 's/="\(.*\)"/=\1/g' .env
 
             echo "==> [VPS1] Running migrations..."
             docker run --rm \
@@ -149,7 +148,6 @@ jobs:
 
             echo "==> [VPS2] Writing .env..."
             printf '%s\n' "$ENV_PRODUCTION" > .env
-            sed -i 's/="\(.*\)"/=\1/g' .env
 
             echo "==> [VPS2] Restarting Mặt tiền services..."
             IMAGE=$IMAGE docker compose \

@@ -64,7 +64,7 @@ jobs:
       - name: SSH Deploy to VPS1
         uses: appleboy/ssh-action@v1.2.0
         env:
-          ENV_PRODUCTION: ${{ secrets.VPS1_ENV }}
+          ENV_PRODUCTION: ${{ secrets.ENV_PRODUCTION }}
           GH_PAT: ${{ secrets.GH_PAT }}
         with:
           host: ${{ secrets.VPS1_HOST }}
@@ -88,12 +88,14 @@ jobs:
             git fetch https://${GH_PAT}@github.com/lephuvu1994/euro-smart-server.git main
             git reset --hard FETCH_HEAD
 
-            echo "==> [VPS1] Writing .env..."
-            printf '%s\n' "$ENV_PRODUCTION" > .env
+            echo "==> [VPS1] Writing .env from secret..."
+            printf '%s\n' "$ENV_PRODUCTION" > /root/aurathink-server/.env
+            # Strip surrounding quotes from values (Docker env_file reads them literally)
+            sed -i 's/="\(.*\)"/=\1/g' /root/aurathink-server/.env
 
             echo "==> [VPS1] Running migrations..."
             docker run --rm \
-              --env-file .env \
+              --env-file /root/aurathink-server/.env \
               --network aurathink-prod-network \
               $IMAGE \
               npx prisma migrate deploy
@@ -122,7 +124,7 @@ jobs:
       - name: SSH Deploy to VPS2
         uses: appleboy/ssh-action@v1.2.0
         env:
-          ENV_PRODUCTION: ${{ secrets.VPS2_ENV }}
+          ENV_PRODUCTION: ${{ secrets.ENV_PRODUCTION }}
           GH_PAT: ${{ secrets.GH_PAT }}
         with:
           host: ${{ secrets.VPS2_HOST }}
@@ -146,8 +148,10 @@ jobs:
             git fetch https://${GH_PAT}@github.com/lephuvu1994/euro-smart-server.git main
             git reset --hard FETCH_HEAD
 
-            echo "==> [VPS2] Writing .env..."
-            printf '%s\n' "$ENV_PRODUCTION" > .env
+            echo "==> [VPS2] Writing .env from secret..."
+            printf '%s\n' "$ENV_PRODUCTION" > /root/aurathink-server/.env
+            # Strip surrounding quotes from values (Docker env_file reads them literally)
+            sed -i 's/="\(.*\)"/=\1/g' /root/aurathink-server/.env
 
             echo "==> [VPS2] Restarting Mặt tiền services..."
             IMAGE=$IMAGE docker compose \

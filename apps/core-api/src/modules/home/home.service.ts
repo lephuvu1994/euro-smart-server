@@ -1,5 +1,6 @@
 import { HttpStatus, Injectable, HttpException } from '@nestjs/common';
 import { DatabaseService } from '@app/database';
+import { EHomeRole } from '@app/common';
 import {
   AddMemberDto,
   CreateFloorDto,
@@ -126,7 +127,7 @@ export class HomeService {
       data: {
         userId: userId,
         homeId: home.id,
-        role: 'OWNER',
+        role: EHomeRole.OWNER,
       },
     });
     return home as HomeResponseDto;
@@ -229,7 +230,7 @@ export class HomeService {
       data: {
         userId: targetUser.id,
         homeId: homeId,
-        role: dto.role ?? 'MEMBER',
+        role: dto.role ?? EHomeRole.MEMBER,
       },
       include: {
         user: {

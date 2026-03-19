@@ -1,6 +1,7 @@
 import { HttpStatus, Injectable, HttpException } from '@nestjs/common';
 
 import { DatabaseService } from '@app/database';
+import { EHomeRole } from '@app/common';
 import { ApiGenericResponseDto } from '@app/common/response/dtos/response.generic.dto';
 
 import { UserUpdateDto } from '../dtos/request/user.update.request';
@@ -93,7 +94,7 @@ export class UserService implements IUserService {
       id: home.id,
       name: home.name,
       isOwner: true,
-      role: 'OWNER',
+      role: EHomeRole.OWNER,
     }));
 
     // Homes mà user là MEMBER

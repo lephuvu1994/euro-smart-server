@@ -10,3 +10,8 @@ export enum APP_BULLMQ_QUEUES {
   DEVICE_CONTROL = 'device_controll',
   DEVICE_STATUS = 'device_status',
 }
+
+export enum EHomeRole {
+  OWNER = 'OWNER',
+  MEMBER = 'MEMBER',
+}

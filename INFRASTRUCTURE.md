@@ -27,16 +27,23 @@
               └────────────────────────┘
 ```
 
-## Quick Start
+---
 
-### GĐ1: Single Node (VPS1 only)
+## Deployment Phases
+
+### GĐ1: Single Node (hiện tại ✅)
+
+VPS1 chạy **tất cả** services. VPS2 chưa kích hoạt.
 
 ```bash
-# Deploy everything on VPS1
 docker compose -f docker-compose.prod.yml up -d
 ```
 
+**CI/CD**: Dùng secret `ENV_PRODUCTION` → deploy VPS1 only.
+
 ### GĐ2: HA Split (2 VPS)
+
+> Xem [Checklist chuyển sang GĐ2](#checklist-chuyển-sang-gđ2) bên dưới.
 
 ```bash
 # VPS1 (Hậu cung)
@@ -54,6 +61,9 @@ docker compose -f docker-compose.prod.yml -f docker-compose.vps2.yml --profile l
 ├── docker-compose.prod.yml       # Base config (all services)
 ├── docker-compose.vps1.yml       # Override: VPS1 Hậu cung
 ├── docker-compose.vps2.yml       # Override: VPS2 Mặt tiền
+├── .env.vps1.example             # Template: VPS1_ENV secret
+├── .env.vps2.example             # Template: VPS2_ENV secret
+├── .env.production.example       # Template: GĐ1 single-node ENV_PRODUCTION
 ├── deploy/
 │   ├── haproxy/
 │   │   └── haproxy.cfg           # HAProxy: MQTTS 8883, WS sticky, API LB
@@ -62,7 +72,7 @@ docker compose -f docker-compose.prod.yml -f docker-compose.vps2.yml --profile l
 │       └── ssl/                  # TLS certificates
 │           └── mqtt.pem          # MQTT TLS cert (HAProxy)
 └── .github/workflows/
-    ├── deploy.yml                # CI/CD: dual VPS deploy
+    ├── deploy.yml                # CI/CD: production deploy
     └── dev-build.yml             # CI: lint, test, format
 ```
 
@@ -139,49 +149,100 @@ cat cert.pem privkey.pem > deploy/docker/ssl/mqtt.pem
 
 ## CI/CD Pipeline
 
+### GĐ1 (hiện tại)
 ```
 git push main
     ├─ Build Docker image → push ghcr.io
-    ├─ Deploy VPS1 (iot-gateway, worker-service, emqx)
-    └─ Deploy VPS2 (core-api, socket-gateway, emqx, nginx, haproxy)
+    └─ Deploy VPS1 (ALL services)
 ```
 
-### GitHub Secrets Required
+### GĐ2
+```
+git push main
+    ├─ Build Docker image → push ghcr.io
+    ├─ Deploy VPS1 (postgres, redis, emqx, iot-gateway, worker-service)
+    └─ Deploy VPS2 (core-api, socket-gateway, emqx, nginx, haproxy)  ← after VPS1
+```
+
+---
+
+## GitHub Secrets
+
+### GĐ1 (hiện tại)
 
 | Secret | Description |
 |--------|-------------|
 | `GH_PAT` | GitHub PAT (repo + read:packages) |
+| `ENV_PRODUCTION` | .env content (single-node, xem `.env.production.example`) |
 | `VPS1_HOST` | 157.66.27.91 |
 | `VPS1_USER` | root |
 | `VPS1_SSH_KEY` | SSH private key for VPS1 |
 | `VPS1_PORT` | 22 |
-| `VPS1_ENV` | .env content for VPS1 |
+
+### GĐ2 (cần thêm)
+
+| Secret | Description |
+|--------|-------------|
+| `VPS1_ENV` | .env content cho VPS1 (xem `.env.vps1.example`) |
+| `VPS2_ENV` | .env content cho VPS2 (xem `.env.vps2.example`) |
 | `VPS2_HOST` | 42.96.13.60 |
 | `VPS2_USER` | root |
 | `VPS2_SSH_KEY` | SSH private key for VPS2 |
 | `VPS2_PORT` | 26266 |
-| `VPS2_ENV` | .env content for VPS2 |
 
 ---
 
-## Environment Variables
+## Environment Variables — Key Differences
 
-### VPS1 (.env) — Hậu cung
-```env
-EMQX_NODE_NAME=emqx@100.117.220.15
-TAILSCALE_IP=100.117.220.15
-DATABASE_URL=postgresql://postgres:PASSWORD@postgres:5432/aurathink?schema=public
-REDIS_HOST=redis
-MQTT_HOST=mqtt://emqx
-```
+| Biến | VPS1 (Hậu cung) | VPS2 (Mặt tiền) |
+|------|-----------------|-----------------|
+| `DATABASE_URL` | `...@postgres:5432/...` (local) | `...@100.117.220.15:5432/...` (Tailscale) |
+| `REDIS_HOST` | `redis` (local) | `100.117.220.15` (Tailscale) |
+| `MQTT_HOST` | `mqtt://emqx` (local) | `mqtt://localhost` (local EMQX node) |
+| `EMQX_NODE_NAME` | `emqx@100.117.220.15` | `emqx@100.85.73.41` |
+| `TAILSCALE_IP` | `100.117.220.15` | không cần |
 
-### VPS2 (.env) — Mặt tiền
-```env
-EMQX_NODE_NAME=emqx@100.85.73.41
-DATABASE_URL=postgresql://postgres:PASSWORD@100.117.220.15:5432/aurathink?schema=public
-REDIS_HOST=100.117.220.15
-MQTT_HOST=mqtt://localhost
-```
+> ⚠️ Các secret chung (JWT, DB password, Redis password, MQTT password...) PHẢI GIỐNG NHAU giữa 2 VPS.
+
+---
+
+## Checklist chuyển sang GĐ2
+
+### 1. Chuẩn bị VPS2
+- [ ] Cài Docker + Docker Compose trên VPS2
+- [ ] Cài Tailscale, join cùng tailnet với VPS1
+- [ ] Verify kết nối: `tailscale ping aurathink-vps1` → OK
+- [ ] Clone repo: `git clone https://github.com/lephuvu1994/euro-smart-server.git ~/aurathink-server`
+
+### 2. Verify network
+- [ ] Từ VPS2, kết nối được Postgres VPS1: `psql -h 100.117.220.15 -U postgres -d aurathink`
+- [ ] Từ VPS2, kết nối được Redis VPS1: `redis-cli -h 100.117.220.15 -a <password> ping`
+- [ ] Từ VPS2, kết nối được EMQX VPS1: `nc -zv 100.117.220.15 4370` (cluster port)
+
+### 3. SSL / TLS
+- [ ] Copy SSL cert lên VPS2: `deploy/docker/ssl/`
+- [ ] Tạo MQTTS PEM: `cat cert.pem privkey.pem > deploy/docker/ssl/mqtt.pem`
+- [ ] Cấu hình DNS trỏ domain về VPS2 public IP (42.96.13.60)
+
+### 4. GitHub Secrets
+- [ ] Tạo `VPS1_ENV` — copy nội dung từ `.env.vps1.example`, điền giá trị thật
+- [ ] Tạo `VPS2_ENV` — copy nội dung từ `.env.vps2.example`, điền giá trị thật
+- [ ] Tạo `VPS2_HOST` = `42.96.13.60`
+- [ ] Tạo `VPS2_USER` = `root`
+- [ ] Tạo `VPS2_SSH_KEY` = SSH private key VPS2
+- [ ] Tạo `VPS2_PORT` = `26266`
+
+### 5. Merge & Deploy
+- [ ] Merge branch `feature/phase2-ha-split` vào `main`
+- [ ] CI/CD sẽ tự động deploy cả 2 VPS
+- [ ] Verify VPS1: containers postgres, redis, emqx, iot-gateway, worker-service đang chạy
+- [ ] Verify VPS2: containers core-api, socket-gateway, emqx, nginx, haproxy đang chạy
+
+### 6. Post-deploy checks
+- [ ] EMQX cluster đã join: `docker exec aurathink-emqx-prod emqx ctl cluster status`
+- [ ] Health check VPS2: `curl https://aurathink.ddns.net/health`
+- [ ] MQTTS test: `mosquitto_pub -h aurathink.ddns.net -p 8883 --cafile ca.crt -t test -m "hello"`
+- [ ] App kết nối bình thường (API + WebSocket + MQTT)
 
 ---
 

@@ -117,7 +117,7 @@ export class DeviceController {
    */
   @Get()
   async getMyDevices(@Req() req: any, @Query() query: GetDevicesDto) {
-    const userId = req.user.id;
+    const userId = req.user.userId;
     const result = await this.deviceService.getUserDevices(userId, query);
 
     return {
@@ -133,7 +133,7 @@ export class DeviceController {
    */
   @Get(':id')
   async getDeviceDetail(@Param('id') id: string, @Req() req: any) {
-    const userId = req.user.id;
+    const userId = req.user.userId;
     const device = await this.deviceService.getDeviceDetail(id, userId);
 
     return {

@@ -49,13 +49,12 @@ export class DeviceService {
     });
 
     const results = await pipeline.exec();
-    // kết quả trả về dạng [[null, 'online'], [null, { 'shutter_main': '"OPEN"' }], ...]
 
     // 3. Hydrate (Trộn) dữ liệu DB và Redis
     const enrichedDevices = devices.map((device, index) => {
-      const status = (results[index * 2][1] as string) || 'offline';
+      const status = (results?.[index * 2]?.[1] as string) || 'offline';
       const shadow =
-        (results[index * 2 + 1][1] as Record<string, string>) || {};
+        (results?.[index * 2 + 1]?.[1] as Record<string, string>) || {};
 
       const features = device.features.map((f) => {
         let currentValue: any = null;
@@ -131,8 +130,8 @@ export class DeviceService {
       .hgetall(`shadow:${device.token}`)
       .exec();
 
-    const status = (statusRes[1] as string) || 'offline';
-    const shadow = (shadowRes[1] as Record<string, string>) || {};
+    const status = (statusRes?.[1] as string) || 'offline';
+    const shadow = (shadowRes?.[1] as Record<string, string>) || {};
 
     // 3. Trộn dữ liệu (Data Hydration)
     const features = device.features.map((f) => {

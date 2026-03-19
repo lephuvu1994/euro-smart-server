@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
 import { DatabaseService } from '@app/database';
 import { RedisService } from '@app/redis-cache';
 import { GetDevicesDto } from '../dto/get-devices.dto';
@@ -13,6 +18,26 @@ export class DeviceService {
   async getUserDevices(userId: string, query: GetDevicesDto) {
     const { page = 1, limit = 10, homeId } = query;
     const skip = (page - 1) * limit;
+
+    // 0. Nếu có homeId, kiểm tra user có quyền truy cập home đó
+    if (homeId) {
+      const home = await this.db.home.findFirst({
+        where: {
+          id: homeId,
+          OR: [
+            { ownerId: userId },
+            { members: { some: { userId: userId } } },
+          ],
+        },
+        select: { id: true },
+      });
+      if (!home) {
+        throw new HttpException(
+          'home.error.notFoundOrNoAccess',
+          HttpStatus.FORBIDDEN,
+        );
+      }
+    }
 
     // 1. Lấy khung dữ liệu từ DB
     const [devices, total] = await Promise.all([

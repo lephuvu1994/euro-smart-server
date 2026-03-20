@@ -44,7 +44,7 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/dist ./dist
 
 # Copy entrypoint script (auto migrate on startup)
-COPY deploy/docker/entrypoint.sh /app/entrypoint.sh
+COPY --from=builder /app/deploy/docker/entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
 EXPOSE 3001 3002 3003 3004

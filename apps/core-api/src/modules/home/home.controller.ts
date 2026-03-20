@@ -18,6 +18,7 @@ import { IAuthUser } from '@app/common/request/interfaces/request.interface';
 import { UseGuards } from '@nestjs/common';
 import {
   AddMemberDto,
+  AssignRoomsDto,
   CreateFloorDto,
   CreateHomeDto,
   CreateRoomDto,
@@ -207,6 +208,21 @@ export class HomeController {
     @Body() dto: ReorderDto,
   ): Promise<FloorResponseDto[]> {
     return this.homeService.reorderFloors(homeId, user.userId, dto);
+  }
+
+  @Patch('floors/:floorId/rooms')
+  @ApiOperation({ summary: 'Gán/gỡ phòng thuộc tầng (1 lần)' })
+  @DocResponse({
+    serialization: FloorResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'home.success.roomsAssigned',
+  })
+  async assignRoomsToFloor(
+    @AuthUser() user: IAuthUser,
+    @Param('floorId') floorId: string,
+    @Body() dto: AssignRoomsDto,
+  ): Promise<FloorResponseDto> {
+    return this.homeService.assignRoomsToFloor(floorId, user.userId, dto.roomIds);
   }
 
   // ============================================================

@@ -96,6 +96,7 @@ const createMockDatabaseService = () => ({
   floor: {
     findFirst: jest.fn(),
     findMany: jest.fn(),
+    findUnique: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
     delete: jest.fn(),
@@ -303,6 +304,53 @@ describe('HomeService', () => {
       const transactionArg = db.$transaction.mock.calls[0][0];
       expect(transactionArg).toHaveLength(2);
       expect(result).toHaveLength(2);
+    });
+  });
+
+  describe('assignRoomsToFloor', () => {
+    it('should unassign old rooms and assign new rooms in a transaction', async () => {
+      db.floor.findFirst.mockResolvedValue({ id: MOCK_FLOOR_ID_1, homeId: MOCK_HOME_ID });
+      db.$transaction.mockResolvedValue([{ count: 1 }, { count: 2 }]);
+      const updatedFloor = { ...mockFloor1, rooms: [{ id: MOCK_ROOM_ID_1 }, { id: MOCK_ROOM_ID_2 }] };
+      db.floor.findUnique.mockResolvedValue(updatedFloor);
+
+      const result = await service.assignRoomsToFloor(
+        MOCK_FLOOR_ID_1,
+        MOCK_USER_ID,
+        [MOCK_ROOM_ID_1, MOCK_ROOM_ID_2],
+      );
+
+      expect(db.$transaction).toHaveBeenCalledTimes(1);
+      const txArg = db.$transaction.mock.calls[0][0];
+      // First op: unassign old rooms, second op: assign new rooms
+      expect(txArg).toHaveLength(2);
+      expect(result.rooms).toHaveLength(2);
+    });
+
+    it('should handle empty roomIds (unassign all)', async () => {
+      db.floor.findFirst.mockResolvedValue({ id: MOCK_FLOOR_ID_1, homeId: MOCK_HOME_ID });
+      db.$transaction.mockResolvedValue([{ count: 2 }]);
+      const updatedFloor = { ...mockFloor1, rooms: [] };
+      db.floor.findUnique.mockResolvedValue(updatedFloor);
+
+      const result = await service.assignRoomsToFloor(
+        MOCK_FLOOR_ID_1,
+        MOCK_USER_ID,
+        [],
+      );
+
+      expect(db.$transaction).toHaveBeenCalledTimes(1);
+      const txArg = db.$transaction.mock.calls[0][0];
+      // Only unassign op, no assign op
+      expect(txArg).toHaveLength(1);
+      expect(result.rooms).toHaveLength(0);
+    });
+
+    it('should throw when floor not found', async () => {
+      db.floor.findFirst.mockResolvedValue(null);
+      await expect(
+        service.assignRoomsToFloor('non-existent', MOCK_USER_ID, [MOCK_ROOM_ID_1]),
+      ).rejects.toThrow(HttpException);
     });
   });
 

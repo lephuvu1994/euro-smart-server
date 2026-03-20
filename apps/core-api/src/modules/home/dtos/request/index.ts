@@ -6,3 +6,4 @@ export * from './update-floor.dto';
 export * from './update-room.dto';
 export * from './add-member.dto';
 export * from './reorder.dto';
+export * from './assign-rooms.dto';

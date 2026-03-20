@@ -364,6 +364,37 @@ export class HomeService {
     return floor as FloorResponseDto;
   }
 
+  async assignRoomsToFloor(
+    floorId: string,
+    userId: string,
+    roomIds: string[],
+  ): Promise<FloorResponseDto> {
+    const { floor } = await this.ensureUserCanAccessFloor(userId, floorId);
+
+    await this.databaseService.$transaction([
+      // 1. Gỡ tất cả rooms cũ khỏi floor
+      this.databaseService.room.updateMany({
+        where: { floorId: floor.id },
+        data: { floorId: null },
+      }),
+      // 2. Gán rooms mới vào floor
+      ...(roomIds.length > 0
+        ? [
+            this.databaseService.room.updateMany({
+              where: { id: { in: roomIds }, homeId: floor.homeId },
+              data: { floorId: floor.id },
+            }),
+          ]
+        : []),
+    ]);
+
+    const updated = await this.databaseService.floor.findUnique({
+      where: { id: floor.id },
+      include: { rooms: { orderBy: { sortOrder: 'asc' } } },
+    });
+    return updated as FloorResponseDto;
+  }
+
   async deleteFloor(
     floorId: string,
     userId: string,

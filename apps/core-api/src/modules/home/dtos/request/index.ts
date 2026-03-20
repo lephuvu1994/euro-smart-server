@@ -5,3 +5,4 @@ export * from './update-home.dto';
 export * from './update-floor.dto';
 export * from './update-room.dto';
 export * from './add-member.dto';
+export * from './reorder.dto';

@@ -1,7 +1,9 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
   HttpStatus,
   Param,
   Patch,
@@ -19,14 +21,17 @@ import {
   CreateFloorDto,
   CreateHomeDto,
   CreateRoomDto,
+  ReorderDto,
   UpdateFloorDto,
   UpdateHomeDto,
   UpdateRoomDto,
 } from './dtos/request';
 import {
   FloorResponseDto,
+  HomeDetailResponseDto,
   HomeMemberResponseDto,
   HomeResponseDto,
+  HomeWithFloorsResponseDto,
   RoomResponseDto,
 } from './dtos/response/home.response';
 import { HomeService } from './home.service';
@@ -38,15 +43,33 @@ import { HomeService } from './home.service';
 export class HomeController {
   constructor(private readonly homeService: HomeService) {}
 
+  // ============================================================
+  // HOMES
+  // ============================================================
+
   @Get()
-  @ApiOperation({ summary: 'Lấy danh sách nhà của user' })
+  @ApiOperation({ summary: 'Lấy danh sách nhà (kèm floors + rooms)' })
   @DocResponse({
-    serialization: HomeResponseDto,
+    serialization: HomeWithFloorsResponseDto,
     httpStatus: HttpStatus.OK,
     messageKey: 'home.success.list',
   })
-  async getHomes(@AuthUser() user: IAuthUser): Promise<HomeResponseDto[]> {
+  async getHomes(@AuthUser() user: IAuthUser): Promise<HomeWithFloorsResponseDto[]> {
     return this.homeService.getHomesForUser(user.userId);
+  }
+
+  @Get(':homeId/detail')
+  @ApiOperation({ summary: 'Chi tiết nhà (home + floors + rooms)' })
+  @DocResponse({
+    serialization: HomeDetailResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'home.success.detail',
+  })
+  async getHomeDetail(
+    @AuthUser() user: IAuthUser,
+    @Param('homeId') homeId: string,
+  ): Promise<HomeDetailResponseDto> {
+    return this.homeService.getHomeDetail(homeId, user.userId);
   }
 
   @Post()
@@ -62,6 +85,25 @@ export class HomeController {
   ): Promise<HomeResponseDto> {
     return this.homeService.createHome(user.userId, dto);
   }
+
+  @Patch(':homeId')
+  @ApiOperation({ summary: 'Cập nhật thông tin nhà (tên, tọa độ, bán kính)' })
+  @DocResponse({
+    serialization: HomeResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'home.success.updated',
+  })
+  async updateHome(
+    @AuthUser() user: IAuthUser,
+    @Param('homeId') homeId: string,
+    @Body() dto: UpdateHomeDto,
+  ): Promise<HomeResponseDto> {
+    return this.homeService.updateHome(homeId, user.userId, dto);
+  }
+
+  // ============================================================
+  // MEMBERS
+  // ============================================================
 
   @Get(':homeId/members')
   @ApiOperation({ summary: 'Lấy danh sách thành viên trong nhà' })
@@ -94,19 +136,9 @@ export class HomeController {
     return this.homeService.addMember(homeId, user.userId, dto);
   }
 
-  @Get(':homeId/floors/:floorId/rooms')
-  @ApiOperation({ summary: 'Lấy danh sách phòng theo tầng' })
-  @DocResponse({
-    serialization: RoomResponseDto,
-    httpStatus: HttpStatus.OK,
-    messageKey: 'home.success.rooms',
-  })
-  async getRoomsByFloor(
-    @AuthUser() user: IAuthUser,
-    @Param('floorId') floorId: string,
-  ): Promise<RoomResponseDto[]> {
-    return this.homeService.getRoomsByFloor(floorId, user.userId);
-  }
+  // ============================================================
+  // FLOORS
+  // ============================================================
 
   @Get(':homeId/floors')
   @ApiOperation({ summary: 'Lấy danh sách tầng theo nhà' })
@@ -122,20 +154,6 @@ export class HomeController {
     return this.homeService.getFloors(homeId, user.userId);
   }
 
-  @Get(':homeId/rooms')
-  @ApiOperation({ summary: 'Lấy danh sách phòng theo nhà' })
-  @DocResponse({
-    serialization: RoomResponseDto,
-    httpStatus: HttpStatus.OK,
-    messageKey: 'home.success.rooms',
-  })
-  async getRoomsByHome(
-    @AuthUser() user: IAuthUser,
-    @Param('homeId') homeId: string,
-  ): Promise<RoomResponseDto[]> {
-    return this.homeService.getRoomsByHome(homeId, user.userId);
-  }
-
   @Post(':homeId/floors')
   @ApiOperation({ summary: 'Tạo tầng trong nhà' })
   @DocResponse({
@@ -149,6 +167,78 @@ export class HomeController {
     @Body() dto: CreateFloorDto,
   ): Promise<FloorResponseDto> {
     return this.homeService.createFloor(homeId, user.userId, dto);
+  }
+
+  @Patch('floors/:floorId')
+  @ApiOperation({ summary: 'Cập nhật tầng' })
+  @DocResponse({
+    serialization: FloorResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'home.success.floorUpdated',
+  })
+  async updateFloor(
+    @AuthUser() user: IAuthUser,
+    @Param('floorId') floorId: string,
+    @Body() dto: UpdateFloorDto,
+  ): Promise<FloorResponseDto> {
+    return this.homeService.updateFloor(floorId, user.userId, dto);
+  }
+
+  @Delete('floors/:floorId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Xóa tầng (rooms chuyển sang ungrouped)' })
+  async deleteFloor(
+    @AuthUser() user: IAuthUser,
+    @Param('floorId') floorId: string,
+  ): Promise<void> {
+    return this.homeService.deleteFloor(floorId, user.userId);
+  }
+
+  @Patch(':homeId/floors/reorder')
+  @ApiOperation({ summary: 'Sắp xếp lại thứ tự tầng' })
+  @DocResponse({
+    serialization: FloorResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'home.success.floorsReordered',
+  })
+  async reorderFloors(
+    @AuthUser() user: IAuthUser,
+    @Param('homeId') homeId: string,
+    @Body() dto: ReorderDto,
+  ): Promise<FloorResponseDto[]> {
+    return this.homeService.reorderFloors(homeId, user.userId, dto);
+  }
+
+  // ============================================================
+  // ROOMS
+  // ============================================================
+
+  @Get(':homeId/floors/:floorId/rooms')
+  @ApiOperation({ summary: 'Lấy danh sách phòng theo tầng' })
+  @DocResponse({
+    serialization: RoomResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'home.success.rooms',
+  })
+  async getRoomsByFloor(
+    @AuthUser() user: IAuthUser,
+    @Param('floorId') floorId: string,
+  ): Promise<RoomResponseDto[]> {
+    return this.homeService.getRoomsByFloor(floorId, user.userId);
+  }
+
+  @Get(':homeId/rooms')
+  @ApiOperation({ summary: 'Lấy danh sách phòng theo nhà' })
+  @DocResponse({
+    serialization: RoomResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'home.success.rooms',
+  })
+  async getRoomsByHome(
+    @AuthUser() user: IAuthUser,
+    @Param('homeId') homeId: string,
+  ): Promise<RoomResponseDto[]> {
+    return this.homeService.getRoomsByHome(homeId, user.userId);
   }
 
   @Post(':homeId/rooms')
@@ -168,21 +258,6 @@ export class HomeController {
     return this.homeService.createRoom(homeId, user.userId, dto, dto.floorId);
   }
 
-  @Patch('floors/:floorId')
-  @ApiOperation({ summary: 'Cập nhật tầng' })
-  @DocResponse({
-    serialization: FloorResponseDto,
-    httpStatus: HttpStatus.OK,
-    messageKey: 'home.success.floorUpdated',
-  })
-  async updateFloor(
-    @AuthUser() user: IAuthUser,
-    @Param('floorId') floorId: string,
-    @Body() dto: UpdateFloorDto,
-  ): Promise<FloorResponseDto> {
-    return this.homeService.updateFloor(floorId, user.userId, dto);
-  }
-
   @Patch('rooms/:roomId')
   @ApiOperation({ summary: 'Cập nhật phòng' })
   @DocResponse({
@@ -198,18 +273,28 @@ export class HomeController {
     return this.homeService.updateRoom(roomId, user.userId, dto);
   }
 
-  @Patch(':homeId')
-  @ApiOperation({ summary: 'Cập nhật thông tin nhà (tên, tọa độ, bán kính)' })
+  @Delete('rooms/:roomId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Xóa phòng' })
+  async deleteRoom(
+    @AuthUser() user: IAuthUser,
+    @Param('roomId') roomId: string,
+  ): Promise<void> {
+    return this.homeService.deleteRoom(roomId, user.userId);
+  }
+
+  @Patch(':homeId/rooms/reorder')
+  @ApiOperation({ summary: 'Sắp xếp lại thứ tự phòng' })
   @DocResponse({
-    serialization: HomeResponseDto,
+    serialization: RoomResponseDto,
     httpStatus: HttpStatus.OK,
-    messageKey: 'home.success.updated',
+    messageKey: 'home.success.roomsReordered',
   })
-  async updateHome(
+  async reorderRooms(
     @AuthUser() user: IAuthUser,
     @Param('homeId') homeId: string,
-    @Body() dto: UpdateHomeDto,
-  ): Promise<HomeResponseDto> {
-    return this.homeService.updateHome(homeId, user.userId, dto);
+    @Body() dto: ReorderDto,
+  ): Promise<RoomResponseDto[]> {
+    return this.homeService.reorderRooms(homeId, user.userId, dto);
   }
 }

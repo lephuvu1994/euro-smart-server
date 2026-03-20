@@ -408,6 +408,7 @@ model HomeMember {
 model Room {
   id        String   @id @default(uuid()) @db.Uuid
   name      String
+  sortOrder Int      @default(0) @map("sort_order")
   homeId   String   @db.Uuid @map("home_id")
   home      Home     @relation(fields: [homeId], references: [id], onDelete: Cascade)
   floorId  String?  @db.Uuid @map("floor_id")

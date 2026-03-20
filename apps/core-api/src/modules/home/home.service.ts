@@ -6,14 +6,17 @@ import {
   CreateFloorDto,
   CreateHomeDto,
   CreateRoomDto,
+  ReorderDto,
   UpdateFloorDto,
   UpdateHomeDto,
   UpdateRoomDto,
 } from './dtos/request';
 import {
   FloorResponseDto,
+  HomeDetailResponseDto,
   HomeMemberResponseDto,
   HomeResponseDto,
+  HomeWithFloorsResponseDto,
   RoomResponseDto,
 } from './dtos/response/home.response';
 
@@ -100,14 +103,57 @@ export class HomeService {
     }
   }
 
-  async getHomesForUser(userId: string): Promise<HomeResponseDto[]> {
+  // ============================================================
+  // HOMES
+  // ============================================================
+
+  /** Lấy danh sách nhà — kèm floors (nested rooms) + all rooms */
+  async getHomesForUser(userId: string): Promise<HomeWithFloorsResponseDto[]> {
     const homes = await this.databaseService.home.findMany({
       where: {
         OR: [{ ownerId: userId }, { members: { some: { userId: userId } } }],
       },
+      include: {
+        floors: {
+          orderBy: { sortOrder: 'asc' },
+          include: {
+            rooms: { orderBy: { sortOrder: 'asc' } },
+          },
+        },
+        rooms: {
+          orderBy: { sortOrder: 'asc' },
+        },
+      },
       orderBy: { createdAt: 'asc' },
     });
-    return homes as HomeResponseDto[];
+    return homes as HomeWithFloorsResponseDto[];
+  }
+
+  /** Lấy chi tiết 1 nhà — kèm floors (nested rooms) + all rooms */
+  async getHomeDetail(
+    homeId: string,
+    userId: string,
+  ): Promise<HomeDetailResponseDto> {
+    await this.ensureUserCanAccessHome(userId, homeId);
+    const home = await this.databaseService.home.findUnique({
+      where: { id: homeId },
+    });
+    const floors = await this.databaseService.floor.findMany({
+      where: { homeId },
+      include: {
+        rooms: { orderBy: { sortOrder: 'asc' } },
+      },
+      orderBy: { sortOrder: 'asc' },
+    });
+    const rooms = await this.databaseService.room.findMany({
+      where: { homeId },
+      orderBy: { sortOrder: 'asc' },
+    });
+    return {
+      home: home as HomeResponseDto,
+      floors: floors as FloorResponseDto[],
+      rooms: rooms as RoomResponseDto[],
+    };
   }
 
   async createHome(
@@ -152,6 +198,10 @@ export class HomeService {
     });
     return home as HomeResponseDto;
   }
+
+  // ============================================================
+  // MEMBERS
+  // ============================================================
 
   async getMembers(
     homeId: string,
@@ -253,20 +303,103 @@ export class HomeService {
     } as HomeMemberResponseDto;
   }
 
+  // ============================================================
+  // FLOORS
+  // ============================================================
+
   async getFloors(homeId: string, userId: string): Promise<FloorResponseDto[]> {
     await this.ensureUserCanAccessHome(userId, homeId);
     const floors = await this.databaseService.floor.findMany({
       where: { homeId: homeId },
       include: {
-        // Include danh sách rooms thuộc floor này
-        rooms: {
-          orderBy: { createdAt: 'asc' }, // Có thể sắp xếp room nếu muốn
-        },
+        rooms: { orderBy: { sortOrder: 'asc' } },
       },
       orderBy: { sortOrder: 'asc' },
     });
     return floors as FloorResponseDto[];
   }
+
+  async createFloor(
+    homeId: string,
+    userId: string,
+    dto: CreateFloorDto,
+  ): Promise<FloorResponseDto> {
+    await this.ensureUserCanAccessHome(userId, homeId);
+    // Auto-increment sortOrder nếu không được truyền
+    const maxSort = await this.databaseService.floor.aggregate({
+      where: { homeId },
+      _max: { sortOrder: true },
+    });
+    const floor = await this.databaseService.floor.create({
+      data: {
+        homeId: homeId,
+        name: dto.name,
+        sortOrder: dto.sortOrder ?? (maxSort._max.sortOrder ?? 0) + 1,
+      },
+      include: {
+        rooms: { orderBy: { sortOrder: 'asc' } },
+      },
+    });
+    return floor as FloorResponseDto;
+  }
+
+  async updateFloor(
+    floorId: string,
+    userId: string,
+    dto: UpdateFloorDto,
+  ): Promise<FloorResponseDto> {
+    await this.ensureUserCanAccessFloor(userId, floorId);
+    const floor = await this.databaseService.floor.update({
+      where: { id: floorId },
+      data: {
+        ...(dto.name !== undefined && { name: dto.name }),
+        ...(dto.sortOrder !== undefined && {
+          sortOrder: dto.sortOrder,
+        }),
+      },
+      include: {
+        rooms: { orderBy: { sortOrder: 'asc' } },
+      },
+    });
+    return floor as FloorResponseDto;
+  }
+
+  async deleteFloor(
+    floorId: string,
+    userId: string,
+  ): Promise<void> {
+    const { floor } = await this.ensureUserCanAccessFloor(userId, floorId);
+    // Rooms trong floor này → set floorId = null (ungrouped)
+    await this.databaseService.room.updateMany({
+      where: { floorId: floor.id },
+      data: { floorId: null },
+    });
+    await this.databaseService.floor.delete({
+      where: { id: floor.id },
+    });
+  }
+
+  async reorderFloors(
+    homeId: string,
+    userId: string,
+    dto: ReorderDto,
+  ): Promise<FloorResponseDto[]> {
+    await this.ensureUserCanAccessHome(userId, homeId);
+    // Batch update sortOrder theo vị trí trong mảng ids
+    await this.databaseService.$transaction(
+      dto.ids.map((id, index) =>
+        this.databaseService.floor.update({
+          where: { id },
+          data: { sortOrder: index },
+        }),
+      ),
+    );
+    return this.getFloors(homeId, userId);
+  }
+
+  // ============================================================
+  // ROOMS
+  // ============================================================
 
   async getRoomsByHome(
     homeId: string,
@@ -275,7 +408,7 @@ export class HomeService {
     await this.ensureUserCanAccessHome(userId, homeId);
     const rooms = await this.databaseService.room.findMany({
       where: { homeId: homeId },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { sortOrder: 'asc' },
     });
     return rooms as RoomResponseDto[];
   }
@@ -287,25 +420,9 @@ export class HomeService {
     await this.ensureUserCanAccessFloor(userId, floorId);
     const rooms = await this.databaseService.room.findMany({
       where: { floorId: floorId },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { sortOrder: 'asc' },
     });
     return rooms as RoomResponseDto[];
-  }
-
-  async createFloor(
-    homeId: string,
-    userId: string,
-    dto: CreateFloorDto,
-  ): Promise<FloorResponseDto> {
-    await this.ensureUserCanAccessHome(userId, homeId);
-    const floor = await this.databaseService.floor.create({
-      data: {
-        homeId: homeId,
-        name: dto.name,
-        sortOrder: dto.sortOrder ?? 0,
-      },
-    });
-    return floor as FloorResponseDto;
   }
 
   async createRoom(
@@ -324,32 +441,20 @@ export class HomeService {
         );
       }
     }
+    // Auto-increment sortOrder
+    const maxSort = await this.databaseService.room.aggregate({
+      where: floorId ? { floorId } : { homeId, floorId: null },
+      _max: { sortOrder: true },
+    });
     const room = await this.databaseService.room.create({
       data: {
         homeId: homeId,
         floorId: floorId ?? null,
         name: dto.name,
+        sortOrder: (maxSort._max.sortOrder ?? 0) + 1,
       },
     });
     return room as RoomResponseDto;
-  }
-
-  async updateFloor(
-    floorId: string,
-    userId: string,
-    dto: UpdateFloorDto,
-  ): Promise<FloorResponseDto> {
-    await this.ensureUserCanAccessFloor(userId, floorId);
-    const floor = await this.databaseService.floor.update({
-      where: { id: floorId },
-      data: {
-        ...(dto.name !== undefined && { name: dto.name }),
-        ...(dto.sortOrder !== undefined && {
-          sortOrder: dto.sortOrder,
-        }),
-      },
-    });
-    return floor as FloorResponseDto;
   }
 
   async updateRoom(
@@ -365,5 +470,32 @@ export class HomeService {
       },
     });
     return room as RoomResponseDto;
+  }
+
+  async deleteRoom(
+    roomId: string,
+    userId: string,
+  ): Promise<void> {
+    await this.ensureUserCanAccessRoom(userId, roomId);
+    await this.databaseService.room.delete({
+      where: { id: roomId },
+    });
+  }
+
+  async reorderRooms(
+    homeId: string,
+    userId: string,
+    dto: ReorderDto,
+  ): Promise<RoomResponseDto[]> {
+    await this.ensureUserCanAccessHome(userId, homeId);
+    await this.databaseService.$transaction(
+      dto.ids.map((id, index) =>
+        this.databaseService.room.update({
+          where: { id },
+          data: { sortOrder: index },
+        }),
+      ),
+    );
+    return this.getRoomsByHome(homeId, userId);
   }
 }

@@ -183,7 +183,7 @@ services:
       REDIS_PORT: '6379'
       MQTT_HOST: mqtt://emqx
       MQTT_PORT: '1883'
-    command: ['node', 'dist/apps/core-api/main.js']
+    command: ['/app/entrypoint.sh', 'dist/apps/core-api/main.js']
     depends_on:
       postgres:
         condition: service_healthy

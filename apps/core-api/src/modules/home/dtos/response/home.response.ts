@@ -46,6 +46,10 @@ export class RoomResponseDto {
   name: string;
 
   @Expose()
+  @ApiProperty({ default: 0 })
+  sortOrder: number;
+
+  @Expose()
   @ApiProperty()
   homeId: string;
 
@@ -123,4 +127,48 @@ export class HomeMemberResponseDto {
     firstName: string | null;
     lastName: string | null;
   };
+}
+
+/** Response cho GET /homes/:homeId/detail — gộp home + floors + rooms */
+export class HomeDetailResponseDto {
+  @Expose()
+  @ApiProperty({ type: HomeResponseDto })
+  @Type(() => HomeResponseDto)
+  home: HomeResponseDto;
+
+  @Expose()
+  @ApiProperty({ type: [FloorResponseDto] })
+  @Type(() => FloorResponseDto)
+  @ValidateNested({ each: true })
+  floors: FloorResponseDto[];
+
+  @Expose()
+  @ApiProperty({
+    type: [RoomResponseDto],
+    description: 'Tất cả rooms của home (bao gồm cả rooms không thuộc floor nào)',
+  })
+  @Type(() => RoomResponseDto)
+  @ValidateNested({ each: true })
+  rooms: RoomResponseDto[];
+}
+
+/** Response cho GET /homes — gộp home + floors (with nested rooms) */
+export class HomeWithFloorsResponseDto extends HomeResponseDto {
+  @ApiProperty({
+    type: [FloorResponseDto],
+    description: 'Danh sách tầng (kèm rooms) của nhà',
+  })
+  @Expose()
+  @Type(() => FloorResponseDto)
+  @ValidateNested({ each: true })
+  floors: FloorResponseDto[];
+
+  @ApiProperty({
+    type: [RoomResponseDto],
+    description: 'Tất cả rooms của home',
+  })
+  @Expose()
+  @Type(() => RoomResponseDto)
+  @ValidateNested({ each: true })
+  rooms: RoomResponseDto[];
 }

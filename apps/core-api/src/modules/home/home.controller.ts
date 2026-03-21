@@ -19,6 +19,8 @@ import { UseGuards } from '@nestjs/common';
 import {
   AddMemberDto,
   AssignRoomsDto,
+  AssignFeaturesDto,
+  AssignScenesDto,
   CreateFloorDto,
   CreateHomeDto,
   CreateRoomDto,
@@ -297,6 +299,36 @@ export class HomeController {
     @Param('roomId') roomId: string,
   ): Promise<void> {
     return this.homeService.deleteRoom(roomId, user.userId);
+  }
+
+  @Patch('rooms/:roomId/features')
+  @ApiOperation({ summary: 'Gán các DeviceFeatures vào Phòng' })
+  @DocResponse({
+    serialization: RoomResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'home.success.roomUpdated',
+  })
+  async assignFeaturesToRoom(
+    @AuthUser() user: IAuthUser,
+    @Param('roomId') roomId: string,
+    @Body() dto: AssignFeaturesDto,
+  ): Promise<RoomResponseDto> {
+    return this.homeService.assignFeaturesToRoom(roomId, user.userId, dto.featureIds);
+  }
+
+  @Patch('rooms/:roomId/scenes')
+  @ApiOperation({ summary: 'Gán các Scenes vào Phòng' })
+  @DocResponse({
+    serialization: RoomResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'home.success.roomUpdated',
+  })
+  async assignScenesToRoom(
+    @AuthUser() user: IAuthUser,
+    @Param('roomId') roomId: string,
+    @Body() dto: AssignScenesDto,
+  ): Promise<RoomResponseDto> {
+    return this.homeService.assignScenesToRoom(roomId, user.userId, dto.sceneIds);
   }
 
   @Patch(':homeId/rooms/reorder')

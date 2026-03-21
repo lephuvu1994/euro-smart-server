@@ -106,11 +106,18 @@ const createMockDatabaseService = () => ({
   room: {
     findFirst: jest.fn(),
     findMany: jest.fn(),
+    findUniqueOrThrow: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
     updateMany: jest.fn(),
     delete: jest.fn(),
     aggregate: jest.fn(),
+    count: jest.fn(),
+  },
+  deviceFeature: {
+    count: jest.fn(),
+  },
+  scene: {
     count: jest.fn(),
   },
   homeMember: {
@@ -399,6 +406,132 @@ describe('HomeService', () => {
       ).rejects.toThrow(
         new HttpException('home.error.floorNotFoundOrNoAccess', HttpStatus.FORBIDDEN)
       );
+    });
+  });
+
+  describe('assignFeaturesToRoom', () => {
+    beforeEach(() => {
+      db.room.findFirst.mockResolvedValue({ id: MOCK_ROOM_ID_1, homeId: MOCK_HOME_ID });
+      db.room.findUniqueOrThrow.mockResolvedValue({ homeId: MOCK_HOME_ID });
+    });
+
+    it('should assign features using Prisma set relation in a single update', async () => {
+      db.deviceFeature.count.mockResolvedValue(2);
+      
+      const updatedRoom = { 
+        ...mockRoom1, 
+        features: [{ id: 'feature-1' }, { id: 'feature-2' }] 
+      };
+      db.room.update.mockResolvedValue(updatedRoom);
+
+      const result = await service.assignFeaturesToRoom(
+        MOCK_ROOM_ID_1,
+        MOCK_USER_ID,
+        ['feature-1', 'feature-2'],
+      );
+
+      expect(db.deviceFeature.count).toHaveBeenCalledWith({
+        where: { id: { in: ['feature-1', 'feature-2'] }, device: { homeId: MOCK_HOME_ID } },
+      });
+
+      expect(db.room.update).toHaveBeenCalledWith({
+        where: { id: MOCK_ROOM_ID_1 },
+        data: {
+          features: {
+            set: [{ id: 'feature-1' }, { id: 'feature-2' }],
+          },
+        },
+      });
+
+      expect(result['features']).toHaveLength(2);
+    });
+
+    it('should handle empty featureIds correctly', async () => {
+      const updatedRoom = { ...mockRoom1, features: [] };
+      db.room.update.mockResolvedValue(updatedRoom);
+
+      const result = await service.assignFeaturesToRoom(MOCK_ROOM_ID_1, MOCK_USER_ID, []);
+
+      expect(db.deviceFeature.count).not.toHaveBeenCalled(); 
+      expect(db.room.update).toHaveBeenCalledWith({
+        where: { id: MOCK_ROOM_ID_1 },
+        data: { features: { set: [] } },
+      });
+      expect(result['features']).toHaveLength(0);
+    });
+
+    it('should throw FORBIDDEN if some listed features do not belong to the home', async () => {
+      db.deviceFeature.count.mockResolvedValue(1);
+
+      await expect(
+        service.assignFeaturesToRoom(MOCK_ROOM_ID_1, MOCK_USER_ID, ['f1', 'f2']),
+      ).rejects.toThrow(
+        new HttpException('home.error.featureNotFoundOrNoAccess', HttpStatus.FORBIDDEN)
+      );
+      expect(db.room.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('assignScenesToRoom', () => {
+    beforeEach(() => {
+      db.room.findFirst.mockResolvedValue({ id: MOCK_ROOM_ID_1, homeId: MOCK_HOME_ID });
+      db.room.findUniqueOrThrow.mockResolvedValue({ homeId: MOCK_HOME_ID });
+    });
+
+    it('should assign scenes using Prisma set relation in a single update', async () => {
+      db.scene.count.mockResolvedValue(2);
+      
+      const updatedRoom = { 
+        ...mockRoom1, 
+        scenes: [{ id: 'scene-1' }, { id: 'scene-2' }] 
+      };
+      db.room.update.mockResolvedValue(updatedRoom);
+
+      const result = await service.assignScenesToRoom(
+        MOCK_ROOM_ID_1,
+        MOCK_USER_ID,
+        ['scene-1', 'scene-2'],
+      );
+
+      expect(db.scene.count).toHaveBeenCalledWith({
+        where: { id: { in: ['scene-1', 'scene-2'] }, homeId: MOCK_HOME_ID },
+      });
+
+      expect(db.room.update).toHaveBeenCalledWith({
+        where: { id: MOCK_ROOM_ID_1 },
+        data: {
+          scenes: {
+            set: [{ id: 'scene-1' }, { id: 'scene-2' }],
+          },
+        },
+      });
+
+      expect(result['scenes']).toHaveLength(2);
+    });
+
+    it('should handle empty sceneIds correctly', async () => {
+      const updatedRoom = { ...mockRoom1, scenes: [] };
+      db.room.update.mockResolvedValue(updatedRoom);
+
+      const result = await service.assignScenesToRoom(MOCK_ROOM_ID_1, MOCK_USER_ID, []);
+
+      expect(db.scene.count).not.toHaveBeenCalled(); 
+      expect(db.room.update).toHaveBeenCalledWith({
+        where: { id: MOCK_ROOM_ID_1 },
+        data: { scenes: { set: [] } },
+      });
+      expect(result['scenes']).toHaveLength(0);
+    });
+
+    it('should throw FORBIDDEN if some listed scenes do not belong to the home', async () => {
+      db.scene.count.mockResolvedValue(1);
+
+      await expect(
+        service.assignScenesToRoom(MOCK_ROOM_ID_1, MOCK_USER_ID, ['s1', 's2']),
+      ).rejects.toThrow(
+        new HttpException('home.error.sceneNotFoundOrNoAccess', HttpStatus.FORBIDDEN)
+      );
+      expect(db.room.update).not.toHaveBeenCalled();
     });
   });
 

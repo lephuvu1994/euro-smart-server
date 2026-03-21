@@ -7,3 +7,5 @@ export * from './update-room.dto';
 export * from './add-member.dto';
 export * from './reorder.dto';
 export * from './assign-rooms.dto';
+export * from './assign-features.dto';
+export * from './assign-scenes.dto';

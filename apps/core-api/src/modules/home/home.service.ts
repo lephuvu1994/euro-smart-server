@@ -521,6 +521,72 @@ export class HomeService {
     });
   }
 
+  async assignFeaturesToRoom(
+    roomId: string,
+    userId: string,
+    featureIds: string[],
+  ): Promise<RoomResponseDto> {
+    await this.ensureUserCanAccessRoom(userId, roomId);
+
+    const { room } = await this.databaseService.room.findUniqueOrThrow({
+      where: { id: roomId },
+      select: { homeId: true },
+    }).then(room => ({ room }));
+
+    if (featureIds && featureIds.length > 0) {
+      const dbFeaturesCount = await this.databaseService.deviceFeature.count({
+        where: { id: { in: featureIds }, device: { homeId: room.homeId } },
+      });
+      if (dbFeaturesCount !== featureIds.length) {
+        throw new HttpException('home.error.featureNotFoundOrNoAccess', HttpStatus.FORBIDDEN);
+      }
+    }
+
+    const updatedRoom = await this.databaseService.room.update({
+      where: { id: roomId },
+      data: {
+        features: {
+          set: (featureIds || []).map(id => ({ id })),
+        },
+      },
+    });
+
+    return updatedRoom as RoomResponseDto;
+  }
+
+  async assignScenesToRoom(
+    roomId: string,
+    userId: string,
+    sceneIds: string[],
+  ): Promise<RoomResponseDto> {
+    await this.ensureUserCanAccessRoom(userId, roomId);
+
+    const { room } = await this.databaseService.room.findUniqueOrThrow({
+      where: { id: roomId },
+      select: { homeId: true },
+    }).then(room => ({ room }));
+
+    if (sceneIds && sceneIds.length > 0) {
+      const dbScenesCount = await this.databaseService.scene.count({
+        where: { id: { in: sceneIds }, homeId: room.homeId },
+      });
+      if (dbScenesCount !== sceneIds.length) {
+        throw new HttpException('home.error.sceneNotFoundOrNoAccess', HttpStatus.FORBIDDEN);
+      }
+    }
+
+    const updatedRoom = await this.databaseService.room.update({
+      where: { id: roomId },
+      data: {
+        scenes: {
+          set: (sceneIds || []).map(id => ({ id })),
+        },
+      },
+    });
+
+    return updatedRoom as RoomResponseDto;
+  }
+
   async reorderRooms(
     homeId: string,
     userId: string,

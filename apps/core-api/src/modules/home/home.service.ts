@@ -369,30 +369,38 @@ export class HomeService {
     userId: string,
     roomIds: string[],
   ): Promise<FloorResponseDto> {
-    const { floor } = await this.ensureUserCanAccessFloor(userId, floorId);
+    await this.ensureUserCanAccessFloor(userId, floorId);
 
-    await this.databaseService.$transaction([
-      // 1. Gỡ tất cả rooms cũ khỏi floor
-      this.databaseService.room.updateMany({
-        where: { floorId: floor.id },
-        data: { floorId: null },
-      }),
-      // 2. Gán rooms mới vào floor
-      ...(roomIds.length > 0
-        ? [
-            this.databaseService.room.updateMany({
-              where: { id: { in: roomIds }, homeId: floor.homeId },
-              data: { floorId: floor.id },
-            }),
-          ]
-        : []),
-    ]);
+    // Verify all upcoming rooms belong to this home to prevent cross-home assignment bypasses
+    const { floor } = await this.databaseService.floor.findUniqueOrThrow({
+      where: { id: floorId },
+      select: { homeId: true },
+    }).then(floor => ({ floor }));
 
-    const updated = await this.databaseService.floor.findUnique({
-      where: { id: floor.id },
-      include: { rooms: { orderBy: { sortOrder: 'asc' } } },
+    if (roomIds && roomIds.length > 0) {
+      const dbRoomsCount = await this.databaseService.room.count({
+        where: { id: { in: roomIds }, homeId: floor.homeId },
+      });
+      if (dbRoomsCount !== roomIds.length) {
+        throw new HttpException('home.error.roomNotFoundOrNoAccess', HttpStatus.FORBIDDEN);
+      }
+    }
+
+    const updatedFloor = await this.databaseService.floor.update({
+      where: { id: floorId },
+      data: {
+        rooms: {
+          set: (roomIds || []).map(id => ({ id })),
+        },
+      },
+      include: {
+        rooms: {
+          orderBy: { createdAt: 'asc' },
+        },
+      },
     });
-    return updated as FloorResponseDto;
+
+    return updatedFloor as FloorResponseDto;
   }
 
   async deleteFloor(

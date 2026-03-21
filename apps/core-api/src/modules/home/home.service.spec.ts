@@ -97,6 +97,7 @@ const createMockDatabaseService = () => ({
     findFirst: jest.fn(),
     findMany: jest.fn(),
     findUnique: jest.fn(),
+    findUniqueOrThrow: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
     delete: jest.fn(),
@@ -110,6 +111,7 @@ const createMockDatabaseService = () => ({
     updateMany: jest.fn(),
     delete: jest.fn(),
     aggregate: jest.fn(),
+    count: jest.fn(),
   },
   homeMember: {
     findMany: jest.fn(),
@@ -308,11 +310,21 @@ describe('HomeService', () => {
   });
 
   describe('assignRoomsToFloor', () => {
-    it('should unassign old rooms and assign new rooms in a transaction', async () => {
+    beforeEach(() => {
+      // Mock ensureUserCanAccessFloor internals
       db.floor.findFirst.mockResolvedValue({ id: MOCK_FLOOR_ID_1, homeId: MOCK_HOME_ID });
-      db.$transaction.mockResolvedValue([{ count: 1 }, { count: 2 }]);
-      const updatedFloor = { ...mockFloor1, rooms: [{ id: MOCK_ROOM_ID_1 }, { id: MOCK_ROOM_ID_2 }] };
-      db.floor.findUnique.mockResolvedValue(updatedFloor);
+      // Mock room check
+      db.floor.findUniqueOrThrow.mockResolvedValue({ homeId: MOCK_HOME_ID });
+    });
+
+    it('should assign new rooms using Prisma set relation in a single update', async () => {
+      db.room.count.mockResolvedValue(2);
+      
+      const updatedFloor = { 
+        ...mockFloor1, 
+        rooms: [{ id: MOCK_ROOM_ID_1 }, { id: MOCK_ROOM_ID_2 }] 
+      };
+      db.floor.update.mockResolvedValue(updatedFloor);
 
       const result = await service.assignRoomsToFloor(
         MOCK_FLOOR_ID_1,
@@ -320,18 +332,30 @@ describe('HomeService', () => {
         [MOCK_ROOM_ID_1, MOCK_ROOM_ID_2],
       );
 
-      expect(db.$transaction).toHaveBeenCalledTimes(1);
-      const txArg = db.$transaction.mock.calls[0][0];
-      // First op: unassign old rooms, second op: assign new rooms
-      expect(txArg).toHaveLength(2);
+      // Verify validation query
+      expect(db.room.count).toHaveBeenCalledWith({
+        where: { id: { in: [MOCK_ROOM_ID_1, MOCK_ROOM_ID_2] }, homeId: MOCK_HOME_ID },
+      });
+
+      // Verify Prisma set query
+      expect(db.floor.update).toHaveBeenCalledWith({
+        where: { id: MOCK_FLOOR_ID_1 },
+        data: {
+          rooms: {
+            set: [{ id: MOCK_ROOM_ID_1 }, { id: MOCK_ROOM_ID_2 }],
+          },
+        },
+        include: {
+          rooms: { orderBy: { createdAt: 'asc' } },
+        },
+      });
+
       expect(result.rooms).toHaveLength(2);
     });
 
-    it('should handle empty roomIds (unassign all)', async () => {
-      db.floor.findFirst.mockResolvedValue({ id: MOCK_FLOOR_ID_1, homeId: MOCK_HOME_ID });
-      db.$transaction.mockResolvedValue([{ count: 2 }]);
+    it('should handle empty roomIds correctly', async () => {
       const updatedFloor = { ...mockFloor1, rooms: [] };
-      db.floor.findUnique.mockResolvedValue(updatedFloor);
+      db.floor.update.mockResolvedValue(updatedFloor);
 
       const result = await service.assignRoomsToFloor(
         MOCK_FLOOR_ID_1,
@@ -339,18 +363,42 @@ describe('HomeService', () => {
         [],
       );
 
-      expect(db.$transaction).toHaveBeenCalledTimes(1);
-      const txArg = db.$transaction.mock.calls[0][0];
-      // Only unassign op, no assign op
-      expect(txArg).toHaveLength(1);
+      expect(db.room.count).not.toHaveBeenCalled(); // No validation needed for empty array
+
+      expect(db.floor.update).toHaveBeenCalledWith({
+        where: { id: MOCK_FLOOR_ID_1 },
+        data: {
+          rooms: { set: [] },
+        },
+        include: {
+          rooms: { orderBy: { createdAt: 'asc' } },
+        },
+      });
+
       expect(result.rooms).toHaveLength(0);
     });
 
-    it('should throw when floor not found', async () => {
+    it('should throw FORBIDDEN if some listed rooms do not belong to the home', async () => {
+      // Say the count returns 1 but we passed 2 IDs
+      db.room.count.mockResolvedValue(1);
+
+      await expect(
+        service.assignRoomsToFloor(MOCK_FLOOR_ID_1, MOCK_USER_ID, [MOCK_ROOM_ID_1, MOCK_ROOM_ID_2]),
+      ).rejects.toThrow(
+        new HttpException('home.error.roomNotFoundOrNoAccess', HttpStatus.FORBIDDEN)
+      );
+
+      expect(db.floor.update).not.toHaveBeenCalled();
+    });
+
+    it('should throw FORBIDDEN when user has no access to the floor', async () => {
+      // findFirst returns null for verify process
       db.floor.findFirst.mockResolvedValue(null);
       await expect(
-        service.assignRoomsToFloor('non-existent', MOCK_USER_ID, [MOCK_ROOM_ID_1]),
-      ).rejects.toThrow(HttpException);
+        service.assignRoomsToFloor(MOCK_FLOOR_ID_1, MOCK_USER_ID, [MOCK_ROOM_ID_1]),
+      ).rejects.toThrow(
+        new HttpException('home.error.floorNotFoundOrNoAccess', HttpStatus.FORBIDDEN)
+      );
     });
   });
 

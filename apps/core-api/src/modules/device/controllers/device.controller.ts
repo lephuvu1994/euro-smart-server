@@ -30,6 +30,43 @@ export class DeviceController {
     private readonly deviceService: DeviceService,
   ) {}
 
+  /**
+   * API: Device UI Config — trả về JSON config cho app render theo loại thiết bị.
+   * GET /v1/devices/config
+   * Flow: Redis cache → DB → seed defaults.
+   * MUST be before :id route to avoid route conflict.
+   */
+  @Get('config')
+  @ApiOperation({
+    summary: 'Get device UI config for app rendering',
+    description: 'Returns JSON config mapping device types to UI properties. Cached in Redis, stored in DB (SystemConfig).',
+  })
+  async getDeviceConfig() {
+    const data = await this.deviceService.getDeviceUiConfigs();
+    return {
+      statusCode: HttpStatus.OK,
+      data,
+    };
+  }
+
+  /**
+   * API: Refresh Redis cache for device UI config.
+   * POST /v1/devices/config/refresh
+   * Called after admin updates config in DB (via dashboard, SQL, etc.)
+   */
+  @Post('config/refresh')
+  @ApiOperation({
+    summary: 'Refresh device UI config Redis cache from DB',
+    description: 'Re-reads SystemConfig from DB and updates Redis cache. Use after config changes.',
+  })
+  async refreshDeviceConfig() {
+    const result = await this.deviceService.refreshDeviceUiConfigCache();
+    return {
+      statusCode: HttpStatus.OK,
+      ...result,
+    };
+  }
+
   @Post('register')
   @ApiOperation({
     summary:

@@ -12,6 +12,7 @@ import { UpdatePartnerDto } from './dtos/request/update-partner.dto';
 import { CreateDeviceModelDto } from './dtos/request/create-device-model.dto';
 import { SetMqttConfigDto } from './dtos/request/set-mqtt-config.dto';
 import { UpdateSystemConfigDto } from './dtos/request/update-system-config.dto';
+import { UpdateDeviceUiConfigDto } from './dtos/request/update-device-ui-config.dto';
 import { PartnerUsageResponseDto } from './dtos/response/partner-usage.response.dto';
 import { SystemConfigResponseDto } from './dtos/response/system-config.response.dto';
 
@@ -106,4 +107,27 @@ export class AdminController {
   updateSystemConfigs(@Body() body: UpdateSystemConfigDto) {
     return this.adminService.updateSystemConfigs(body);
   }
+
+  // ──────────────────────────────────────────────
+  // DEVICE UI CONFIG
+  // ──────────────────────────────────────────────
+
+  @Get('configs/device-ui')
+  @ApiOperation({
+    summary: 'Get device UI config',
+    description: 'Returns current device UI config from DB (or defaults if not set)',
+  })
+  getDeviceUiConfig() {
+    return this.adminService.getDeviceUiConfig();
+  }
+
+  @Put('configs/device-ui')
+  @ApiOperation({
+    summary: 'Update device UI config',
+    description: 'Replaces entire device UI config in DB and refreshes Redis cache immediately',
+  })
+  updateDeviceUiConfig(@Body() body: UpdateDeviceUiConfigDto) {
+    return this.adminService.updateDeviceUiConfig(body);
+  }
 }
+

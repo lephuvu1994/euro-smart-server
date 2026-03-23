@@ -7,6 +7,12 @@ import {
 import { DatabaseService } from '@app/database';
 import { RedisService } from '@app/redis-cache';
 import { GetDevicesDto } from '../dto/get-devices.dto';
+import {
+  DEFAULT_DEVICE_UI_CONFIGS,
+  DEVICE_UI_CONFIG_KEY,
+  DEVICE_UI_CONFIG_REDIS_KEY,
+  type DeviceUiConfig,
+} from '../constants/device-ui-config.constant';
 
 @Injectable()
 export class DeviceService {
@@ -265,5 +271,85 @@ export class DeviceService {
         homeId: s.homeId,
       })),
     };
+  }
+
+  // ──────────────────────────────────────────────
+  // DEVICE UI CONFIG (Redis cache + DB fallback)
+  // ──────────────────────────────────────────────
+
+  /**
+   * Get device UI configs for app rendering.
+   * Flow: Redis cache → DB → seed default values.
+   */
+  async getDeviceUiConfigs(): Promise<DeviceUiConfig[]> {
+    // 1. Try Redis cache first
+    const cached = await this.redis.get(DEVICE_UI_CONFIG_REDIS_KEY);
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch {
+        // Invalid cache, fall through to DB
+      }
+    }
+
+    // 2. Fallback to DB
+    const dbConfig = await this.db.systemConfig.findUnique({
+      where: { key: DEVICE_UI_CONFIG_KEY },
+    });
+
+    if (dbConfig?.value) {
+      try {
+        const configs = JSON.parse(dbConfig.value) as DeviceUiConfig[];
+        // Write to Redis cache (no TTL — manual refresh)
+        await this.redis.set(DEVICE_UI_CONFIG_REDIS_KEY, dbConfig.value);
+        return configs;
+      } catch {
+        // Invalid DB value, seed defaults
+      }
+    }
+
+    // 3. Seed defaults → DB + Redis
+    const defaultJson = JSON.stringify(DEFAULT_DEVICE_UI_CONFIGS);
+    await this.db.systemConfig.upsert({
+      where: { key: DEVICE_UI_CONFIG_KEY },
+      update: { value: defaultJson },
+      create: {
+        key: DEVICE_UI_CONFIG_KEY,
+        value: defaultJson,
+        description: 'Device UI config for app rendering (JSON array)',
+      },
+    });
+    await this.redis.set(DEVICE_UI_CONFIG_REDIS_KEY, defaultJson);
+
+    return DEFAULT_DEVICE_UI_CONFIGS;
+  }
+
+  /**
+   * Refresh Redis cache from DB.
+   * Called after admin updates the config via dashboard.
+   */
+  async refreshDeviceUiConfigCache(): Promise<{ message: string }> {
+    const dbConfig = await this.db.systemConfig.findUnique({
+      where: { key: DEVICE_UI_CONFIG_KEY },
+    });
+
+    if (dbConfig?.value) {
+      await this.redis.set(DEVICE_UI_CONFIG_REDIS_KEY, dbConfig.value);
+    } else {
+      // No config in DB, seed defaults
+      const defaultJson = JSON.stringify(DEFAULT_DEVICE_UI_CONFIGS);
+      await this.db.systemConfig.upsert({
+        where: { key: DEVICE_UI_CONFIG_KEY },
+        update: { value: defaultJson },
+        create: {
+          key: DEVICE_UI_CONFIG_KEY,
+          value: defaultJson,
+          description: 'Device UI config for app rendering (JSON array)',
+        },
+      });
+      await this.redis.set(DEVICE_UI_CONFIG_REDIS_KEY, defaultJson);
+    }
+
+    return { message: 'Device UI config cache refreshed successfully' };
   }
 }

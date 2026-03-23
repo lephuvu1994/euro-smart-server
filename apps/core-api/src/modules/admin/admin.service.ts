@@ -1,5 +1,6 @@
 import { ConflictException, HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { DatabaseService } from '@app/database';
+import { RedisService } from '@app/redis-cache';
 
 import { CreatePartnerDto } from './dtos/request/create-partner.dto';
 import { CreateDeviceModelDto } from './dtos/request/create-device-model.dto';
@@ -8,10 +9,20 @@ import { SetMqttConfigDto } from './dtos/request/set-mqtt-config.dto';
 import { UpdateSystemConfigDto } from './dtos/request/update-system-config.dto';
 import { PartnerUsageResponseDto } from './dtos/response/partner-usage.response.dto';
 import { SystemConfigResponseDto } from './dtos/response/system-config.response.dto';
+import { UpdateDeviceUiConfigDto } from './dtos/request/update-device-ui-config.dto';
+import {
+  DEFAULT_DEVICE_UI_CONFIGS,
+  DEVICE_UI_CONFIG_KEY,
+  DEVICE_UI_CONFIG_REDIS_KEY,
+} from '../device/constants/device-ui-config.constant';
 
 @Injectable()
 export class AdminService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly redis: RedisService,
+  ) {}
+
 
   // ──────────────────────────────────────────────
   // PARTNERS
@@ -218,4 +229,45 @@ export class AdminService {
 
     return { message: 'System configuration updated successfully' };
   }
+
+  // ──────────────────────────────────────────────
+  // DEVICE UI CONFIG
+  // ──────────────────────────────────────────────
+
+  async getDeviceUiConfig() {
+    const dbConfig = await this.db.systemConfig.findUnique({
+      where: { key: DEVICE_UI_CONFIG_KEY },
+    });
+
+    if (dbConfig?.value) {
+      try {
+        return JSON.parse(dbConfig.value);
+      } catch {
+        // Invalid JSON, return defaults
+      }
+    }
+
+    return DEFAULT_DEVICE_UI_CONFIGS;
+  }
+
+  async updateDeviceUiConfig(data: UpdateDeviceUiConfigDto) {
+    const configJson = JSON.stringify(data.configs);
+
+    // Write to DB
+    await this.db.systemConfig.upsert({
+      where: { key: DEVICE_UI_CONFIG_KEY },
+      update: { value: configJson },
+      create: {
+        key: DEVICE_UI_CONFIG_KEY,
+        value: configJson,
+        description: 'Device UI config for app rendering (JSON array)',
+      },
+    });
+
+    // Refresh Redis cache immediately
+    await this.redis.set(DEVICE_UI_CONFIG_REDIS_KEY, configJson);
+
+    return { message: 'Device UI config updated and cache refreshed' };
+  }
 }
+

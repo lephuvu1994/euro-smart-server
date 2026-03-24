@@ -140,32 +140,6 @@ describe('HomeService', () => {
   });
 
   // ============================================================
-  // getHomesForUser
-  // ============================================================
-  describe('getHomesForUser', () => {
-    it('should return homes with nested floors and rooms', async () => {
-      const homesWithData = [{ ...mockHome, floors: [{ ...mockFloor1, rooms: [mockRoom1] }], rooms: [mockRoom1, mockRoom3] }];
-      db.home.findMany.mockResolvedValue(homesWithData);
-      const result = await service.getHomesForUser(MOCK_USER_ID);
-      expect(result).toEqual(homesWithData);
-      expect(db.home.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          include: expect.objectContaining({
-            floors: expect.any(Object),
-            rooms: expect.any(Object),
-          }),
-        }),
-      );
-    });
-
-    it('should return empty array when user has no homes', async () => {
-      db.home.findMany.mockResolvedValue([]);
-      const result = await service.getHomesForUser(MOCK_USER_ID);
-      expect(result).toEqual([]);
-    });
-  });
-
-  // ============================================================
   // getHomeDetail
   // ============================================================
   describe('getHomeDetail', () => {

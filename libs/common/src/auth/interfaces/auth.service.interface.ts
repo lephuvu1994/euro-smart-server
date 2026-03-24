@@ -1,6 +1,7 @@
 import { IAuthUser } from '../../request/interfaces/request.interface';
 
 import {
+  AuthMeResponseDto,
   AuthRefreshResponseDto,
   AuthResponseDto,
 } from '../dtos/response/auth.response.dto';
@@ -15,6 +16,7 @@ export interface IAuthService {
   login(data: UserLoginDto): Promise<AuthResponseDto>;
   signup(data: UserCreateDto): Promise<AuthResponseDto>;
   checkExists(data: CheckExistsDto): Promise<{ exists: boolean }>;
+  getMe(userId: string): Promise<AuthMeResponseDto>;
   refreshTokens(payload: IAuthUser): Promise<AuthRefreshResponseDto>;
   forgotPassword(data: ForgotPasswordDto): Promise<void>;
   verifyOtp(data: VerifyOtpDto): Promise<{ resetToken: string }>;

@@ -16,7 +16,6 @@ import {
   HomeDetailResponseDto,
   HomeMemberResponseDto,
   HomeResponseDto,
-  HomeWithFloorsResponseDto,
   RoomResponseDto,
 } from './dtos/response/home.response';
 
@@ -106,28 +105,6 @@ export class HomeService {
   // ============================================================
   // HOMES
   // ============================================================
-
-  /** Lấy danh sách nhà — kèm floors (nested rooms) + all rooms */
-  async getHomesForUser(userId: string): Promise<HomeWithFloorsResponseDto[]> {
-    const homes = await this.databaseService.home.findMany({
-      where: {
-        OR: [{ ownerId: userId }, { members: { some: { userId: userId } } }],
-      },
-      include: {
-        floors: {
-          orderBy: { sortOrder: 'asc' },
-          include: {
-            rooms: { orderBy: { sortOrder: 'asc' } },
-          },
-        },
-        rooms: {
-          orderBy: { sortOrder: 'asc' },
-        },
-      },
-      orderBy: { createdAt: 'asc' },
-    });
-    return homes as HomeWithFloorsResponseDto[];
-  }
 
   /** Lấy chi tiết 1 nhà — kèm floors (nested rooms) + all rooms */
   async getHomeDetail(

@@ -144,6 +144,28 @@ services:
           cpus: '0.25'
 
   # ─────────────────────────────────────────────
+  # EMQX AUTH INIT (chạy 1 lần, tạo MQTT user)
+  # ─────────────────────────────────────────────
+  emqx-init:
+    image: curlimages/curl:latest
+    container_name: aurathink-emqx-init-prod
+    restart: 'no'
+    env_file:
+      - .env
+    environment:
+      EMQX_API_URL: http://emqx:18083
+      EMQX_DASHBOARD_USER: ${EMQX_DASHBOARD_USER:-admin}
+      EMQX_DASHBOARD_PASS: ${EMQX_DASHBOARD_PASS:?EMQX_DASHBOARD_PASS is required}
+    volumes:
+      - ./deploy/docker/init-emqx-auth.sh:/init.sh:ro
+    entrypoint: ['/bin/sh', '/init.sh']
+    depends_on:
+      emqx:
+        condition: service_healthy
+    networks:
+      - euro-internal
+
+  # ─────────────────────────────────────────────
   # DATABASE MIGRATION (chạy 1 lần rồi thoát)
   # ─────────────────────────────────────────────
   migrate:

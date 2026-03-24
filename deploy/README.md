@@ -52,6 +52,7 @@ Hệ thống deploy HA trên **2 VPS** qua **Docker Compose + Tailscale VPN + CI
 ├── deploy/
 │   ├── docker/
 │   │   ├── nginx.conf            # Nginx reverse proxy
+│   │   ├── init-emqx-auth.sh     # EMQX MQTT user provisioning
 │   │   └── ssl/                  # TLS certs
 │   │       └── mqtt.pem          # MQTT TLS (HAProxy)
 │   ├── haproxy/
@@ -245,7 +246,7 @@ docker exec aurathink-postgres-prod pg_dump \
 - [ ] Port 18083 (EMQX Dashboard): chỉ mở cho IP admin
 - [ ] Port 5432, 6379: chỉ Tailscale (không public)
 - [ ] SSL/HTTPS: Let's Encrypt + auto-renew
-- [ ] EMQX: thêm user MQTT riêng, bật authentication
+- [x] EMQX: auto-provision user MQTT (emqx-init service)
 - [ ] `.env` không commit vào Git (đã .gitignore)
 
 ---

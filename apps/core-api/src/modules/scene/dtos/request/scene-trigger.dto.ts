@@ -122,15 +122,22 @@ export class LocationTriggerConfigDto {
 // DEVICE_STATE – Cảm biến / trạng thái thiết bị (mảng điều kiện, AND/OR)
 // ---------------------------------------------------------------------------
 
-/** Một điều kiện: 1 thiết bị + 1 feature (giá trị cảm biến hoặc state), so sánh theo operator */
+/** Một điều kiện: 1 thiết bị + 1 entity (state hoặc attribute), so sánh theo operator */
 export class SceneDeviceConditionDto {
   @ApiProperty({ description: 'Token thiết bị' })
   @IsString()
   deviceToken: string;
 
-  @ApiProperty({ description: 'Mã feature (vd: sw1, motion, temperature)' })
+  @ApiProperty({ description: 'Mã entity (vd: channel_1, main, sensor_temp)' })
   @IsString()
-  featureCode: string;
+  entityCode: string;
+
+  @ApiPropertyOptional({
+    description: 'Key attribute cụ thể (vd: brightness, temperature). Để trống = so sánh primary state.',
+  })
+  @IsOptional()
+  @IsString()
+  attributeKey?: string;
 
   @ApiPropertyOptional({
     description:

@@ -1,4 +1,4 @@
-import { Device, DeviceFeature } from '@prisma/client';
+import { Device, DeviceEntity } from '@prisma/client';
 
 export interface IDeviceDriver {
   /**
@@ -7,21 +7,24 @@ export interface IDeviceDriver {
    */
   readonly name: string;
   /**
-   * Hàm thực thi lệnh
+   * Hàm thực thi lệnh cho 1 entity
    * @param device Entity Device (chứa thông tin kết nối, token...)
-   * @param feature Entity Feature (chứa code: switch_1, type: binary...)
+   * @param entity DeviceEntity (chứa code: channel_1, domain: light...)
    * @param value Giá trị user gửi lên (1, 0, #FF0000, 50...)
    */
   setValue(
     device: Device,
-    feature: DeviceFeature,
+    entity: DeviceEntity,
     value: any,
   ): Promise<boolean>;
 
-  setValueBulk(device: Device, features: DeviceFeature[]): Promise<boolean>;
+  /**
+   * Hàm thực thi bulk cho nhiều entities cùng 1 device
+   */
+  setValueBulk(device: Device, entities: DeviceEntity[]): Promise<boolean>;
 
   /**
    * (Optional) Hàm convert dữ liệu thô từ thiết bị về format chuẩn của server
    */
-  normalizeValue?(feature: DeviceFeature, rawValue: any): any;
+  normalizeValue?(entity: DeviceEntity, rawValue: any): any;
 }

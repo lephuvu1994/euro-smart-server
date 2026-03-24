@@ -13,14 +13,6 @@ import { RedisService } from '@app/redis-cache';
 import { DatabaseService } from '@app/database';
 import { DEVICE_JOBS } from '@app/common';
 
-// 1. Định nghĩa Interface cho Config JSON (để bỏ 'any')
-interface DeviceFeatureConfig {
-  commandSuffix?: string;
-  commandKey?: string;
-  embeddedKeys?: string[];
-  values?: string[];
-}
-
 @Injectable()
 export class DeviceControlService {
   constructor(
@@ -31,33 +23,32 @@ export class DeviceControlService {
   ) {}
 
   /**
-   * Hàm kiểm tra quyền sở hữu (Có thể gọi từ Controller hoặc nội bộ)
+   * Kiểm tra quyền sở hữu device
    */
   async checkUserPermission(
-    deviceId: string,
+    deviceToken: string,
     userId: string,
   ): Promise<boolean> {
     const device = await this.databaseService.device.findFirst({
-      where: {
-        token: deviceId,
-        ownerId: userId,
-      },
+      where: { token: deviceToken, ownerId: userId },
     });
     return !!device;
   }
 
+  /**
+   * Gửi lệnh điều khiển 1 entity của device
+   */
   async sendControlCommand(
     deviceToken: string,
     userId: string,
-    featureCode: string,
+    entityCode: string,
     value: any,
   ) {
-    // 1. Lấy thông tin Device KÈM THEO Partner và Feature
     const device = await this.databaseService.device.findFirst({
       where: { token: deviceToken, ownerId: userId },
       include: {
         partner: { select: { code: true } },
-        features: true,
+        entities: true,
       },
     });
 
@@ -67,22 +58,17 @@ export class DeviceControlService {
       );
     }
 
-    // 2. Validate Feature
-    const feature = device.features.find((f) => f.code === featureCode);
-    if (!feature) {
-      throw new NotFoundException(`Tính năng '${featureCode}' không tồn tại`);
+    const entity = device.entities.find((e) => e.code === entityCode);
+    if (!entity) {
+      throw new NotFoundException(`Entity '${entityCode}' không tồn tại`);
     }
 
-    if (feature.readOnly) {
-      throw new BadRequestException('Tính năng này chỉ đọc (Read-only)');
+    if (entity.readOnly) {
+      throw new BadRequestException('Entity này chỉ đọc (Read-only)');
     }
 
-    // [MỚI] 3. Validate Dữ liệu đầu vào (Tránh gửi rác xuống thiết bị)
-    this.validateFeatureValue(
-      feature.type,
-      value,
-      feature.config as DeviceFeatureConfig,
-    );
+    // Validate value theo entity domain
+    this.validateEntityValue(entity.domain, value);
 
     const isOnline = await this.redisService.hget(
       `device:shadow:${device.token}`,
@@ -96,119 +82,14 @@ export class DeviceControlService {
       );
     }
 
-    // 5. Chuẩn bị Payload cho Queue
-    // Ép kiểu config sang Interface đã định nghĩa
-    const featureConfig = feature.config as any as DeviceFeatureConfig;
-
-    const mqttPayload = {
-      partnerCode: device.partner.code,
-      token: device.token,
-      // Nếu không có suffix trong DB, dùng mặc định 'set'
-      commandSuffix: featureConfig.commandSuffix || 'set',
-      featureCode: featureCode,
-
-      featureType: feature.type,
-      // Nếu không có command_key, dùng mặc định 'state'
-      commandKey: featureConfig.commandKey || 'state',
-      embeddedKeys: featureConfig.embeddedKeys || [],
-
-      value: value,
-    };
-
-    // 6. Đẩy Job vào Queue
-    await this.deviceQueue.add(DEVICE_JOBS.CONTROL_CMD, mqttPayload, {
-      priority: 1,
-      attempts: 3,
-      backoff: 5000,
-      removeOnComplete: true,
-    });
-
-    // [MỚI] 7. (Optional) Cập nhật Optimistic Shadow
-    // Cập nhật tạm thời vào Redis để UI thấy phản hồi ngay (trước khi thiết bị thật phản hồi)
-    // await this.redisService.hset(`shadow:${device.token}`, featureCode, JSON.stringify(value));
-
-    return {
-      status: 'queued',
-      deviceToken,
-      featureCode,
-      value,
-      timestamp: new Date(),
-    };
-  }
-
-  async sendDeviceValueCommand(
-    deviceToken: string,
-    userId: string,
-    value: { code: string; value: any }[],
-  ) {
-    // 1. Lấy thông tin Device KÈM THEO Partner và Feature
-    const device = await this.databaseService.device.findFirst({
-      where: { token: deviceToken, ownerId: userId },
-      include: {
-        partner: { select: { code: true } },
-        features: true,
-      },
-    });
-
-    if (!device) {
-      throw new UnauthorizedException(
-        'Thiết bị không tồn tại hoặc không có quyền',
-      );
-    }
-
-    const isOnline = await this.redisService.hget(
-      `device:shadow:${device.token}`,
-      'online',
-    );
-
-    if (!isOnline) {
-      throw new HttpException(
-        'Thiết bị đang ngoại tuyến',
-        HttpStatus.SERVICE_UNAVAILABLE,
-      );
-    }
-
-    // 5. Lấy tất cả các feature của thiết bị
-    const features = await this.databaseService.deviceFeature.findMany({
-      where: { deviceId: device.id },
-    });
-
-    // 6. Chuẩn bị Payload cho Queue
-    // Ép kiểu config sang Interface đã định nghĩa
-    const featureMQTTPayloads = features
-      .filter(
-        (f) =>
-          !f.readOnly &&
-          (f.config as DeviceFeatureConfig).commandSuffix === 'set',
-      )
-      .map((f) => {
-        const config = f.config as DeviceFeatureConfig;
-        const featureValue = value.find((v) => v.code === f.code);
-        if (!featureValue) {
-          throw new BadRequestException(
-            `Giá trị cho feature ${f.code} không tồn tại`,
-          );
-        }
-        this.validateFeatureValue(f.type, featureValue.value, config);
-        return {
-          partnerCode: device.partner.code,
-          token: device.token,
-          // Nếu không có suffix trong DB, dùng mặc định 'set'
-          commandSuffix: config.commandSuffix || 'set',
-          featureCode: f.code,
-
-          featureType: f.type,
-          // Nếu không có command_key, dùng mặc định 'state'
-          commandKey: config.commandKey || 'state',
-          embeddedKeys: config.embeddedKeys || [],
-          value: featureValue.value,
-        };
-      });
-
-    // 6. Đẩy Job vào Queue
+    // Đẩy job vào Queue — entity mang đầy đủ config (commandKey, commandSuffix)
     await this.deviceQueue.add(
-      DEVICE_JOBS.CONTROL_DEVICE_VALUE_CMD,
-      featureMQTTPayloads,
+      DEVICE_JOBS.CONTROL_CMD,
+      {
+        token: device.token,
+        entityCode,
+        value,
+      },
       {
         priority: 1,
         attempts: 3,
@@ -217,64 +98,122 @@ export class DeviceControlService {
       },
     );
 
-    // [MỚI] 7. (Optional) Cập nhật Optimistic Shadow
-    // Cập nhật tạm thời vào Redis để UI thấy phản hồi ngay (trước khi thiết bị thật phản hồi)
-    await this.redisService.hset(
-      `device:shadow:${device.token}`,
-      'device_value',
-      JSON.stringify(value),
-    );
-
     return {
       status: 'queued',
       deviceToken,
+      entityCode,
       value,
       timestamp: new Date(),
     };
   }
 
   /**
-   * Hàm Validate dữ liệu dựa trên Feature Type
+   * Gửi lệnh bulk cho nhiều entities cùng 1 device
    */
-  private validateFeatureValue(
-    type: string,
-    value: any,
-    config: DeviceFeatureConfig,
+  async sendDeviceValueCommand(
+    deviceToken: string,
+    userId: string,
+    values: { entityCode: string; value: any }[],
   ) {
-    switch (type) {
-      case 'BINARY': // 0 hoặc 1, true hoặc false
+    const device = await this.databaseService.device.findFirst({
+      where: { token: deviceToken, ownerId: userId },
+      include: {
+        partner: { select: { code: true } },
+        entities: true,
+      },
+    });
+
+    if (!device) {
+      throw new UnauthorizedException(
+        'Thiết bị không tồn tại hoặc không có quyền',
+      );
+    }
+
+    const isOnline = await this.redisService.hget(
+      `device:shadow:${device.token}`,
+      'online',
+    );
+
+    if (!isOnline) {
+      throw new HttpException(
+        'Thiết bị đang ngoại tuyến',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+
+    // Build entity MQTT payloads
+    const entityPayloads = values.map((v) => {
+      const entity = device.entities.find((e) => e.code === v.entityCode);
+      if (!entity) {
+        throw new BadRequestException(
+          `Entity '${v.entityCode}' không tồn tại`,
+        );
+      }
+      if (entity.readOnly) {
+        throw new BadRequestException(
+          `Entity '${v.entityCode}' chỉ đọc (Read-only)`,
+        );
+      }
+      this.validateEntityValue(entity.domain, v.value);
+      return {
+        entityCode: entity.code,
+        value: v.value,
+      };
+    });
+
+    await this.deviceQueue.add(
+      DEVICE_JOBS.CONTROL_DEVICE_VALUE_CMD,
+      {
+        token: device.token,
+        entityPayloads,
+      },
+      {
+        priority: 1,
+        attempts: 3,
+        backoff: 5000,
+        removeOnComplete: true,
+      },
+    );
+
+    return {
+      status: 'queued',
+      deviceToken,
+      values,
+      timestamp: new Date(),
+    };
+  }
+
+  /**
+   * Validate giá trị dựa trên EntityDomain
+   */
+  private validateEntityValue(domain: string, value: any) {
+    switch (domain) {
+      case 'switch_':
+      case 'button':
         if (value !== 0 && value !== 1 && value !== true && value !== false) {
           throw new BadRequestException(
-            'Giá trị BINARY phải là 0/1 hoặc true/false',
+            'Giá trị switch phải là 0/1 hoặc true/false',
           );
         }
         break;
-      case 'DIMMER': // 0 -> 100
-        if (typeof value !== 'number' || value < 0 || value > 100) {
-          throw new BadRequestException('Giá trị DIMMER phải từ 0 đến 100');
+      case 'light':
+        // Light có thể nhận on/off (0/1) hoặc brightness/color qua attribute
+        if (typeof value === 'number' && (value < 0 || value > 100)) {
+          throw new BadRequestException('Giá trị light phải từ 0 đến 100');
         }
         break;
-      case 'SHUTTER': {
-        // Phải nằm trong danh sách cho phép (OPEN, CLOSE, STOP)
-        const allowedValues = config.values || ['OPEN', 'CLOSE', 'STOP'];
-        if (!allowedValues.includes(value)) {
+      case 'curtain': {
+        const allowed = ['OPEN', 'CLOSE', 'STOP'];
+        if (typeof value === 'string' && !allowed.includes(value)) {
           throw new BadRequestException(
-            `Giá trị SHUTTER không hợp lệ. Cho phép: ${allowedValues.join(', ')}`,
+            `Giá trị curtain không hợp lệ. Cho phép: ${allowed.join(', ')}`,
           );
         }
         break;
       }
-      case 'COLOR': // Kiểm tra Hex hoặc RGB (đơn giản check string)
-        if (typeof value !== 'string') {
-          throw new BadRequestException('Giá trị COLOR phải là chuỗi');
-        }
-        break;
-      case 'CONFIG': // Phải là Object
-        if (typeof value !== 'object') {
-          throw new BadRequestException('Giá trị CONFIG phải là JSON Object');
-        }
-        break;
-      // Các case khác (BUTTON, TEXT...) có thể bỏ qua hoặc validate tùy ý
+      case 'sensor':
+        throw new BadRequestException('Sensor là read-only, không thể điều khiển');
+      // climate, camera, lock — flexible validation
     }
   }
 

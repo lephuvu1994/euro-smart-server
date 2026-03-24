@@ -46,25 +46,21 @@ export class DeviceControlProcessor extends WorkerHost {
   }
 
   /**
-   * Logic xử lý điều khiển thiết bị
+   * Điều khiển 1 entity của device
    */
   private async handleControlCommand(job: Job): Promise<any> {
-    const { token, featureCode, value } = job.data;
+    const { token, entityCode, value } = job.data;
 
     this.logger.log(
-      `🚀 Executing control command: ${JSON.stringify(job.data)}`,
-    );
-    this.logger.log(
-      `🚀 Executing control command: ${token} -> ${featureCode}:${value}`,
+      `🚀 Executing control command: ${token} -> ${entityCode}:${value}`,
     );
 
-    // 1. Truy vấn DB lấy thông tin Driver & Protocol
     const device = await this.databaseService.device.findUnique({
       where: { token },
       include: {
         partner: true,
         deviceModel: true,
-        features: true,
+        entities: true,
       },
     });
 
@@ -73,22 +69,18 @@ export class DeviceControlProcessor extends WorkerHost {
       return;
     }
 
-    const feature = device.features.find((f) => f.code === featureCode);
-    if (!feature) {
+    const entity = device.entities.find((e) => e.code === entityCode);
+    if (!entity) {
       this.logger.error(
-        `Feature ${featureCode} not found on device ${device.token}`,
+        `Entity ${entityCode} not found on device ${device.token}`,
       );
       return;
     }
 
     try {
-      // 2. Lấy Driver (MQTT, Zigbee...) từ Registry
       const driver = this.integrationManager.getDriver(device.protocol);
+      await driver.setValue(device, entity, value);
 
-      // 3. Thực thi qua Driver
-      await driver.setValue(device, feature, value);
-
-      // 4. Thông báo cho người dùng qua WebSocket
       this.redisService.publish(
         'socket:emit',
         JSON.stringify({
@@ -96,7 +88,7 @@ export class DeviceControlProcessor extends WorkerHost {
           event: 'COMMAND_SENT',
           data: {
             deviceId: device.id,
-            featureCode,
+            entityCode,
             value,
             timestamp: new Date(),
             status: 'sent',
@@ -123,30 +115,26 @@ export class DeviceControlProcessor extends WorkerHost {
         }),
       );
 
-      throw error; // Ném lỗi để BullMQ thực hiện retry (theo config attempts)
+      throw error;
     }
   }
 
   /**
-   * Logic xử lý điều khiển thiết bị
-   * Lấy tất cả các feature của thiết bị và gửi lệnh điều khiển từng feature
-   * Mỗi feature gửi lệnh điều khiển từng feature
-   * Có thể gộp nhiều feature thành 1 lệnh điều khiển
+   * Điều khiển bulk nhiều entities cùng 1 device
    */
   private async handleControlDeviceValueCommand(job: Job): Promise<any> {
-    const { token, featureMQTTPayloads } = job.data;
+    const { token, entityPayloads } = job.data;
 
     this.logger.log(
       `🚀 Executing control device value command: ${JSON.stringify(job.data)}`,
     );
 
-    // 1. Truy vấn DB lấy thông tin Driver & Protocol
     const device = await this.databaseService.device.findUnique({
       where: { token },
       include: {
         partner: true,
         deviceModel: true,
-        features: true,
+        entities: true,
       },
     });
 
@@ -156,35 +144,25 @@ export class DeviceControlProcessor extends WorkerHost {
     }
 
     try {
-      // 2. Lấy Driver (MQTT, Zigbee...) từ Registry
       const driver = this.integrationManager.getDriver(device.protocol);
 
-      const features = device.features.filter((f) =>
-        featureMQTTPayloads.some((fmqtt) => fmqtt.featureCode === f.code),
+      const entities = device.entities.filter((e) =>
+        entityPayloads.some((ep: any) => ep.entityCode === e.code),
       );
-      const newFeatures = features.map((f) => {
-        const value = featureMQTTPayloads.find(
-          (fmqtt) => fmqtt.featureCode === f.code,
-        )?.value;
-        if (!value) {
-          return null;
+      const newEntities = entities.map((e) => {
+        const ep = entityPayloads.find(
+          (ep: any) => ep.entityCode === e.code,
+        );
+        if (!ep) return null;
+        const value = ep.value;
+        if (value !== undefined && !isNaN(Number(value))) {
+          return { ...e, state: Number(value) };
         }
-        if (value && !isNaN(Number(value))) {
-          return {
-            ...f,
-            lastValue: Number(value),
-          };
-        }
-        return {
-          ...f,
-          lastValueString: value,
-        };
-      });
+        return { ...e, stateText: String(value) };
+      }).filter(Boolean);
 
-      // 3. Thực thi qua Driver
-      await driver.setValueBulk(device, newFeatures);
+      await driver.setValueBulk(device, newEntities);
 
-      // 4. Thông báo cho người dùng qua WebSocket
       this.redisService.publish(
         'socket:emit',
         JSON.stringify({
@@ -192,9 +170,10 @@ export class DeviceControlProcessor extends WorkerHost {
           event: 'COMMAND_SENT',
           data: {
             deviceId: device.id,
-            values: featureMQTTPayloads.map((f) => {
-              return { code: f.featureCode, value: f.value };
-            }),
+            values: entityPayloads.map((ep: any) => ({
+              entityCode: ep.entityCode,
+              value: ep.value,
+            })),
             timestamp: new Date(),
             status: 'sent',
           },
@@ -220,13 +199,12 @@ export class DeviceControlProcessor extends WorkerHost {
         }),
       );
 
-      throw error; // Ném lỗi để BullMQ thực hiện retry (theo config attempts)
+      throw error;
     }
   }
 
   /**
-   * RUN_SCENE: Chỉ load scene, gộp action theo deviceToken, đẩy 1 job/thiết bị (SCENE_DEVICE_ACTIONS).
-   * Không thực thi tại đây → tránh block worker, scale với 200k+ thiết bị (job con chạy song song).
+   * RUN_SCENE: Load scene, gộp actions theo deviceToken, đẩy job/device.
    */
   private async handleRunScene(job: Job): Promise<any> {
     const { sceneId } = job.data as { sceneId: string };
@@ -246,16 +224,17 @@ export class DeviceControlProcessor extends WorkerHost {
       return { success: false, error: 'Scene is inactive' };
     }
 
+    // Scene actions now use entityCode instead of featureCode
     const actions =
       (scene.actions as {
         deviceToken: string;
-        featureCode: string;
+        entityCode: string;
         value: any;
       }[]) || [];
-    const byDevice = new Map<string, { featureCode: string; value: any }[]>();
+    const byDevice = new Map<string, { entityCode: string; value: any }[]>();
     for (const a of actions) {
       const list = byDevice.get(a.deviceToken) ?? [];
-      list.push({ featureCode: a.featureCode, value: a.value });
+      list.push({ entityCode: a.entityCode, value: a.value });
       byDevice.set(a.deviceToken, list);
     }
 
@@ -280,17 +259,17 @@ export class DeviceControlProcessor extends WorkerHost {
   }
 
   /**
-   * Thực thi gộp toàn bộ action của 1 thiết bị (1 lần setValueBulk) → 1 MQTT/lệnh per device.
+   * SCENE_DEVICE_ACTIONS: Thực thi gộp toàn bộ entity actions của 1 device.
    */
   private async handleSceneDeviceActions(job: Job): Promise<any> {
     const { deviceToken, actions } = job.data as {
       deviceToken: string;
-      actions: { featureCode: string; value: any }[];
+      actions: { entityCode: string; value: any }[];
     };
 
     const device = await this.databaseService.device.findUnique({
       where: { token: deviceToken },
-      include: { partner: true, deviceModel: true, features: true },
+      include: { partner: true, deviceModel: true, entities: true },
     });
 
     if (!device) {
@@ -298,29 +277,29 @@ export class DeviceControlProcessor extends WorkerHost {
       return { success: false, deviceToken, error: 'Device not found' };
     }
 
-    const features = device.features.filter((f) =>
-      actions.some((a) => a.featureCode === f.code),
+    const entities = device.entities.filter((e) =>
+      actions.some((a) => a.entityCode === e.code),
     );
-    const newFeatures = features
-      .map((f) => {
-        const act = actions.find((a) => a.featureCode === f.code);
+    const newEntities = entities
+      .map((e) => {
+        const act = actions.find((a) => a.entityCode === e.code);
         if (!act) return null;
         const value = act.value;
         if (value !== undefined && value !== null && !isNaN(Number(value))) {
-          return { ...f, lastValue: Number(value) };
+          return { ...e, state: Number(value) };
         }
-        return { ...f, lastValueString: value };
+        return { ...e, stateText: value };
       })
       .filter(Boolean) as any[];
 
-    if (newFeatures.length === 0) {
+    if (newEntities.length === 0) {
       this.logger.warn(`Scene device ${deviceToken}: no valid actions`);
       return { success: true, deviceToken, skipped: true };
     }
 
     try {
       const driver = this.integrationManager.getDriver(device.protocol);
-      await driver.setValueBulk(device, newFeatures);
+      await driver.setValueBulk(device, newEntities);
       this.redisService.publish(
         'socket:emit',
         JSON.stringify({
@@ -328,9 +307,9 @@ export class DeviceControlProcessor extends WorkerHost {
           event: 'COMMAND_SENT',
           data: {
             deviceId: device.id,
-            values: newFeatures.map((f) => ({
-              code: f.code,
-              value: f.lastValue ?? f.lastValueString,
+            values: newEntities.map((e) => ({
+              entityCode: e.code,
+              value: e.state ?? e.stateText,
             })),
             timestamp: new Date(),
             status: 'sent',
@@ -338,12 +317,12 @@ export class DeviceControlProcessor extends WorkerHost {
         }),
       );
       this.logger.log(
-        `✅ Scene device ${deviceToken}: ${newFeatures.length} feature(s)`,
+        `✅ Scene device ${deviceToken}: ${newEntities.length} entity(ies)`,
       );
       return {
         success: true,
         deviceToken,
-        featureCount: newFeatures.length,
+        entityCount: newEntities.length,
       };
     } catch (err: any) {
       this.logger.error(`❌ Scene device ${deviceToken}: ${err?.message}`);
@@ -363,13 +342,13 @@ export class DeviceControlProcessor extends WorkerHost {
   }
 
   /**
-   * Đánh giá scene có trigger DEVICE_STATE khi thiết bị báo state thay đổi.
-   * Tìm scene có điều kiện chứa deviceToken này, đọc giá trị hiện tại từ Redis, so sánh and/or → chạy scene nếu thỏa.
+   * CHECK_DEVICE_STATE_TRIGGERS: Đánh giá scene triggers khi device state thay đổi.
+   * Now uses entityCode instead of featureCode.
    */
   private async handleCheckDeviceStateTriggers(job: Job): Promise<any> {
     const { deviceToken } = job.data as {
       deviceToken: string;
-      updates: { featureCode: string; value: any }[];
+      updates: { entityCode: string; state: any; attributes?: any[] }[];
     };
 
     const scenes = await this.databaseService.scene.findMany({
@@ -393,7 +372,8 @@ export class DeviceControlProcessor extends WorkerHost {
         const logic = trigger.deviceStateConfig.conditionLogic as 'and' | 'or';
         const conditions = trigger.deviceStateConfig.conditions as Array<{
           deviceToken: string;
-          featureCode: string;
+          entityCode: string;
+          attributeKey?: string;
           value?: any;
           operator?: string;
         }>;
@@ -422,7 +402,8 @@ export class DeviceControlProcessor extends WorkerHost {
   private async evaluateConditionsAll(
     conditions: Array<{
       deviceToken: string;
-      featureCode: string;
+      entityCode: string;
+      attributeKey?: string;
       value?: any;
       operator?: string;
     }>,
@@ -437,7 +418,8 @@ export class DeviceControlProcessor extends WorkerHost {
   private async evaluateConditionsAny(
     conditions: Array<{
       deviceToken: string;
-      featureCode: string;
+      entityCode: string;
+      attributeKey?: string;
       value?: any;
       operator?: string;
     }>,
@@ -449,9 +431,14 @@ export class DeviceControlProcessor extends WorkerHost {
     return false;
   }
 
+  /**
+   * Evaluate 1 condition: read entity state from Redis, compare with expected value.
+   * Supports both entity primary state and specific attribute values.
+   */
   private async evaluateOneCondition(condition: {
     deviceToken: string;
-    featureCode: string;
+    entityCode: string;
+    attributeKey?: string;
     value?: any;
     operator?: string;
   }): Promise<boolean> {
@@ -461,18 +448,32 @@ export class DeviceControlProcessor extends WorkerHost {
     });
     if (!device) return false;
 
+    // Read entity state from Redis
     const raw = await this.redisService.get(
-      `device:${device.id}:feature:${condition.featureCode}`,
+      `device:${device.id}:entity:${condition.entityCode}`,
     );
-    let current: any = raw;
-    if (raw !== null) {
-      try {
-        current = JSON.parse(raw);
-      } catch {
-        const n = Number(raw);
-        current = Number.isNaN(n) ? raw : n;
-      }
+    if (raw === null) return false;
+
+    let entityState: any;
+    try {
+      entityState = JSON.parse(raw);
+    } catch {
+      entityState = {};
     }
+
+    // Get the value to compare: attribute or primary state
+    let current: any;
+    if (condition.attributeKey) {
+      current = entityState[condition.attributeKey];
+    } else {
+      current = entityState.state;
+    }
+
+    if (current === undefined || current === null) return false;
+
+    // Normalize to number if both sides are numeric
+    const n = Number(current);
+    current = Number.isNaN(n) ? current : n;
 
     const op = condition.operator ?? 'eq';
     const expected = condition.value;

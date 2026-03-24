@@ -7,7 +7,7 @@ export class SceneActionResponseDto {
   deviceToken: string;
 
   @ApiProperty()
-  featureCode: string;
+  entityCode: string;
 
   @ApiProperty()
   value: any;
@@ -41,7 +41,8 @@ export class SceneTriggerResponseDto {
     conditionLogic: 'and' | 'or';
     conditions: Array<{
       deviceToken: string;
-      featureCode: string;
+      entityCode: string;
+      attributeKey?: string;
       value?: any;
       operator?: string;
     }>;

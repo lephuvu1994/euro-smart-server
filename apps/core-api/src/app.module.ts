@@ -7,7 +7,7 @@ import * as redisStore from 'cache-manager-ioredis';
 
 import { DatabaseModule } from '@app/database';
 import { RedisModule } from '@app/redis-cache';
-import { configs, APP_BULLMQ_QUEUES } from '@app/common';
+import { configs } from '@app/common';
 import { AuthModule } from '@app/common/auth/auth.module';
 import { CustomLoggerModule } from '@app/common/logger/logger.module';
 import { RequestModule } from '@app/common/request/request.module';

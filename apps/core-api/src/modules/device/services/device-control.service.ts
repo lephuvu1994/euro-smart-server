@@ -145,9 +145,7 @@ export class DeviceControlService {
     const entityPayloads = values.map((v) => {
       const entity = device.entities.find((e) => e.code === v.entityCode);
       if (!entity) {
-        throw new BadRequestException(
-          `Entity '${v.entityCode}' không tồn tại`,
-        );
+        throw new BadRequestException(`Entity '${v.entityCode}' không tồn tại`);
       }
       if (entity.readOnly) {
         throw new BadRequestException(
@@ -212,7 +210,9 @@ export class DeviceControlService {
         break;
       }
       case 'sensor':
-        throw new BadRequestException('Sensor là read-only, không thể điều khiển');
+        throw new BadRequestException(
+          'Sensor là read-only, không thể điều khiển',
+        );
       // climate, camera, lock — flexible validation
     }
   }

@@ -68,7 +68,7 @@ export class AuthMeResponseDto {
   @Expose()
   @Type(() => UserResponseDto)
   @ValidateNested()
-  user: UserResponseDto;
+  user!: UserResponseDto;
 
   @ApiProperty({
     type: () => [AuthHomeDto],
@@ -76,5 +76,5 @@ export class AuthMeResponseDto {
   })
   @Expose()
   @Type(() => AuthHomeDto)
-  homes: AuthHomeDto[];
+  homes!: AuthHomeDto[];
 }

@@ -26,15 +26,65 @@ export interface DeviceUiConfig {
  */
 export const DEFAULT_DEVICE_UI_CONFIGS: DeviceUiConfig[] = [
   // By Feature Category
-  { deviceType: 'light', hasToggle: true, accentColor: '#A3EC3E', modalSnapPoints: ['50%'] },
-  { deviceType: 'switch', hasToggle: true, accentColor: '#A3EC3E', modalSnapPoints: ['50%'] },
-  { deviceType: 'sensor', hasToggle: false, accentColor: '#60A5FA', modalSnapPoints: ['60%'] },
-  { deviceType: 'camera', hasToggle: false, accentColor: '#60A5FA', modalSnapPoints: ['70%'] },
-  { deviceType: 'lock', hasToggle: true, accentColor: '#F59E0B', modalSnapPoints: ['50%'] },
-  { deviceType: 'curtain', hasToggle: true, accentColor: '#8B5CF6', modalSnapPoints: ['50%'] },
-  { deviceType: 'climate', hasToggle: true, accentColor: '#06B6D4', modalSnapPoints: ['60%'] },
+  {
+    deviceType: 'light',
+    hasToggle: true,
+    accentColor: '#A3EC3E',
+    modalSnapPoints: ['50%'],
+  },
+  {
+    deviceType: 'switch',
+    hasToggle: true,
+    accentColor: '#A3EC3E',
+    modalSnapPoints: ['50%'],
+  },
+  {
+    deviceType: 'sensor',
+    hasToggle: false,
+    accentColor: '#60A5FA',
+    modalSnapPoints: ['60%'],
+  },
+  {
+    deviceType: 'camera',
+    hasToggle: false,
+    accentColor: '#60A5FA',
+    modalSnapPoints: ['70%'],
+  },
+  {
+    deviceType: 'lock',
+    hasToggle: true,
+    accentColor: '#F59E0B',
+    modalSnapPoints: ['50%'],
+  },
+  {
+    deviceType: 'curtain',
+    hasToggle: true,
+    accentColor: '#8B5CF6',
+    modalSnapPoints: ['50%'],
+  },
+  {
+    deviceType: 'climate',
+    hasToggle: true,
+    accentColor: '#06B6D4',
+    modalSnapPoints: ['60%'],
+  },
   // By DeviceModel.code
-  { deviceType: 'WIFI_SWITCH_4', hasToggle: true, accentColor: '#A3EC3E', modalSnapPoints: ['50%'] },
-  { deviceType: 'SHUTTER_DOOR', hasToggle: true, accentColor: '#F59E0B', modalSnapPoints: ['50%'] },
-  { deviceType: 'alexa', hasToggle: false, accentColor: '#8B5CF6', modalSnapPoints: ['50%'] },
+  {
+    deviceType: 'WIFI_SWITCH_4',
+    hasToggle: true,
+    accentColor: '#A3EC3E',
+    modalSnapPoints: ['50%'],
+  },
+  {
+    deviceType: 'SHUTTER_DOOR',
+    hasToggle: true,
+    accentColor: '#F59E0B',
+    modalSnapPoints: ['50%'],
+  },
+  {
+    deviceType: 'alexa',
+    hasToggle: false,
+    accentColor: '#8B5CF6',
+    modalSnapPoints: ['50%'],
+  },
 ];

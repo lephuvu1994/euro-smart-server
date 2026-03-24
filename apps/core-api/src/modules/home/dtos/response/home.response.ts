@@ -145,7 +145,8 @@ export class HomeDetailResponseDto {
   @Expose()
   @ApiProperty({
     type: [RoomResponseDto],
-    description: 'Tất cả rooms của home (bao gồm cả rooms không thuộc floor nào)',
+    description:
+      'Tất cả rooms của home (bao gồm cả rooms không thuộc floor nào)',
   })
   @Type(() => RoomResponseDto)
   @ValidateNested({ each: true })

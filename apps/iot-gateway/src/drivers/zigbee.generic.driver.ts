@@ -26,7 +26,8 @@ export class ZigbeeGenericDriver implements IDeviceDriver {
           payloadStr = JSON.stringify(template);
         } else {
           payloadStr = JSON.stringify(
-            (mqttConfig.payloadTemplate ?? '').replace?.('{{value}}', value) ?? value,
+            (mqttConfig.payloadTemplate ?? '').replace?.('{{value}}', value) ??
+              value,
           );
         }
 
@@ -65,7 +66,9 @@ export class ZigbeeGenericDriver implements IDeviceDriver {
         }
       }
 
-      await this.mqttService.publish(topic, JSON.stringify(payload), { qos: 1 });
+      await this.mqttService.publish(topic, JSON.stringify(payload), {
+        qos: 1,
+      });
       return true;
     } catch (error) {
       this.logger.error(

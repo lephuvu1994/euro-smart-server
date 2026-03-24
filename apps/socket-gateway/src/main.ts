@@ -23,7 +23,9 @@ async function bootstrap(): Promise<void> {
 
   // Graceful shutdown for production (PM2, K8s, Docker send SIGTERM)
   const shutdown = async (signal: string) => {
-    logger.log(`[socket-gateway] ${signal} received, shutting down gracefully...`);
+    logger.log(
+      `[socket-gateway] ${signal} received, shutting down gracefully...`,
+    );
     await app.close();
     process.exit(0);
   };
@@ -31,4 +33,3 @@ async function bootstrap(): Promise<void> {
   process.on('SIGINT', () => shutdown('SIGINT'));
 }
 bootstrap();
-

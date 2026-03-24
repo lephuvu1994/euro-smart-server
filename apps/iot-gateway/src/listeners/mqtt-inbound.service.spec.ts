@@ -32,18 +32,18 @@ const mockDevice = {
       commandKey: 'state',
       attributes: [
         { key: 'brightness', config: {} },
-        { key: 'color_temp', config: { commandKey: 'ct' } }
-      ]
-    }
-  ]
+        { key: 'color_temp', config: { commandKey: 'ct' } },
+      ],
+    },
+  ],
 };
 
 const mockDbService = {
-  device: { findUnique: jest.fn() }
+  device: { findUnique: jest.fn() },
 };
 
 const mockMqttService = {
-  subscribe: jest.fn()
+  subscribe: jest.fn(),
 };
 
 const mockRedisService = {
@@ -53,7 +53,7 @@ const mockRedisService = {
   get: jest.fn(),
   set: jest.fn(),
   sadd: jest.fn(),
-  publish: jest.fn()
+  publish: jest.fn(),
 };
 
 const mockStatusQueue = { add: jest.fn() };
@@ -72,9 +72,15 @@ describe('MqttInboundService', () => {
         { provide: DatabaseService, useValue: mockDbService },
         { provide: MqttService, useValue: mockMqttService },
         { provide: RedisService, useValue: mockRedisService },
-        { provide: getQueueToken(APP_BULLMQ_QUEUES.DEVICE_STATUS), useValue: mockStatusQueue },
-        { provide: getQueueToken(APP_BULLMQ_QUEUES.DEVICE_CONTROL), useValue: mockControlQueue }
-      ]
+        {
+          provide: getQueueToken(APP_BULLMQ_QUEUES.DEVICE_STATUS),
+          useValue: mockStatusQueue,
+        },
+        {
+          provide: getQueueToken(APP_BULLMQ_QUEUES.DEVICE_CONTROL),
+          useValue: mockControlQueue,
+        },
+      ],
     }).compile();
 
     service = module.get<MqttInboundService>(MqttInboundService);
@@ -97,19 +103,34 @@ describe('MqttInboundService', () => {
       await service.handleStateMessage(mockTopic, payload);
 
       // Verify Redis interactions
-      expect(redis.hmset).toHaveBeenCalledWith(`shadow:${mockDeviceToken}`, payloadObj);
-      
+      expect(redis.hmset).toHaveBeenCalledWith(
+        `shadow:${mockDeviceToken}`,
+        payloadObj,
+      );
+
       const entityRedisKey = `device:dev-1:entity:light_1`;
-      expect(redis.sadd).toHaveBeenCalledWith(`device:dev-1:_ekeys`, entityRedisKey);
-      
+      expect(redis.sadd).toHaveBeenCalledWith(
+        `device:dev-1:_ekeys`,
+        entityRedisKey,
+      );
+
       // The saved state should combine state and attributes
       const expectedNewState = { state: 1, brightness: 80, color_temp: 4000 };
-      expect(redis.set).toHaveBeenCalledWith(entityRedisKey, JSON.stringify(expectedNewState));
+      expect(redis.set).toHaveBeenCalledWith(
+        entityRedisKey,
+        JSON.stringify(expectedNewState),
+      );
 
       // Verify Socket publish
-      expect(redis.publish).toHaveBeenCalledWith('socket:emit', expect.stringContaining('"event":"DEVICE_UPDATE"'));
-      expect(redis.publish).toHaveBeenCalledWith('socket:emit', expect.stringContaining('"entityCode":"light_1"'));
-      
+      expect(redis.publish).toHaveBeenCalledWith(
+        'socket:emit',
+        expect.stringContaining('"event":"DEVICE_UPDATE"'),
+      );
+      expect(redis.publish).toHaveBeenCalledWith(
+        'socket:emit',
+        expect.stringContaining('"entityCode":"light_1"'),
+      );
+
       // Verify BullMQ job
       expect(controlQueue.add).toHaveBeenCalledWith(
         DEVICE_JOBS.CHECK_DEVICE_STATE_TRIGGERS,
@@ -121,12 +142,12 @@ describe('MqttInboundService', () => {
               state: 1,
               attributes: [
                 { key: 'brightness', value: 80 },
-                { key: 'color_temp', value: 4000 }
-              ]
-            }
-          ]
+                { key: 'color_temp', value: 4000 },
+              ],
+            },
+          ],
         },
-        expect.any(Object)
+        expect.any(Object),
       );
     });
 
@@ -135,16 +156,21 @@ describe('MqttInboundService', () => {
       const payload = Buffer.from(JSON.stringify(payloadObj));
 
       db.device.findUnique.mockResolvedValue(mockDevice as any);
-      
+
       // Mock old state
-      redis.get.mockResolvedValue(JSON.stringify({ state: 1, brightness: 80, color_temp: 4000 }));
+      redis.get.mockResolvedValue(
+        JSON.stringify({ state: 1, brightness: 80, color_temp: 4000 }),
+      );
 
       await service.handleStateMessage(mockTopic, payload);
 
       const entityRedisKey = `device:dev-1:entity:light_1`;
       const expectedNewState = { state: 1, brightness: 50, color_temp: 4000 }; // Brightness updated, others kept
-      
-      expect(redis.set).toHaveBeenCalledWith(entityRedisKey, JSON.stringify(expectedNewState));
+
+      expect(redis.set).toHaveBeenCalledWith(
+        entityRedisKey,
+        JSON.stringify(expectedNewState),
+      );
     });
   });
 });

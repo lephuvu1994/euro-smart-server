@@ -12,11 +12,7 @@ export interface IDeviceDriver {
    * @param entity DeviceEntity (chứa code: channel_1, domain: light...)
    * @param value Giá trị user gửi lên (1, 0, #FF0000, 50...)
    */
-  setValue(
-    device: Device,
-    entity: DeviceEntity,
-    value: any,
-  ): Promise<boolean>;
+  setValue(device: Device, entity: DeviceEntity, value: any): Promise<boolean>;
 
   /**
    * Hàm thực thi bulk cho nhiều entities cùng 1 device

@@ -149,17 +149,17 @@ export class DeviceControlProcessor extends WorkerHost {
       const entities = device.entities.filter((e) =>
         entityPayloads.some((ep: any) => ep.entityCode === e.code),
       );
-      const newEntities = entities.map((e) => {
-        const ep = entityPayloads.find(
-          (ep: any) => ep.entityCode === e.code,
-        );
-        if (!ep) return null;
-        const value = ep.value;
-        if (value !== undefined && !isNaN(Number(value))) {
-          return { ...e, state: Number(value) };
-        }
-        return { ...e, stateText: String(value) };
-      }).filter(Boolean);
+      const newEntities = entities
+        .map((e) => {
+          const ep = entityPayloads.find((ep: any) => ep.entityCode === e.code);
+          if (!ep) return null;
+          const value = ep.value;
+          if (value !== undefined && !isNaN(Number(value))) {
+            return { ...e, state: Number(value) };
+          }
+          return { ...e, stateText: String(value) };
+        })
+        .filter(Boolean);
 
       await driver.setValueBulk(device, newEntities);
 

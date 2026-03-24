@@ -26,4 +26,3 @@ import { AdminMigrationSeed } from './admin.seed';
   exports: [AdminMigrationSeed],
 })
 export class MigrationModule {}
-

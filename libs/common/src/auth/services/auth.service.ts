@@ -233,7 +233,9 @@ export class AuthService implements IAuthService {
     );
 
     // Trả về home vừa tạo
-    const homes = [{ id: defaultHome.id, name: defaultHome.name, role: 'OWNER' }];
+    const homes = [
+      { id: defaultHome.id, name: defaultHome.name, role: 'OWNER' },
+    ];
 
     return {
       ...tokens,

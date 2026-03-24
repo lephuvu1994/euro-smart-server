@@ -13,7 +13,9 @@ async function bootstrap(): Promise<void> {
 
   // Graceful shutdown for production (PM2, K8s, Docker send SIGTERM)
   const shutdown = async (signal: string) => {
-    logger.log(`[worker-service] ${signal} received, shutting down gracefully...`);
+    logger.log(
+      `[worker-service] ${signal} received, shutting down gracefully...`,
+    );
     await app.close();
     process.exit(0);
   };

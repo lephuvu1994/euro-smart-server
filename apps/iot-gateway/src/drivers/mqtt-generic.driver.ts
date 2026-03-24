@@ -46,7 +46,9 @@ export class MqttGenericDriver implements IDeviceDriver {
         }
       }
 
-      await this.mqttService.publish(topic, JSON.stringify(payload), { qos: 1 });
+      await this.mqttService.publish(topic, JSON.stringify(payload), {
+        qos: 1,
+      });
       return true;
     } catch (error) {
       this.logger.error(

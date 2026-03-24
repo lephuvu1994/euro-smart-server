@@ -131,10 +131,7 @@ describe('HomeService', () => {
   beforeEach(async () => {
     db = createMockDatabaseService();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        HomeService,
-        { provide: DatabaseService, useValue: db },
-      ],
+      providers: [HomeService, { provide: DatabaseService, useValue: db }],
     }).compile();
     service = module.get<HomeService>(HomeService);
   });
@@ -146,7 +143,9 @@ describe('HomeService', () => {
     it('should return home detail with floors and rooms', async () => {
       db.home.findFirst.mockResolvedValue(mockHome); // ensureAccess
       db.home.findUnique.mockResolvedValue(mockHome);
-      db.floor.findMany.mockResolvedValue([{ ...mockFloor1, rooms: [mockRoom1, mockRoom2] }]);
+      db.floor.findMany.mockResolvedValue([
+        { ...mockFloor1, rooms: [mockRoom1, mockRoom2] },
+      ]);
       db.room.findMany.mockResolvedValue([mockRoom1, mockRoom2, mockRoom3]);
 
       const result = await service.getHomeDetail(MOCK_HOME_ID, MOCK_USER_ID);
@@ -160,7 +159,10 @@ describe('HomeService', () => {
       await expect(
         service.getHomeDetail(MOCK_HOME_ID, MOCK_OTHER_USER_ID),
       ).rejects.toThrow(
-        new HttpException('home.error.notFoundOrNoAccess', HttpStatus.FORBIDDEN),
+        new HttpException(
+          'home.error.notFoundOrNoAccess',
+          HttpStatus.FORBIDDEN,
+        ),
       );
     });
   });
@@ -172,7 +174,9 @@ describe('HomeService', () => {
     it('should create a home and add owner as member', async () => {
       db.home.create.mockResolvedValue(mockHome);
       db.homeMember.create.mockResolvedValue({});
-      const result = await service.createHome(MOCK_USER_ID, { name: 'Test Home' });
+      const result = await service.createHome(MOCK_USER_ID, {
+        name: 'Test Home',
+      });
       expect(result).toEqual(mockHome);
       expect(db.homeMember.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -190,7 +194,9 @@ describe('HomeService', () => {
       db.home.findFirst.mockResolvedValue(mockHome);
       const updated = { ...mockHome, name: 'Updated' };
       db.home.update.mockResolvedValue(updated);
-      const result = await service.updateHome(MOCK_HOME_ID, MOCK_USER_ID, { name: 'Updated' });
+      const result = await service.updateHome(MOCK_HOME_ID, MOCK_USER_ID, {
+        name: 'Updated',
+      });
       expect(result.name).toBe('Updated');
     });
 
@@ -211,7 +217,9 @@ describe('HomeService', () => {
       db.floor.aggregate.mockResolvedValue({ _max: { sortOrder: 2 } });
       db.floor.create.mockResolvedValue({ ...mockFloor1, sortOrder: 3 });
 
-      const result = await service.createFloor(MOCK_HOME_ID, MOCK_USER_ID, { name: 'New Floor' });
+      const result = await service.createFloor(MOCK_HOME_ID, MOCK_USER_ID, {
+        name: 'New Floor',
+      });
       expect(result.sortOrder).toBe(3);
       expect(db.floor.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -225,7 +233,10 @@ describe('HomeService', () => {
       db.floor.aggregate.mockResolvedValue({ _max: { sortOrder: 2 } });
       db.floor.create.mockResolvedValue({ ...mockFloor1, sortOrder: 5 });
 
-      await service.createFloor(MOCK_HOME_ID, MOCK_USER_ID, { name: 'New', sortOrder: 5 });
+      await service.createFloor(MOCK_HOME_ID, MOCK_USER_ID, {
+        name: 'New',
+        sortOrder: 5,
+      });
       expect(db.floor.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({ sortOrder: 5 }),
@@ -236,16 +247,27 @@ describe('HomeService', () => {
 
   describe('updateFloor', () => {
     it('should update floor name', async () => {
-      db.floor.findFirst.mockResolvedValue({ id: MOCK_FLOOR_ID_1, homeId: MOCK_HOME_ID });
-      db.floor.update.mockResolvedValue({ ...mockFloor1, name: 'Updated Floor' });
-      const result = await service.updateFloor(MOCK_FLOOR_ID_1, MOCK_USER_ID, { name: 'Updated Floor' });
+      db.floor.findFirst.mockResolvedValue({
+        id: MOCK_FLOOR_ID_1,
+        homeId: MOCK_HOME_ID,
+      });
+      db.floor.update.mockResolvedValue({
+        ...mockFloor1,
+        name: 'Updated Floor',
+      });
+      const result = await service.updateFloor(MOCK_FLOOR_ID_1, MOCK_USER_ID, {
+        name: 'Updated Floor',
+      });
       expect(result.name).toBe('Updated Floor');
     });
   });
 
   describe('deleteFloor', () => {
     it('should set rooms to ungrouped and delete floor', async () => {
-      db.floor.findFirst.mockResolvedValue({ id: MOCK_FLOOR_ID_1, homeId: MOCK_HOME_ID });
+      db.floor.findFirst.mockResolvedValue({
+        id: MOCK_FLOOR_ID_1,
+        homeId: MOCK_HOME_ID,
+      });
       db.room.updateMany.mockResolvedValue({ count: 2 });
       db.floor.delete.mockResolvedValue(mockFloor1);
 
@@ -254,7 +276,9 @@ describe('HomeService', () => {
         where: { floorId: MOCK_FLOOR_ID_1 },
         data: { floorId: null },
       });
-      expect(db.floor.delete).toHaveBeenCalledWith({ where: { id: MOCK_FLOOR_ID_1 } });
+      expect(db.floor.delete).toHaveBeenCalledWith({
+        where: { id: MOCK_FLOOR_ID_1 },
+      });
     });
 
     it('should throw when floor not found', async () => {
@@ -286,17 +310,20 @@ describe('HomeService', () => {
   describe('assignRoomsToFloor', () => {
     beforeEach(() => {
       // Mock ensureUserCanAccessFloor internals
-      db.floor.findFirst.mockResolvedValue({ id: MOCK_FLOOR_ID_1, homeId: MOCK_HOME_ID });
+      db.floor.findFirst.mockResolvedValue({
+        id: MOCK_FLOOR_ID_1,
+        homeId: MOCK_HOME_ID,
+      });
       // Mock room check
       db.floor.findUniqueOrThrow.mockResolvedValue({ homeId: MOCK_HOME_ID });
     });
 
     it('should assign new rooms using Prisma set relation in a single update', async () => {
       db.room.count.mockResolvedValue(2);
-      
-      const updatedFloor = { 
-        ...mockFloor1, 
-        rooms: [{ id: MOCK_ROOM_ID_1 }, { id: MOCK_ROOM_ID_2 }] 
+
+      const updatedFloor = {
+        ...mockFloor1,
+        rooms: [{ id: MOCK_ROOM_ID_1 }, { id: MOCK_ROOM_ID_2 }],
       };
       db.floor.update.mockResolvedValue(updatedFloor);
 
@@ -308,7 +335,10 @@ describe('HomeService', () => {
 
       // Verify validation query
       expect(db.room.count).toHaveBeenCalledWith({
-        where: { id: { in: [MOCK_ROOM_ID_1, MOCK_ROOM_ID_2] }, homeId: MOCK_HOME_ID },
+        where: {
+          id: { in: [MOCK_ROOM_ID_1, MOCK_ROOM_ID_2] },
+          homeId: MOCK_HOME_ID,
+        },
       });
 
       // Verify Prisma set query
@@ -357,9 +387,15 @@ describe('HomeService', () => {
       db.room.count.mockResolvedValue(1);
 
       await expect(
-        service.assignRoomsToFloor(MOCK_FLOOR_ID_1, MOCK_USER_ID, [MOCK_ROOM_ID_1, MOCK_ROOM_ID_2]),
+        service.assignRoomsToFloor(MOCK_FLOOR_ID_1, MOCK_USER_ID, [
+          MOCK_ROOM_ID_1,
+          MOCK_ROOM_ID_2,
+        ]),
       ).rejects.toThrow(
-        new HttpException('home.error.roomNotFoundOrNoAccess', HttpStatus.FORBIDDEN)
+        new HttpException(
+          'home.error.roomNotFoundOrNoAccess',
+          HttpStatus.FORBIDDEN,
+        ),
       );
 
       expect(db.floor.update).not.toHaveBeenCalled();
@@ -369,9 +405,14 @@ describe('HomeService', () => {
       // findFirst returns null for verify process
       db.floor.findFirst.mockResolvedValue(null);
       await expect(
-        service.assignRoomsToFloor(MOCK_FLOOR_ID_1, MOCK_USER_ID, [MOCK_ROOM_ID_1]),
+        service.assignRoomsToFloor(MOCK_FLOOR_ID_1, MOCK_USER_ID, [
+          MOCK_ROOM_ID_1,
+        ]),
       ).rejects.toThrow(
-        new HttpException('home.error.floorNotFoundOrNoAccess', HttpStatus.FORBIDDEN)
+        new HttpException(
+          'home.error.floorNotFoundOrNoAccess',
+          HttpStatus.FORBIDDEN,
+        ),
       );
     });
   });
@@ -385,17 +426,27 @@ describe('HomeService', () => {
       db.room.aggregate.mockResolvedValue({ _max: { sortOrder: 1 } });
       db.room.create.mockResolvedValue({ ...mockRoom1, sortOrder: 2 });
 
-      const result = await service.createRoom(MOCK_HOME_ID, MOCK_USER_ID, { name: 'New Room' });
+      const result = await service.createRoom(MOCK_HOME_ID, MOCK_USER_ID, {
+        name: 'New Room',
+      });
       expect(result.sortOrder).toBe(2);
     });
 
     it('should create room in floor when floorId provided', async () => {
       db.home.findFirst.mockResolvedValue(mockHome);
-      db.floor.findFirst.mockResolvedValue({ id: MOCK_FLOOR_ID_1, homeId: MOCK_HOME_ID });
+      db.floor.findFirst.mockResolvedValue({
+        id: MOCK_FLOOR_ID_1,
+        homeId: MOCK_HOME_ID,
+      });
       db.room.aggregate.mockResolvedValue({ _max: { sortOrder: 0 } });
       db.room.create.mockResolvedValue({ ...mockRoom1, sortOrder: 1 });
 
-      await service.createRoom(MOCK_HOME_ID, MOCK_USER_ID, { name: 'New Room' }, MOCK_FLOOR_ID_1);
+      await service.createRoom(
+        MOCK_HOME_ID,
+        MOCK_USER_ID,
+        { name: 'New Room' },
+        MOCK_FLOOR_ID_1,
+      );
       expect(db.room.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
@@ -408,10 +459,18 @@ describe('HomeService', () => {
 
     it('should throw when floor does not belong to home', async () => {
       db.home.findFirst.mockResolvedValue(mockHome);
-      db.floor.findFirst.mockResolvedValue({ id: MOCK_FLOOR_ID_1, homeId: 'other-home-id' });
+      db.floor.findFirst.mockResolvedValue({
+        id: MOCK_FLOOR_ID_1,
+        homeId: 'other-home-id',
+      });
 
       await expect(
-        service.createRoom(MOCK_HOME_ID, MOCK_USER_ID, { name: 'x' }, MOCK_FLOOR_ID_1),
+        service.createRoom(
+          MOCK_HOME_ID,
+          MOCK_USER_ID,
+          { name: 'x' },
+          MOCK_FLOOR_ID_1,
+        ),
       ).rejects.toThrow(
         new HttpException('home.error.floorNotInHome', HttpStatus.BAD_REQUEST),
       );
@@ -422,7 +481,9 @@ describe('HomeService', () => {
     it('should update room name', async () => {
       db.room.findFirst.mockResolvedValue(mockRoom1);
       db.room.update.mockResolvedValue({ ...mockRoom1, name: 'Updated Room' });
-      const result = await service.updateRoom(MOCK_ROOM_ID_1, MOCK_USER_ID, { name: 'Updated Room' });
+      const result = await service.updateRoom(MOCK_ROOM_ID_1, MOCK_USER_ID, {
+        name: 'Updated Room',
+      });
       expect(result.name).toBe('Updated Room');
     });
 
@@ -440,7 +501,9 @@ describe('HomeService', () => {
       db.room.delete.mockResolvedValue(mockRoom1);
 
       await service.deleteRoom(MOCK_ROOM_ID_1, MOCK_USER_ID);
-      expect(db.room.delete).toHaveBeenCalledWith({ where: { id: MOCK_ROOM_ID_1 } });
+      expect(db.room.delete).toHaveBeenCalledWith({
+        where: { id: MOCK_ROOM_ID_1 },
+      });
     });
 
     it('should throw when room not found', async () => {
@@ -471,10 +534,21 @@ describe('HomeService', () => {
   describe('getMembers', () => {
     it('should return members list', async () => {
       db.home.findFirst.mockResolvedValue(mockHome);
-      const mockMembers = [{
-        id: 'mem-1', userId: MOCK_USER_ID, homeId: MOCK_HOME_ID, role: EHomeRole.OWNER,
-        user: { id: MOCK_USER_ID, email: 'test@test.com', phone: null, firstName: 'Test', lastName: 'User' },
-      }];
+      const mockMembers = [
+        {
+          id: 'mem-1',
+          userId: MOCK_USER_ID,
+          homeId: MOCK_HOME_ID,
+          role: EHomeRole.OWNER,
+          user: {
+            id: MOCK_USER_ID,
+            email: 'test@test.com',
+            phone: null,
+            firstName: 'Test',
+            lastName: 'User',
+          },
+        },
+      ];
       db.homeMember.findMany.mockResolvedValue(mockMembers);
 
       const result = await service.getMembers(MOCK_HOME_ID, MOCK_USER_ID);
@@ -489,12 +563,23 @@ describe('HomeService', () => {
       db.user.findUnique.mockResolvedValue({ id: MOCK_OTHER_USER_ID });
       db.homeMember.findUnique.mockResolvedValue(null);
       const newMember = {
-        id: 'mem-2', userId: MOCK_OTHER_USER_ID, homeId: MOCK_HOME_ID, role: EHomeRole.MEMBER,
-        user: { id: MOCK_OTHER_USER_ID, email: 'other@test.com', phone: null, firstName: 'Other', lastName: 'User' },
+        id: 'mem-2',
+        userId: MOCK_OTHER_USER_ID,
+        homeId: MOCK_HOME_ID,
+        role: EHomeRole.MEMBER,
+        user: {
+          id: MOCK_OTHER_USER_ID,
+          email: 'other@test.com',
+          phone: null,
+          firstName: 'Other',
+          lastName: 'User',
+        },
       };
       db.homeMember.create.mockResolvedValue(newMember);
 
-      const result = await service.addMember(MOCK_HOME_ID, MOCK_USER_ID, { userId: MOCK_OTHER_USER_ID });
+      const result = await service.addMember(MOCK_HOME_ID, MOCK_USER_ID, {
+        userId: MOCK_OTHER_USER_ID,
+      });
       expect(result.userId).toBe(MOCK_OTHER_USER_ID);
       expect(result.role).toBe(EHomeRole.MEMBER);
     });
@@ -504,16 +589,25 @@ describe('HomeService', () => {
       await expect(
         service.addMember(MOCK_HOME_ID, MOCK_USER_ID, {} as any),
       ).rejects.toThrow(
-        new HttpException('home.error.provideUserIdOrEmail', HttpStatus.BAD_REQUEST),
+        new HttpException(
+          'home.error.provideUserIdOrEmail',
+          HttpStatus.BAD_REQUEST,
+        ),
       );
     });
 
     it('should throw when both userId and email provided', async () => {
       db.home.findFirst.mockResolvedValue(mockHome);
       await expect(
-        service.addMember(MOCK_HOME_ID, MOCK_USER_ID, { userId: MOCK_OTHER_USER_ID, email: 'x@x.com' } as any),
+        service.addMember(MOCK_HOME_ID, MOCK_USER_ID, {
+          userId: MOCK_OTHER_USER_ID,
+          email: 'x@x.com',
+        } as any),
       ).rejects.toThrow(
-        new HttpException('home.error.provideOnlyUserIdOrEmail', HttpStatus.BAD_REQUEST),
+        new HttpException(
+          'home.error.provideOnlyUserIdOrEmail',
+          HttpStatus.BAD_REQUEST,
+        ),
       );
     });
 
@@ -521,7 +615,9 @@ describe('HomeService', () => {
       db.home.findFirst.mockResolvedValue(mockHome);
       db.user.findUnique.mockResolvedValue(null);
       await expect(
-        service.addMember(MOCK_HOME_ID, MOCK_USER_ID, { userId: 'non-existent' }),
+        service.addMember(MOCK_HOME_ID, MOCK_USER_ID, {
+          userId: 'non-existent',
+        }),
       ).rejects.toThrow(
         new HttpException('home.error.userNotFound', HttpStatus.NOT_FOUND),
       );
@@ -532,9 +628,14 @@ describe('HomeService', () => {
       db.user.findUnique.mockResolvedValue({ id: MOCK_OTHER_USER_ID });
       db.homeMember.findUnique.mockResolvedValue({ id: 'existing' });
       await expect(
-        service.addMember(MOCK_HOME_ID, MOCK_USER_ID, { userId: MOCK_OTHER_USER_ID }),
+        service.addMember(MOCK_HOME_ID, MOCK_USER_ID, {
+          userId: MOCK_OTHER_USER_ID,
+        }),
       ).rejects.toThrow(
-        new HttpException('home.error.memberAlreadyInHome', HttpStatus.CONFLICT),
+        new HttpException(
+          'home.error.memberAlreadyInHome',
+          HttpStatus.CONFLICT,
+        ),
       );
     });
   });
@@ -572,9 +673,15 @@ describe('HomeService', () => {
 
   describe('getRoomsByFloor', () => {
     it('should return rooms for specific floor', async () => {
-      db.floor.findFirst.mockResolvedValue({ id: MOCK_FLOOR_ID_1, homeId: MOCK_HOME_ID });
+      db.floor.findFirst.mockResolvedValue({
+        id: MOCK_FLOOR_ID_1,
+        homeId: MOCK_HOME_ID,
+      });
       db.room.findMany.mockResolvedValue([mockRoom1, mockRoom2]);
-      const result = await service.getRoomsByFloor(MOCK_FLOOR_ID_1, MOCK_USER_ID);
+      const result = await service.getRoomsByFloor(
+        MOCK_FLOOR_ID_1,
+        MOCK_USER_ID,
+      );
       expect(result).toHaveLength(2);
     });
 

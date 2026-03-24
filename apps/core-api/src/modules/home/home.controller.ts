@@ -210,7 +210,11 @@ export class HomeController {
     @Param('floorId') floorId: string,
     @Body() dto: AssignRoomsDto,
   ): Promise<FloorResponseDto> {
-    return this.homeService.assignRoomsToFloor(floorId, user.userId, dto.roomIds);
+    return this.homeService.assignRoomsToFloor(
+      floorId,
+      user.userId,
+      dto.roomIds,
+    );
   }
 
   // ============================================================

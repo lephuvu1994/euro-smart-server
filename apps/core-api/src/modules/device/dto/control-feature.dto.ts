@@ -1,8 +1,8 @@
-import { IsNotEmpty, IsUUID } from 'class-validator';
+import { IsNotEmpty, IsString } from 'class-validator';
 
-export class ControlFeatureDto {
-  @IsUUID()
-  featureId: string; // Đây là UUID trong bảng DeviceFeature
+export class ControlEntityDto {
+  @IsString()
+  entityCode: string; // Mã entity (VD: channel_1)
 
   @IsNotEmpty()
   value: any; // 1, 0, "red", 50...

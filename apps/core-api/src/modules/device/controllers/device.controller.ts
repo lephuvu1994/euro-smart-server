@@ -80,19 +80,19 @@ export class DeviceController {
   }
 
   /**
-   * API: Điều khiển thiết bị (Bật/Tắt, Điều chỉnh độ sáng, đóng mở cửa...)
-   * POST /v1/devices/:deviceToken/features/:featureCode/setValue
+   * API: Điều khiển 1 entity của thiết bị
+   * POST /v1/devices/:deviceToken/entities/:entityCode/setValue
    */
-  @Post(':deviceToken/features/:featureCode/setValue')
+  @Post(':deviceToken/entities/:entityCode/setValue')
   @ApiOperation({
     summary:
-      'Điều khiển thiết bị (Bật/Tắt, Điều chỉnh độ sáng, đóng mở cửa...)',
+      'Điều khiển entity thiết bị (Bật/Tắt, Điều chỉnh độ sáng, đóng mở cửa...)',
     description:
-      'Điều khiển thiết bị (Bật/Tắt, Điều chỉnh độ sáng, đóng mở cửa...)',
+      'Điều khiển 1 entity của thiết bị theo entity code',
   })
-  async setFeatureValue(
+  async setEntityValue(
     @Param('deviceToken') deviceToken: string,
-    @Param('featureCode') featureCode: string,
+    @Param('entityCode') entityCode: string,
     @Body() body: SetFeatureValueDto,
     @Req() req: any,
   ) {
@@ -100,21 +100,22 @@ export class DeviceController {
     return await this.deviceControlService.sendControlCommand(
       deviceToken,
       userId,
-      featureCode,
+      entityCode,
       body.value,
     );
   }
 
   /**
-   * API: Điều khiển thiết bị (Bật/Tắt, Điều chỉnh độ sáng, đóng mở cửa...)
-   * POST /v1/devices/:deviceToken/features/:featureCode/setValue
+   * API: Điều khiển bulk nhiều entities của 1 thiết bị
+   * POST /v1/devices/:deviceToken/setValue
+   * Body: { value: [{ entityCode, value }] }
    */
   @Post(':deviceToken/setValue')
   @ApiOperation({
     summary:
-      'Điều khiển thiết bị (Bật/Tắt, Điều chỉnh độ sáng, đóng mở cửa...)',
+      'Điều khiển bulk nhiều entities của thiết bị',
     description:
-      'Điều khiển thiết bị (Bật/Tắt, Điều chỉnh độ sáng, đóng mở cửa...)',
+      'Gửi lệnh cho nhiều entities cùng lúc (VD: bật + chỉnh độ sáng)',
   })
   async setDeviceValue(
     @Param('deviceToken') deviceToken: string,

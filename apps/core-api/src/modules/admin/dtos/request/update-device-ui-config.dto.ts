@@ -3,7 +3,7 @@ import { IsArray, IsBoolean, IsOptional, IsString, ValidateNested } from 'class-
 import { Type } from 'class-transformer';
 
 class DeviceUiConfigItemDto {
-  @ApiProperty({ example: 'light', description: 'Device type key (DeviceModel.code or DeviceFeatureCategory)' })
+  @ApiProperty({ example: 'light', description: 'Device type key (DeviceModel.code or EntityDomain)' })
   @IsString()
   deviceType: string;
 

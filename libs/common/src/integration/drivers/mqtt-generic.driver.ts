@@ -1,101 +1,69 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { MqttService } from '../../mqtt/mqtt.service';
 import { IDeviceDriver } from '../interfaces/device-driver.interface';
-import { Device, DeviceFeature } from '@prisma/client';
+import { DeviceEntity } from '@prisma/client';
 
 @Injectable()
 export class MqttGenericDriver implements IDeviceDriver {
-  name = 'mqtt'; // Khớp với Enum DeviceProtocol
+  name = 'mqtt';
   private readonly logger = new Logger(MqttGenericDriver.name);
 
   constructor(private mqttService: MqttService) {}
 
-  // SỬA: Thêm kiểu trả về Promise<boolean>
-  async setValue(device: any, feature: any, value: any): Promise<boolean> {
+  /**
+   * Gửi lệnh điều khiển 1 entity.
+   * Entity đã chứa commandKey/commandSuffix trực tiếp → không cần lookup từ featuresConfig.
+   */
+  async setValue(device: any, entity: any, value: any): Promise<boolean> {
     try {
-      // 1. Lấy Config
-      const featuresConfig = device.deviceModel.featuresConfig as any;
-      // Cần xử lý trường hợp featuresConfig là object hoặc array tùy schema của bạn
-      // Giả sử featuresConfig là { features: [...] }
-      const featureConfig = featuresConfig.features?.find(
-        (f: any) => f.code === feature.code,
-      );
+      const suffix = entity.commandSuffix ?? 'set';
+      const topic = `${device.partner.code}/${device.deviceModel.code}/${device.token}/${suffix}`;
 
-      if (!featureConfig) {
-        this.logger.error(`Missing MQTT config for feature ${feature.code}`);
-        return false; // Trả về false nếu lỗi
-      }
-
-      // 2. Render Topic
-      const topic = `${device.partner.code}/${device.deviceModel.code}/${device.token}/${featureConfig.commandSuffix}`;
-
-      // 3. Render Payload
       let payloadStr = '';
-      if (featureConfig.commandKey) {
-        const template = { [featureConfig.commandKey]: value };
-        payloadStr = JSON.stringify(template);
-      } else if (featureConfig.type === 'CONFIG') {
-        payloadStr = JSON.stringify({
-          config: value,
-        });
+      if (entity.commandKey) {
+        payloadStr = JSON.stringify({ [entity.commandKey]: value });
       } else {
         payloadStr = JSON.stringify(value);
       }
 
-      // 4. Gửi lệnh
       await this.mqttService.publish(topic, payloadStr, { qos: 1 });
-
-      return true; // <--- QUAN TRỌNG: Phải return true để khớp với Interface
+      return true;
     } catch (error) {
       this.logger.error(
-        `Failed to set value for device ${device.token}: ${error.message}`,
+        `Failed to set value for device ${device.token}, entity ${entity.code}: ${error.message}`,
       );
-      return false; // Trả về false nếu gửi thất bại
+      return false;
     }
   }
 
-  async setValueBulk(device: any, features: DeviceFeature[]): Promise<boolean> {
+  /**
+   * Gửi lệnh bulk cho nhiều entities cùng 1 device.
+   * Gộp nhiều entity values vào 1 MQTT message.
+   */
+  async setValueBulk(device: any, entities: DeviceEntity[]): Promise<boolean> {
     try {
-      // 1. Lấy Config
-      const featuresConfig = device.deviceModel.featuresConfig as any;
-      // Cần xử lý trường hợp featuresConfig là object hoặc array tùy schema của bạn
-      // Giả sử featuresConfig là { features: [...] }
-      const featureConfig = featuresConfig.features?.find(
-        (f: any) => f.code === features[0].code,
-      );
+      if (entities.length === 0) return true;
 
-      if (!featureConfig) {
-        this.logger.error(
-          `Missing MQTT config for feature ${features[0].code}`,
-        );
-        return false; // Trả về false nếu lỗi
+      // Dùng commandSuffix của entity đầu tiên (bulk thường cùng suffix)
+      const suffix = (entities[0] as any).commandSuffix ?? 'set';
+      const topic = `${device.partner.code}/${device.deviceModel.code}/${device.token}/${suffix}`;
+
+      // Gộp payload: { commandKey1: value1, commandKey2: value2, ... }
+      const payload: Record<string, any> = {};
+      for (const entity of entities as any[]) {
+        if (entity.commandKey) {
+          payload[entity.commandKey] = entity.state ?? entity.stateText ?? '';
+        }
       }
 
-      // 2. Render Topic
-      const topic = `${device.partner.code}/${device.deviceModel.code}/${device.token}/${featureConfig.commandSuffix}`;
-
-      // 3. Render Payload
-      let payloadStr = '';
-      payloadStr = JSON.stringify(
-        features.map((f) => {
-          if (f.lastValue) {
-            return { [featureConfig.commandKey]: f.lastValue };
-          }
-          return {
-            [featureConfig.commandKey]: f.lastValueString || '',
-          };
-        }),
-      );
-
-      // 4. Gửi lệnh
+      const payloadStr = JSON.stringify(payload);
       await this.mqttService.publish(topic, payloadStr, { qos: 1 });
-
-      return true; // <--- QUAN TRỌNG: Phải return true để khớp với Interface
+      return true;
     } catch (error) {
       this.logger.error(
-        `Failed to set value for device ${device.token}: ${error.message}`,
+        `Failed to set value bulk for device ${device.token}: ${error.message}`,
       );
-      return false; // Trả về false nếu gửi thất bại
+      return false;
     }
   }
 }

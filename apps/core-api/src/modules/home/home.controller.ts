@@ -32,7 +32,6 @@ import {
   HomeDetailResponseDto,
   HomeMemberResponseDto,
   HomeResponseDto,
-  HomeWithFloorsResponseDto,
   RoomResponseDto,
 } from './dtos/response/home.response';
 import { HomeService } from './home.service';
@@ -47,17 +46,6 @@ export class HomeController {
   // ============================================================
   // HOMES
   // ============================================================
-
-  @Get()
-  @ApiOperation({ summary: 'Lấy danh sách nhà (kèm floors + rooms)' })
-  @DocResponse({
-    serialization: HomeWithFloorsResponseDto,
-    httpStatus: HttpStatus.OK,
-    messageKey: 'home.success.list',
-  })
-  async getHomes(@AuthUser() user: IAuthUser): Promise<HomeWithFloorsResponseDto[]> {
-    return this.homeService.getHomesForUser(user.userId);
-  }
 
   @Get(':homeId/detail')
   @ApiOperation({ summary: 'Chi tiết nhà (home + floors + rooms)' })

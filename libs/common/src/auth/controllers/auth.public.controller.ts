@@ -12,6 +12,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { DocResponse } from '../../doc/decorators/doc.response.decorator';
 import { PublicRoute } from '../../request/decorators/request.public.decorator';
 import { AuthUser } from '../../request/decorators/request.user.decorator';
+import { JwtAccessGuard } from '../../request/guards/jwt.access.guard';
 import { JwtRefreshGuard } from '../../request/guards/jwt.refresh.guard';
 import { IAuthUser } from '../../request/interfaces/request.interface';
 
@@ -23,6 +24,7 @@ import { VerifyOtpDto } from '../dtos/request/verify-otp.dto';
 import { ResetPasswordDto } from '../dtos/request/reset-password.dto';
 
 import {
+  AuthMeResponseDto,
   AuthRefreshResponseDto,
   AuthResponseDto,
 } from '../dtos/response/auth.response.dto';
@@ -83,6 +85,23 @@ export class AuthPublicController {
     @Body() payload: CheckExistsDto,
   ): Promise<{ exists: boolean }> {
     return this.authService.checkExists(payload);
+  }
+
+  // --- GET ME (Lấy profile + homes) ---
+  @Get('me')
+  @UseGuards(JwtAccessGuard)
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({
+    summary: 'Get current user and homes',
+    description: 'Trả về profile của user và danh sách nhà mà user tham gia.',
+  })
+  @DocResponse({
+    serialization: AuthMeResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'auth.success.me',
+  })
+  public async getMe(@AuthUser() user: IAuthUser): Promise<AuthMeResponseDto> {
+    return this.authService.getMe(user.userId);
   }
 
   // --- REFRESH TOKEN ---

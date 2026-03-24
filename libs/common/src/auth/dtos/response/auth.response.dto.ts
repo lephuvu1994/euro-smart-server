@@ -13,7 +13,7 @@ export class TokenDto {
   @Expose()
   @IsString()
   @IsNotEmpty()
-  accessToken: string;
+  accessToken!: string;
 
   @ApiProperty({
     example: faker.string.alphanumeric({ length: 64 }),
@@ -22,24 +22,45 @@ export class TokenDto {
   @Expose()
   @IsString()
   @IsNotEmpty()
-  refreshToken: string;
+  refreshToken!: string;
 }
 
 export class AuthHomeDto {
   @ApiProperty({ example: faker.string.uuid() })
   @Expose()
-  id: string;
+  id!: string;
 
   @ApiProperty({ example: 'Nhà của tôi' })
   @Expose()
-  name: string;
+  name!: string;
 
   @ApiProperty({ example: 'OWNER', enum: ['OWNER', 'MEMBER'] })
   @Expose()
-  role: string;
+  role!: string;
 }
 
 export class AuthResponseDto extends TokenDto {
+  @ApiProperty({
+    type: () => UserResponseDto,
+    required: true,
+  })
+  @Expose()
+  @Type(() => UserResponseDto)
+  @ValidateNested()
+  user!: UserResponseDto;
+
+  @ApiProperty({
+    type: () => [AuthHomeDto],
+    description: 'List of homes the user belongs to (as owner or member)',
+  })
+  @Expose()
+  @Type(() => AuthHomeDto)
+  homes!: AuthHomeDto[];
+}
+
+export class AuthRefreshResponseDto extends TokenDto {}
+
+export class AuthMeResponseDto {
   @ApiProperty({
     type: () => UserResponseDto,
     required: true,
@@ -57,5 +78,3 @@ export class AuthResponseDto extends TokenDto {
   @Type(() => AuthHomeDto)
   homes: AuthHomeDto[];
 }
-
-export class AuthRefreshResponseDto extends TokenDto {}

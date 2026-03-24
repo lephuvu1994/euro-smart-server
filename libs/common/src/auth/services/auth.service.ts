@@ -25,6 +25,7 @@ import { VerifyOtpDto } from '../dtos/request/verify-otp.dto';
 import { ResetPasswordDto } from '../dtos/request/reset-password.dto';
 import { ChangePasswordDto } from '../dtos/request/change.password.dto';
 import {
+  AuthMeResponseDto,
   AuthRefreshResponseDto,
   AuthResponseDto,
 } from '../dtos/response/auth.response.dto';
@@ -112,6 +113,38 @@ export class AuthService implements IAuthService {
     });
 
     return { exists: !!user };
+  }
+
+  /**
+   * 1c. Lấy thông tin User và Homes hiện tại
+   */
+  public async getMe(userId: string): Promise<AuthMeResponseDto> {
+    const user = await this.databaseService.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new HttpException('auth.error.userNotFound', HttpStatus.NOT_FOUND);
+    }
+
+    const userDto = plainToInstance(
+      UserResponseDto,
+      {
+        ...user,
+        avatar: null,
+        userName: user.email ? user.email.split('@')[0] : user.phone,
+      },
+      {
+        excludeExtraneousValues: true,
+      },
+    );
+
+    const homes = await this.getUserHomes(user.id);
+
+    return {
+      user: userDto,
+      homes,
+    };
   }
 
   /**

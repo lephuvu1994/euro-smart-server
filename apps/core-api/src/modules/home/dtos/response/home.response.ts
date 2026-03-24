@@ -151,24 +151,3 @@ export class HomeDetailResponseDto {
   @ValidateNested({ each: true })
   rooms: RoomResponseDto[];
 }
-
-/** Response cho GET /homes — gộp home + floors (with nested rooms) */
-export class HomeWithFloorsResponseDto extends HomeResponseDto {
-  @ApiProperty({
-    type: [FloorResponseDto],
-    description: 'Danh sách tầng (kèm rooms) của nhà',
-  })
-  @Expose()
-  @Type(() => FloorResponseDto)
-  @ValidateNested({ each: true })
-  floors: FloorResponseDto[];
-
-  @ApiProperty({
-    type: [RoomResponseDto],
-    description: 'Tất cả rooms của home',
-  })
-  @Expose()
-  @Type(() => RoomResponseDto)
-  @ValidateNested({ each: true })
-  rooms: RoomResponseDto[];
-}

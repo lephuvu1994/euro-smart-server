@@ -35,8 +35,18 @@ const createMockRedisService = () => ({
 });
 
 const MOCK_CONFIGS = [
-  { deviceType: 'light', hasToggle: true, accentColor: '#A3EC3E', modalSnapPoints: ['50%'] },
-  { deviceType: 'camera', hasToggle: false, accentColor: '#60A5FA', modalSnapPoints: ['70%'] },
+  {
+    deviceType: 'light',
+    hasToggle: true,
+    accentColor: '#A3EC3E',
+    modalSnapPoints: ['50%'],
+  },
+  {
+    deviceType: 'camera',
+    hasToggle: false,
+    accentColor: '#60A5FA',
+    modalSnapPoints: ['70%'],
+  },
 ];
 const MOCK_CONFIGS_JSON = JSON.stringify(MOCK_CONFIGS);
 
@@ -86,7 +96,10 @@ describe('DeviceService — Device UI Config', () => {
         where: { key: DEVICE_UI_CONFIG_KEY },
       });
       // Should write back to Redis
-      expect(redis.set).toHaveBeenCalledWith(DEVICE_UI_CONFIG_REDIS_KEY, MOCK_CONFIGS_JSON);
+      expect(redis.set).toHaveBeenCalledWith(
+        DEVICE_UI_CONFIG_REDIS_KEY,
+        MOCK_CONFIGS_JSON,
+      );
     });
 
     it('should seed defaults when DB has no config', async () => {
@@ -148,8 +161,13 @@ describe('DeviceService — Device UI Config', () => {
 
       const result = await service.refreshDeviceUiConfigCache();
 
-      expect(result).toEqual({ message: 'Device UI config cache refreshed successfully' });
-      expect(redis.set).toHaveBeenCalledWith(DEVICE_UI_CONFIG_REDIS_KEY, MOCK_CONFIGS_JSON);
+      expect(result).toEqual({
+        message: 'Device UI config cache refreshed successfully',
+      });
+      expect(redis.set).toHaveBeenCalledWith(
+        DEVICE_UI_CONFIG_REDIS_KEY,
+        MOCK_CONFIGS_JSON,
+      );
     });
 
     it('should seed defaults when DB has no config', async () => {
@@ -158,7 +176,9 @@ describe('DeviceService — Device UI Config', () => {
 
       const result = await service.refreshDeviceUiConfigCache();
 
-      expect(result).toEqual({ message: 'Device UI config cache refreshed successfully' });
+      expect(result).toEqual({
+        message: 'Device UI config cache refreshed successfully',
+      });
       expect(db.systemConfig.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { key: DEVICE_UI_CONFIG_KEY },

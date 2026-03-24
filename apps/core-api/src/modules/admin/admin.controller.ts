@@ -1,5 +1,18 @@
-import { Body, Controller, Get, Param, Post, Put, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Put,
+  UseGuards,
+} from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 
 import { JwtAccessGuard } from '@app/common/request/guards/jwt.access.guard';
@@ -35,7 +48,10 @@ export class AdminController {
   }
 
   @Get('options/partners')
-  @ApiOperation({ summary: 'Get Partners for Dropdown', description: 'Lấy danh sách code & name để hiện vào Select.' })
+  @ApiOperation({
+    summary: 'Get Partners for Dropdown',
+    description: 'Lấy danh sách code & name để hiện vào Select.',
+  })
   getPartnerOptions() {
     return this.adminService.getPartnersForDropdown();
   }
@@ -48,7 +64,10 @@ export class AdminController {
   }
 
   @Put('partners/:code')
-  @ApiOperation({ summary: 'Update Partner info & quotas', description: 'API đa năng: sửa tên, quota, hoặc cả hai.' })
+  @ApiOperation({
+    summary: 'Update Partner info & quotas',
+    description: 'API đa năng: sửa tên, quota, hoặc cả hai.',
+  })
   updatePartner(@Param('code') code: string, @Body() body: UpdatePartnerDto) {
     return this.adminService.updatePartner(code, body);
   }
@@ -64,8 +83,14 @@ export class AdminController {
   }
 
   @Put('device-models/:code')
-  @ApiOperation({ summary: 'Update Device Model (name, featuresConfig...)', description: 'Dùng khi cần cập nhật featuresConfig cho model đã tồn tại.' })
-  updateDeviceModel(@Param('code') code: string, @Body() body: CreateDeviceModelDto) {
+  @ApiOperation({
+    summary: 'Update Device Model (name, featuresConfig...)',
+    description: 'Dùng khi cần cập nhật featuresConfig cho model đã tồn tại.',
+  })
+  updateDeviceModel(
+    @Param('code') code: string,
+    @Body() body: CreateDeviceModelDto,
+  ) {
     return this.adminService.updateDeviceModel(code, body);
   }
 
@@ -115,7 +140,8 @@ export class AdminController {
   @Get('configs/device-ui')
   @ApiOperation({
     summary: 'Get device UI config',
-    description: 'Returns current device UI config from DB (or defaults if not set)',
+    description:
+      'Returns current device UI config from DB (or defaults if not set)',
   })
   getDeviceUiConfig() {
     return this.adminService.getDeviceUiConfig();
@@ -124,10 +150,10 @@ export class AdminController {
   @Put('configs/device-ui')
   @ApiOperation({
     summary: 'Update device UI config',
-    description: 'Replaces entire device UI config in DB and refreshes Redis cache immediately',
+    description:
+      'Replaces entire device UI config in DB and refreshes Redis cache immediately',
   })
   updateDeviceUiConfig(@Body() body: UpdateDeviceUiConfigDto) {
     return this.adminService.updateDeviceUiConfig(body);
   }
 }
-

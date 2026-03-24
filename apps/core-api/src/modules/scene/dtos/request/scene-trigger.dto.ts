@@ -133,7 +133,8 @@ export class SceneDeviceConditionDto {
   entityCode: string;
 
   @ApiPropertyOptional({
-    description: 'Key attribute cụ thể (vd: brightness, temperature). Để trống = so sánh primary state.',
+    description:
+      'Key attribute cụ thể (vd: brightness, temperature). Để trống = so sánh primary state.',
   })
   @IsOptional()
   @IsString()

@@ -1,4 +1,9 @@
-import { ConflictException, HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import {
+  ConflictException,
+  HttpException,
+  HttpStatus,
+  Injectable,
+} from '@nestjs/common';
 import { DatabaseService } from '@app/database';
 import { RedisService } from '@app/redis-cache';
 
@@ -23,13 +28,14 @@ export class AdminService {
     private readonly redis: RedisService,
   ) {}
 
-
   // ──────────────────────────────────────────────
   // PARTNERS
   // ──────────────────────────────────────────────
 
   async createPartner(data: CreatePartnerDto) {
-    const exists = await this.db.partner.findUnique({ where: { code: data.code } });
+    const exists = await this.db.partner.findUnique({
+      where: { code: data.code },
+    });
     if (exists) throw new ConflictException('Partner Code already exists');
 
     return this.db.partner.create({
@@ -60,10 +66,10 @@ export class AdminService {
       },
     });
 
-    return partners.map(p => ({
+    return partners.map((p) => ({
       companyCode: p.code,
       companyName: p.name,
-      quotas: p.quotas.map(q => ({
+      quotas: p.quotas.map((q) => ({
         modelCode: q.deviceModel.code,
         modelName: q.deviceModel.name,
         used: q.activatedCount,
@@ -73,12 +79,18 @@ export class AdminService {
   }
 
   async updatePartner(partnerCode: string, data: UpdatePartnerDto) {
-    const existing = await this.db.partner.findUnique({ where: { code: partnerCode } });
-    if (!existing) throw new HttpException('Partner not found', HttpStatus.NOT_FOUND);
+    const existing = await this.db.partner.findUnique({
+      where: { code: partnerCode },
+    });
+    if (!existing)
+      throw new HttpException('Partner not found', HttpStatus.NOT_FOUND);
 
-    return this.db.$transaction(async prisma => {
+    return this.db.$transaction(async (prisma) => {
       if (data.name) {
-        await prisma.partner.update({ where: { code: partnerCode }, data: { name: data.name } });
+        await prisma.partner.update({
+          where: { code: partnerCode },
+          data: { name: data.name },
+        });
       }
 
       if (data.quotas !== undefined) {
@@ -89,15 +101,28 @@ export class AdminService {
           });
         } else {
           await Promise.all(
-            data.quotas.map(async item => {
-              const model = await prisma.deviceModel.findUnique({ where: { code: item.deviceModelCode } });
-              if (!model) throw new HttpException(`Device Model '${item.deviceModelCode}' not found`, HttpStatus.BAD_REQUEST);
+            data.quotas.map(async (item) => {
+              const model = await prisma.deviceModel.findUnique({
+                where: { code: item.deviceModelCode },
+              });
+              if (!model)
+                throw new HttpException(
+                  `Device Model '${item.deviceModelCode}' not found`,
+                  HttpStatus.BAD_REQUEST,
+                );
 
               return prisma.licenseQuota.upsert({
-                where: { partnerId_deviceModelId: { partnerId: existing.id, deviceModelId: model.id } },
+                where: {
+                  partnerId_deviceModelId: {
+                    partnerId: existing.id,
+                    deviceModelId: model.id,
+                  },
+                },
                 update: {
                   maxQuantity: item.quantity,
-                  ...(item.licenseDays !== undefined && { licenseDays: item.licenseDays }),
+                  ...(item.licenseDays !== undefined && {
+                    licenseDays: item.licenseDays,
+                  }),
                 },
                 create: {
                   partnerId: existing.id,
@@ -105,7 +130,9 @@ export class AdminService {
                   maxQuantity: item.quantity,
                   activatedCount: 0,
                   isActive: true,
-                  ...(item.licenseDays !== undefined && { licenseDays: item.licenseDays }),
+                  ...(item.licenseDays !== undefined && {
+                    licenseDays: item.licenseDays,
+                  }),
                 },
               });
             }),
@@ -125,7 +152,9 @@ export class AdminService {
   // ──────────────────────────────────────────────
 
   async createDeviceModel(data: CreateDeviceModelDto) {
-    const exists = await this.db.deviceModel.findUnique({ where: { code: data.code } });
+    const exists = await this.db.deviceModel.findUnique({
+      where: { code: data.code },
+    });
     if (exists) throw new ConflictException('Device Model Code already exists');
 
     return this.db.deviceModel.create({
@@ -147,14 +176,19 @@ export class AdminService {
 
   async updateDeviceModel(code: string, data: CreateDeviceModelDto) {
     const existing = await this.db.deviceModel.findUnique({ where: { code } });
-    if (!existing) throw new HttpException('Device Model not found', HttpStatus.NOT_FOUND);
+    if (!existing)
+      throw new HttpException('Device Model not found', HttpStatus.NOT_FOUND);
 
     return this.db.deviceModel.update({
       where: { code },
       data: {
         ...(data.name && { name: data.name }),
-        ...(data.description !== undefined && { description: data.description }),
-        ...(data.featuresConfig !== undefined && { featuresConfig: data.featuresConfig }),
+        ...(data.description !== undefined && {
+          description: data.description,
+        }),
+        ...(data.featuresConfig !== undefined && {
+          featuresConfig: data.featuresConfig,
+        }),
       },
     });
   }
@@ -180,12 +214,20 @@ export class AdminService {
   async setMqttConfig(data: SetMqttConfigDto) {
     const entries = [
       { key: 'MQTT_HOST', value: data.host, description: 'MQTT Broker Host' },
-      { key: 'MQTT_USER', value: data.user, description: 'MQTT Broker Username' },
-      { key: 'MQTT_PASS', value: data.pass, description: 'MQTT Broker Password' },
+      {
+        key: 'MQTT_USER',
+        value: data.user,
+        description: 'MQTT Broker Username',
+      },
+      {
+        key: 'MQTT_PASS',
+        value: data.pass,
+        description: 'MQTT Broker Password',
+      },
     ];
 
     await Promise.all(
-      entries.map(e =>
+      entries.map((e) =>
         this.db.systemConfig.upsert({
           where: { key: e.key },
           update: { value: e.value },
@@ -199,7 +241,7 @@ export class AdminService {
 
   async getSystemConfigs(): Promise<SystemConfigResponseDto> {
     const configs = await this.db.systemConfig.findMany();
-    const map = Object.fromEntries(configs.map(c => [c.key, c.value]));
+    const map = Object.fromEntries(configs.map((c) => [c.key, c.value]));
 
     return {
       mqttHost: map['MQTT_HOST'] || '',
@@ -212,13 +254,33 @@ export class AdminService {
   async updateSystemConfigs(data: UpdateSystemConfigDto) {
     const updates: { key: string; value: string; description: string }[] = [];
 
-    if (data.mqttHost !== undefined) updates.push({ key: 'MQTT_HOST', value: data.mqttHost, description: 'MQTT Broker Host' });
-    if (data.mqttUser !== undefined) updates.push({ key: 'MQTT_USER', value: data.mqttUser, description: 'MQTT Broker Username' });
-    if (data.mqttPass !== undefined) updates.push({ key: 'MQTT_PASS', value: data.mqttPass, description: 'MQTT Broker Password' });
-    if (data.otpExpire !== undefined) updates.push({ key: 'OTP_EXPIRE', value: data.otpExpire.toString(), description: 'OTP Expiration (minutes)' });
+    if (data.mqttHost !== undefined)
+      updates.push({
+        key: 'MQTT_HOST',
+        value: data.mqttHost,
+        description: 'MQTT Broker Host',
+      });
+    if (data.mqttUser !== undefined)
+      updates.push({
+        key: 'MQTT_USER',
+        value: data.mqttUser,
+        description: 'MQTT Broker Username',
+      });
+    if (data.mqttPass !== undefined)
+      updates.push({
+        key: 'MQTT_PASS',
+        value: data.mqttPass,
+        description: 'MQTT Broker Password',
+      });
+    if (data.otpExpire !== undefined)
+      updates.push({
+        key: 'OTP_EXPIRE',
+        value: data.otpExpire.toString(),
+        description: 'OTP Expiration (minutes)',
+      });
 
     await Promise.all(
-      updates.map(u =>
+      updates.map((u) =>
         this.db.systemConfig.upsert({
           where: { key: u.key },
           update: { value: u.value },
@@ -270,4 +332,3 @@ export class AdminService {
     return { message: 'Device UI config updated and cache refreshed' };
   }
 }
-

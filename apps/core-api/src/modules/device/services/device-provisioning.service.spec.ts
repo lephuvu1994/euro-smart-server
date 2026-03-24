@@ -25,7 +25,14 @@ const mockBlueprint = {
       commandSuffix: 'set',
       readOnly: false,
       attributes: [
-        { key: 'brightness', name: 'Brightness', valueType: 'NUMBER', min: 0, max: 100, unit: '%' },
+        {
+          key: 'brightness',
+          name: 'Brightness',
+          valueType: 'NUMBER',
+          min: 0,
+          max: 100,
+          unit: '%',
+        },
       ],
     },
   ],
@@ -88,12 +95,23 @@ describe('DeviceProvisioningService', () => {
   });
 
   it('should parse blueprint v2 and create device with entities and attributes', async () => {
-    db.deviceModel.findUnique.mockResolvedValue({ id: 'model-id', code: 'model-1', featuresConfig: mockBlueprint });
-    db.partner.findUnique.mockResolvedValue({ id: 'partner-id', code: 'partner-1' });
+    db.deviceModel.findUnique.mockResolvedValue({
+      id: 'model-id',
+      code: 'model-1',
+      featuresConfig: mockBlueprint,
+    });
+    db.partner.findUnique.mockResolvedValue({
+      id: 'partner-id',
+      code: 'partner-1',
+    });
 
     mockTx.hardwareRegistry.findUnique.mockResolvedValue(null);
     mockTx.hardwareRegistry.create.mockResolvedValue({ id: 'hw-id' });
-    mockTx.device.create.mockResolvedValue({ id: 'dev-1', name: 'My Device', entities: [] });
+    mockTx.device.create.mockResolvedValue({
+      id: 'dev-1',
+      name: 'My Device',
+      entities: [],
+    });
     mockTx.licenseQuota.findUnique.mockResolvedValue({ licenseDays: 365 });
 
     const result = await service.registerAndClaim(mockUserId, mockDto as any);
@@ -139,17 +157,33 @@ describe('DeviceProvisioningService', () => {
   });
 
   it('should cleanup old redis _ekeys if old device existed', async () => {
-    db.deviceModel.findUnique.mockResolvedValue({ id: 'model-id', code: 'model-1', featuresConfig: mockBlueprint });
-    db.partner.findUnique.mockResolvedValue({ id: 'partner-id', code: 'partner-1' });
+    db.deviceModel.findUnique.mockResolvedValue({
+      id: 'model-id',
+      code: 'model-1',
+      featuresConfig: mockBlueprint,
+    });
+    db.partner.findUnique.mockResolvedValue({
+      id: 'partner-id',
+      code: 'partner-1',
+    });
 
     mockTx.hardwareRegistry.findUnique.mockResolvedValue({ id: 'hw-id' });
-    mockTx.device.findUnique.mockResolvedValue({ id: 'old-dev', token: 'old-token' });
+    mockTx.device.findUnique.mockResolvedValue({
+      id: 'old-dev',
+      token: 'old-token',
+    });
     mockTx.hardwareRegistry.update.mockResolvedValue({ id: 'hw-id' });
-    mockTx.device.create.mockResolvedValue({ id: 'dev-2', name: 'My Device', entities: [] });
+    mockTx.device.create.mockResolvedValue({
+      id: 'dev-2',
+      name: 'My Device',
+      entities: [],
+    });
 
     await service.registerAndClaim(mockUserId, mockDto as any);
 
-    expect(mockTx.device.delete).toHaveBeenCalledWith({ where: { id: 'old-dev' } });
+    expect(mockTx.device.delete).toHaveBeenCalledWith({
+      where: { id: 'old-dev' },
+    });
     expect(redis.del).toHaveBeenCalledWith('status:old-token');
     expect(redis.smembers).toHaveBeenCalledWith('device:old-dev:_ekeys');
   });
@@ -158,6 +192,8 @@ describe('DeviceProvisioningService', () => {
     db.deviceModel.findUnique.mockResolvedValue(null);
     db.partner.findUnique.mockResolvedValue(null);
 
-    await expect(service.registerAndClaim(mockUserId, mockDto as any)).rejects.toThrow(BadRequestException);
+    await expect(
+      service.registerAndClaim(mockUserId, mockDto as any),
+    ).rejects.toThrow(BadRequestException);
   });
 });

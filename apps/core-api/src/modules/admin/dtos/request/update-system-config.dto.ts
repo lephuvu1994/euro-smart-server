@@ -17,7 +17,10 @@ export class UpdateSystemConfigDto {
   @IsOptional()
   mqttPass?: string;
 
-  @ApiPropertyOptional({ example: 5, description: 'OTP expiration time in minutes' })
+  @ApiPropertyOptional({
+    example: 5,
+    description: 'OTP expiration time in minutes',
+  })
   @IsNumber()
   @IsOptional()
   otpExpire?: number;

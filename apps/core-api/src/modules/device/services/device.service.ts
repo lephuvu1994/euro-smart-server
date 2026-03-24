@@ -30,10 +30,7 @@ export class DeviceService {
       const home = await this.db.home.findFirst({
         where: {
           id: homeId,
-          OR: [
-            { ownerId: userId },
-            { members: { some: { userId: userId } } },
-          ],
+          OR: [{ ownerId: userId }, { members: { some: { userId: userId } } }],
         },
         select: { id: true },
       });

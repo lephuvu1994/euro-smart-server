@@ -4,7 +4,12 @@ import { DatabaseService } from '@app/database';
 import { RedisService } from '@app/redis-cache';
 import { getQueueToken } from '@nestjs/bullmq';
 import { APP_BULLMQ_QUEUES, DEVICE_JOBS } from '@app/common';
-import { UnauthorizedException, NotFoundException, BadRequestException, HttpException } from '@nestjs/common';
+import {
+  UnauthorizedException,
+  NotFoundException,
+  BadRequestException,
+  HttpException,
+} from '@nestjs/common';
 
 jest.mock('@faker-js/faker', () => ({
   faker: {
@@ -65,7 +70,10 @@ describe('DeviceControlService', () => {
         DeviceControlService,
         { provide: DatabaseService, useValue: db },
         { provide: RedisService, useValue: redis },
-        { provide: getQueueToken(APP_BULLMQ_QUEUES.DEVICE_CONTROL), useValue: queue },
+        {
+          provide: getQueueToken(APP_BULLMQ_QUEUES.DEVICE_CONTROL),
+          useValue: queue,
+        },
       ],
     }).compile();
 
@@ -75,20 +83,28 @@ describe('DeviceControlService', () => {
   describe('sendControlCommand', () => {
     it('should throw UnauthorizedException if device not found', async () => {
       db.device.findFirst.mockResolvedValue(null);
-      await expect(service.sendControlCommand(mockDeviceToken, mockUserId, 'switch_1', 1))
-        .rejects.toThrow(UnauthorizedException);
+      await expect(
+        service.sendControlCommand(mockDeviceToken, mockUserId, 'switch_1', 1),
+      ).rejects.toThrow(UnauthorizedException);
     });
 
     it('should throw NotFoundException if entity not found', async () => {
       db.device.findFirst.mockResolvedValue(mockDevice);
-      await expect(service.sendControlCommand(mockDeviceToken, mockUserId, 'non_existent', 1))
-        .rejects.toThrow(NotFoundException);
+      await expect(
+        service.sendControlCommand(
+          mockDeviceToken,
+          mockUserId,
+          'non_existent',
+          1,
+        ),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('should throw BadRequestException if entity is readOnly', async () => {
       db.device.findFirst.mockResolvedValue(mockDevice);
-      await expect(service.sendControlCommand(mockDeviceToken, mockUserId, 'sensor_1', 1))
-        .rejects.toThrow(BadRequestException);
+      await expect(
+        service.sendControlCommand(mockDeviceToken, mockUserId, 'sensor_1', 1),
+      ).rejects.toThrow(BadRequestException);
     });
 
     describe('domain validation', () => {
@@ -98,30 +114,63 @@ describe('DeviceControlService', () => {
       });
 
       it('should validate switch_ domain', async () => {
-        await expect(service.sendControlCommand(mockDeviceToken, mockUserId, 'switch_1', 2))
-          .rejects.toThrow(BadRequestException);
-        
-        await service.sendControlCommand(mockDeviceToken, mockUserId, 'switch_1', 1);
+        await expect(
+          service.sendControlCommand(
+            mockDeviceToken,
+            mockUserId,
+            'switch_1',
+            2,
+          ),
+        ).rejects.toThrow(BadRequestException);
+
+        await service.sendControlCommand(
+          mockDeviceToken,
+          mockUserId,
+          'switch_1',
+          1,
+        );
         expect(queue.add).toHaveBeenCalled();
       });
 
       it('should validate light domain', async () => {
-        await expect(service.sendControlCommand(mockDeviceToken, mockUserId, 'light_1', 105))
-          .rejects.toThrow(BadRequestException);
-        
-        await service.sendControlCommand(mockDeviceToken, mockUserId, 'light_1', 80);
+        await expect(
+          service.sendControlCommand(
+            mockDeviceToken,
+            mockUserId,
+            'light_1',
+            105,
+          ),
+        ).rejects.toThrow(BadRequestException);
+
+        await service.sendControlCommand(
+          mockDeviceToken,
+          mockUserId,
+          'light_1',
+          80,
+        );
         expect(queue.add).toHaveBeenCalled();
       });
 
       it('should validate curtain domain', async () => {
-        await expect(service.sendControlCommand(mockDeviceToken, mockUserId, 'curtain_1', 'INVALID'))
-          .rejects.toThrow(BadRequestException);
-        
-        await service.sendControlCommand(mockDeviceToken, mockUserId, 'curtain_1', 'OPEN');
+        await expect(
+          service.sendControlCommand(
+            mockDeviceToken,
+            mockUserId,
+            'curtain_1',
+            'INVALID',
+          ),
+        ).rejects.toThrow(BadRequestException);
+
+        await service.sendControlCommand(
+          mockDeviceToken,
+          mockUserId,
+          'curtain_1',
+          'OPEN',
+        );
         expect(queue.add).toHaveBeenCalledWith(
           DEVICE_JOBS.CONTROL_CMD,
           { token: mockDeviceToken, entityCode: 'curtain_1', value: 'OPEN' },
-          expect.any(Object)
+          expect.any(Object),
         );
       });
     });
@@ -129,8 +178,9 @@ describe('DeviceControlService', () => {
     it('should throw HttpException if device is offline', async () => {
       db.device.findFirst.mockResolvedValue(mockDevice);
       redis.hget.mockResolvedValue(null);
-      await expect(service.sendControlCommand(mockDeviceToken, mockUserId, 'switch_1', 1))
-        .rejects.toThrow(HttpException);
+      await expect(
+        service.sendControlCommand(mockDeviceToken, mockUserId, 'switch_1', 1),
+      ).rejects.toThrow(HttpException);
     });
   });
 
@@ -141,7 +191,7 @@ describe('DeviceControlService', () => {
 
       const values = [
         { entityCode: 'switch_1', value: 1 },
-        { entityCode: 'light_1', value: 50 }
+        { entityCode: 'light_1', value: 50 },
       ];
 
       await service.sendDeviceValueCommand(mockDeviceToken, mockUserId, values);
@@ -152,7 +202,7 @@ describe('DeviceControlService', () => {
           token: mockDeviceToken,
           entityPayloads: values,
         },
-        expect.any(Object)
+        expect.any(Object),
       );
     });
   });

@@ -5,7 +5,12 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Job, Queue } from 'bullmq';
 import { Logger } from '@nestjs/common';
-import { APP_BULLMQ_QUEUES, DEVICE_JOBS, IntegrationManager, SceneTriggerType } from '@app/common';
+import {
+  APP_BULLMQ_QUEUES,
+  DEVICE_JOBS,
+  IntegrationManager,
+  SceneTriggerType,
+} from '@app/common';
 import { RedisService } from '@app/redis-cache';
 import { DatabaseService } from '@app/database';
 import { SceneService } from '../../scene/scene.service';
@@ -77,11 +82,19 @@ export class DeviceControlProcessor extends WorkerHost {
         JSON.stringify({
           room: `device_${device.token}`,
           event: 'COMMAND_SENT',
-          data: { deviceId: device.id, entityCode, value, timestamp: new Date(), status: 'sent' },
+          data: {
+            deviceId: device.id,
+            entityCode,
+            value,
+            timestamp: new Date(),
+            status: 'sent',
+          },
         }),
       );
 
-      this.logger.log(`✅ [${driver.name}] Command dispatched for ${device.token}`);
+      this.logger.log(
+        `✅ [${driver.name}] Command dispatched for ${device.token}`,
+      );
       return { success: true };
     } catch (error) {
       this.logger.error(`❌ Failed to control device: ${error.message}`);
@@ -150,7 +163,9 @@ export class DeviceControlProcessor extends WorkerHost {
         }),
       );
 
-      this.logger.log(`✅ [${driver.name}] Command dispatched for ${device.token}`);
+      this.logger.log(
+        `✅ [${driver.name}] Command dispatched for ${device.token}`,
+      );
       return { success: true };
     } catch (error) {
       this.logger.error(`❌ Failed to control device: ${error.message}`);
@@ -185,7 +200,11 @@ export class DeviceControlProcessor extends WorkerHost {
     }
 
     const actions =
-      (scene.actions as { deviceToken: string; entityCode: string; value: any }[]) || [];
+      (scene.actions as {
+        deviceToken: string;
+        entityCode: string;
+        value: any;
+      }[]) || [];
     const byDevice = new Map<string, { entityCode: string; value: any }[]>();
     for (const a of actions) {
       const list = byDevice.get(a.deviceToken) ?? [];
@@ -263,7 +282,9 @@ export class DeviceControlProcessor extends WorkerHost {
           },
         }),
       );
-      this.logger.log(`✅ Scene device ${deviceToken}: ${newEntities.length} entity(ies)`);
+      this.logger.log(
+        `✅ Scene device ${deviceToken}: ${newEntities.length} entity(ies)`,
+      );
       return { success: true, deviceToken, entityCount: newEntities.length };
     } catch (err: any) {
       this.logger.error(`❌ Scene device ${deviceToken}: ${err?.message}`);

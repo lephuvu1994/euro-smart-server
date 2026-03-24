@@ -18,9 +18,23 @@ const createMockDatabaseService = () => ({
     upsert: jest.fn(),
   },
   // Stubs for other AdminService dependencies
-  partner: { findUnique: jest.fn(), findMany: jest.fn(), create: jest.fn(), update: jest.fn() },
-  deviceModel: { findUnique: jest.fn(), findMany: jest.fn(), create: jest.fn(), update: jest.fn() },
-  licenseQuota: { findMany: jest.fn(), upsert: jest.fn(), updateMany: jest.fn() },
+  partner: {
+    findUnique: jest.fn(),
+    findMany: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+  },
+  deviceModel: {
+    findUnique: jest.fn(),
+    findMany: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+  },
+  licenseQuota: {
+    findMany: jest.fn(),
+    upsert: jest.fn(),
+    updateMany: jest.fn(),
+  },
   $transaction: jest.fn(),
 });
 
@@ -30,8 +44,18 @@ const createMockRedisService = () => ({
 });
 
 const MOCK_CONFIGS = [
-  { deviceType: 'light', hasToggle: true, accentColor: '#A3EC3E', modalSnapPoints: ['50%'] },
-  { deviceType: 'camera', hasToggle: false, accentColor: '#60A5FA', modalSnapPoints: ['70%'] },
+  {
+    deviceType: 'light',
+    hasToggle: true,
+    accentColor: '#A3EC3E',
+    modalSnapPoints: ['50%'],
+  },
+  {
+    deviceType: 'camera',
+    hasToggle: false,
+    accentColor: '#60A5FA',
+    modalSnapPoints: ['70%'],
+  },
 ];
 const MOCK_CONFIGS_JSON = JSON.stringify(MOCK_CONFIGS);
 
@@ -110,9 +134,13 @@ describe('AdminService — Device UI Config', () => {
       db.systemConfig.upsert.mockResolvedValue({});
       redis.set.mockResolvedValue('OK');
 
-      const result = await service.updateDeviceUiConfig({ configs: MOCK_CONFIGS });
+      const result = await service.updateDeviceUiConfig({
+        configs: MOCK_CONFIGS,
+      });
 
-      expect(result).toEqual({ message: 'Device UI config updated and cache refreshed' });
+      expect(result).toEqual({
+        message: 'Device UI config updated and cache refreshed',
+      });
 
       // Verify DB upsert
       expect(db.systemConfig.upsert).toHaveBeenCalledWith({
@@ -126,7 +154,10 @@ describe('AdminService — Device UI Config', () => {
       });
 
       // Verify Redis cache refresh
-      expect(redis.set).toHaveBeenCalledWith(DEVICE_UI_CONFIG_REDIS_KEY, MOCK_CONFIGS_JSON);
+      expect(redis.set).toHaveBeenCalledWith(
+        DEVICE_UI_CONFIG_REDIS_KEY,
+        MOCK_CONFIGS_JSON,
+      );
     });
 
     it('should handle empty configs array', async () => {
@@ -135,7 +166,9 @@ describe('AdminService — Device UI Config', () => {
 
       const result = await service.updateDeviceUiConfig({ configs: [] });
 
-      expect(result).toEqual({ message: 'Device UI config updated and cache refreshed' });
+      expect(result).toEqual({
+        message: 'Device UI config updated and cache refreshed',
+      });
       expect(db.systemConfig.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
           update: { value: '[]' },
@@ -148,7 +181,14 @@ describe('AdminService — Device UI Config', () => {
       db.systemConfig.upsert.mockResolvedValue({});
       redis.set.mockResolvedValue('OK');
 
-      const singleConfig = [{ deviceType: 'light', hasToggle: true, accentColor: '#FFF', modalSnapPoints: ['40%'] }];
+      const singleConfig = [
+        {
+          deviceType: 'light',
+          hasToggle: true,
+          accentColor: '#FFF',
+          modalSnapPoints: ['40%'],
+        },
+      ];
       await service.updateDeviceUiConfig({ configs: singleConfig });
 
       expect(db.systemConfig.upsert).toHaveBeenCalledWith(

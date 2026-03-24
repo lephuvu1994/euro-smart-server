@@ -349,17 +349,22 @@ export class HomeService {
     await this.ensureUserCanAccessFloor(userId, floorId);
 
     // Verify all upcoming rooms belong to this home to prevent cross-home assignment bypasses
-    const { floor } = await this.databaseService.floor.findUniqueOrThrow({
-      where: { id: floorId },
-      select: { homeId: true },
-    }).then(floor => ({ floor }));
+    const { floor } = await this.databaseService.floor
+      .findUniqueOrThrow({
+        where: { id: floorId },
+        select: { homeId: true },
+      })
+      .then((floor) => ({ floor }));
 
     if (roomIds && roomIds.length > 0) {
       const dbRoomsCount = await this.databaseService.room.count({
         where: { id: { in: roomIds }, homeId: floor.homeId },
       });
       if (dbRoomsCount !== roomIds.length) {
-        throw new HttpException('home.error.roomNotFoundOrNoAccess', HttpStatus.FORBIDDEN);
+        throw new HttpException(
+          'home.error.roomNotFoundOrNoAccess',
+          HttpStatus.FORBIDDEN,
+        );
       }
     }
 
@@ -367,7 +372,7 @@ export class HomeService {
       where: { id: floorId },
       data: {
         rooms: {
-          set: (roomIds || []).map(id => ({ id })),
+          set: (roomIds || []).map((id) => ({ id })),
         },
       },
       include: {
@@ -380,10 +385,7 @@ export class HomeService {
     return updatedFloor as FloorResponseDto;
   }
 
-  async deleteFloor(
-    floorId: string,
-    userId: string,
-  ): Promise<void> {
+  async deleteFloor(floorId: string, userId: string): Promise<void> {
     const { floor } = await this.ensureUserCanAccessFloor(userId, floorId);
     // Rooms trong floor này → set floorId = null (ungrouped)
     await this.databaseService.room.updateMany({
@@ -488,10 +490,7 @@ export class HomeService {
     return room as RoomResponseDto;
   }
 
-  async deleteRoom(
-    roomId: string,
-    userId: string,
-  ): Promise<void> {
+  async deleteRoom(roomId: string, userId: string): Promise<void> {
     await this.ensureUserCanAccessRoom(userId, roomId);
     await this.databaseService.room.delete({
       where: { id: roomId },

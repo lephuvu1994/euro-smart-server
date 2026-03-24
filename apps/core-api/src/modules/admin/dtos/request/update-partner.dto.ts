@@ -1,6 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsArray, IsInt, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsInt,
+  IsOptional,
+  IsString,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 
 export class PartnerQuotaItemDto {
   @ApiProperty({ example: 'WIFI_SWITCH_4' })
@@ -12,7 +19,11 @@ export class PartnerQuotaItemDto {
   @Min(0)
   quantity: number;
 
-  @ApiProperty({ example: 90, required: false, description: 'Số ngày license (default 90)' })
+  @ApiProperty({
+    example: 90,
+    required: false,
+    description: 'Số ngày license (default 90)',
+  })
   @IsOptional()
   @IsInt()
   @Min(1)

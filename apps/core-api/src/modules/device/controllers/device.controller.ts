@@ -39,7 +39,8 @@ export class DeviceController {
   @Get('config')
   @ApiOperation({
     summary: 'Get device UI config for app rendering',
-    description: 'Returns JSON config mapping device types to UI properties. Cached in Redis, stored in DB (SystemConfig).',
+    description:
+      'Returns JSON config mapping device types to UI properties. Cached in Redis, stored in DB (SystemConfig).',
   })
   async getDeviceConfig() {
     const data = await this.deviceService.getDeviceUiConfigs();
@@ -57,7 +58,8 @@ export class DeviceController {
   @Post('config/refresh')
   @ApiOperation({
     summary: 'Refresh device UI config Redis cache from DB',
-    description: 'Re-reads SystemConfig from DB and updates Redis cache. Use after config changes.',
+    description:
+      'Re-reads SystemConfig from DB and updates Redis cache. Use after config changes.',
   })
   async refreshDeviceConfig() {
     const result = await this.deviceService.refreshDeviceUiConfigCache();
@@ -87,8 +89,7 @@ export class DeviceController {
   @ApiOperation({
     summary:
       'Điều khiển entity thiết bị (Bật/Tắt, Điều chỉnh độ sáng, đóng mở cửa...)',
-    description:
-      'Điều khiển 1 entity của thiết bị theo entity code',
+    description: 'Điều khiển 1 entity của thiết bị theo entity code',
   })
   async setEntityValue(
     @Param('deviceToken') deviceToken: string,
@@ -112,8 +113,7 @@ export class DeviceController {
    */
   @Post(':deviceToken/setValue')
   @ApiOperation({
-    summary:
-      'Điều khiển bulk nhiều entities của thiết bị',
+    summary: 'Điều khiển bulk nhiều entities của thiết bị',
     description:
       'Gửi lệnh cho nhiều entities cùng lúc (VD: bật + chỉnh độ sáng)',
   })

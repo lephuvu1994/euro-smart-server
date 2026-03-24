@@ -31,27 +31,26 @@ enum DeviceProtocol {
   VIRTUAL
 }
 
-// Loại feature (nút bấm, cảm biến...)
-enum FeatureType {
-  BINARY    // Bật/Tắt (0/1)
-  DIMMER    // Thanh trượt (0-100)
-  SENSOR    // Chỉ đọc (Nhiệt độ, độ ẩm...)
-  TEXT      // Dạng chữ
-  COLOR     // Chỉnh màu (RGB/HEX)
-  CAMERA    // Stream
-  SHUTTER
-  BUTTON
-  CONFIG
+// Domain của entity (tương đương HA entity domain)
+enum EntityDomain {
+  light       // Đèn: on/off + brightness + color + color_temp
+  switch_     // Công tắc: on/off
+  sensor      // Cảm biến: read-only values
+  camera      // Camera: stream
+  lock        // Khoá: lock/unlock
+  curtain     // Rèm/cửa cuốn: open/close/stop + position
+  climate     // Điều hoà: on/off + temp + mode + fan
+  button      // Nút bấm: trigger action
 }
 
-enum DeviceFeatureCategory {
-  light
-  switch
-  sensor
-  camera
-  lock
-  curtain
-  climate
+// Loại giá trị attribute
+enum AttributeValueType {
+  BOOLEAN     // true/false
+  NUMBER      // integer/float
+  STRING      // text
+  ENUM        // one of predefined values
+  COLOR       // hex/rgb
+  JSON        // complex object
 }
 
 // ==========================================
@@ -142,9 +141,9 @@ model DeviceModel {
   name        String   // VD: "Công tắc WiFi 4 nút"
   description String?
 
-  // [BLUEPRINT] JSON quy định tính năng
-  // VD: [{ "code": "sw1", "type": "BINARY", "name": "Nút 1" }]
-  featuresConfig Json    @default("[]") @db.JsonB @map("features_config")
+  // [BLUEPRINT v2] JSON quy định entities + attributes
+  // VD: { "entities": [{ "code": "channel_1", "domain": "light", "attributes": [...] }] }
+  featuresConfig Json    @default("{}") @db.JsonB @map("features_config")
 
   quotas      LicenseQuota[]
   hardwares   HardwareRegistry[]
@@ -263,9 +262,8 @@ model Device {
   // Thứ tự hiển thị (Owner's sort order)
   sortOrder    Int      @default(0) @map("sort_order")
 
-  // Dữ liệu runtime
-  features     DeviceFeature[]
-  params       DeviceParam[]
+  // Dữ liệu runtime (HA-style 3-tier: Device → Entity → Attribute)
+  entities     DeviceEntity[]
 
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
@@ -277,64 +275,85 @@ model Device {
   @@map("t_device")
 }
 
-model DeviceFeature {
-  id          String   @id @default(uuid()) @db.Uuid
+// HA-style Entity: đại diện 1 unit điều khiển (kênh đèn, kênh switch, cảm biến...)
+model DeviceEntity {
+  id            String       @id @default(uuid()) @db.Uuid
 
-  // Mã code tính năng (VD: switch_1). Map từ JSON Config của Model
-  code        String
-  name        String   // Tên hiển thị (VD: Đèn trần)
+  // Mã entity (VD: channel_1, main, sensor_temp)
+  code          String
+  name          String       // Tên hiển thị (VD: Kênh 1, Đèn chính)
+  domain        EntityDomain // light, switch_, sensor, climate...
 
-  // Metadata
-  category    DeviceFeatureCategory
-  type        FeatureType // BINARY, DIMMER...
+  // Primary state (tương đương HA entity state)
+  state         Float?       // Giá trị số (0/1 cho on/off, 24 cho temp...)
+  stateText     String?      @map("state_text") // Giá trị text ("cool", "#FF0000"...)
 
-  min         Float?
-  max         Float?
-  unit        String?
-  readOnly   Boolean  @default(false) @map("read_only")
+  // MQTT config cho primary state
+  commandKey    String?      @map("command_key")     // VD: "state"
+  commandSuffix String?      @map("command_suffix")  // VD: "set"
 
-  // Giá trị hiện tại (Runtime Value)
-  lastValue  Float?   // Dùng cho dạng số @map("last_value")
-  lastValueString String? // Dùng cho dạng text/color @map("last_value_string")
+  // Read-only flag (cho sensor entities)
+  readOnly      Boolean      @default(false) @map("read_only")
 
   // Quan hệ
-  deviceId   String   @db.Uuid @map("device_id")
-  device      Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  deviceId      String       @db.Uuid @map("device_id")
+  device        Device       @relation(fields: [deviceId], references: [id], onDelete: Cascade)
 
-  // Lịch sử trạng thái
-  states      DeviceFeatureState[]
-  // 🔥 CỘT QUAN TRỌNG NHẤT
-  // Lưu: { "embedded_keys": ["start_hour"...], "command_key": "state" }
-  config    Json?    @default("{}")
+  attributes    EntityAttribute[]
+  stateHistory  EntityStateHistory[]
 
-  // Mỗi thiết bị chỉ có 1 feature code duy nhất (VD: Device A chỉ có 1 nút 'switch_1')
+  sortOrder     Int          @default(0) @map("sort_order")
+
   @@unique([deviceId, code])
-  @@map("t_device_feature")
+  @@index([deviceId])
+  @@map("t_device_entity")
 }
 
-model DeviceFeatureState {
-  id         String   @default(uuid()) @db.Uuid
+// Entity Attribute: thuộc tính phụ (brightness, color_temp, mode...)
+model EntityAttribute {
+  id          String              @id @default(uuid()) @db.Uuid
+
+  key         String              // VD: "brightness", "color_temp", "mode"
+  name        String              // VD: "Độ sáng", "Nhiệt độ màu"
+  valueType   AttributeValueType  @map("value_type")
+
+  // Giá trị hiện tại
+  numValue    Float?              @map("num_value")
+  strValue    String?             @map("str_value")
+
+  // Constraints
+  min         Float?
+  max         Float?
+  unit        String?             // "%", "°C", "K"
+  readOnly    Boolean             @default(false) @map("read_only")
+  enumValues  String[]            @default([]) @map("enum_values") // ["cool","heat","auto"]
+
+  // MQTT config (commandKey cho attribute nếu khác entity commandKey)
+  config      Json?               @default("{}")
+
+  // Quan hệ
+  entityId    String              @db.Uuid @map("entity_id")
+  entity      DeviceEntity        @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@unique([entityId, key])
+  @@index([entityId])
+  @@map("t_entity_attribute")
+}
+
+// Lịch sử trạng thái entity (thay thế DeviceFeatureState)
+model EntityStateHistory {
+  id         String       @default(uuid()) @db.Uuid
   value      Float?
-  valueText String? @map("value_text")
+  valueText  String?      @map("value_text")
 
-  featureId String   @db.Uuid @map("feature_id")
-  feature    DeviceFeature @relation(fields: [featureId], references: [id], onDelete: Cascade)
+  entityId   String       @db.Uuid @map("entity_id")
+  entity     DeviceEntity @relation(fields: [entityId], references: [id], onDelete: Cascade)
 
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt  DateTime     @default(now()) @map("created_at")
 
   @@id([id, createdAt])
-  @@index([featureId, createdAt(sort: Desc)])
-  @@map("t_device_feature_state")
-}
-
-model DeviceParam {
-  id        String   @id @default(uuid()) @db.Uuid
-  name      String
-  value     String
-  deviceId String   @db.Uuid @map("device_id")
-  device    Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
-
-  @@map("t_device_param")
+  @@index([entityId, createdAt(sort: Desc)])
+  @@map("t_entity_state_history")
 }
 
 model DeviceShare {

@@ -4,6 +4,26 @@ import { RedisService } from '@app/redis-cache';
 import { RegisterDeviceDto } from '../dto/register-device.dto';
 import { v4 as uuidv4 } from 'uuid';
 
+/**
+ * Blueprint v2 entity format (from DeviceModel.featuresConfig):
+ * {
+ *   "entities": [
+ *     {
+ *       "code": "channel_1",
+ *       "name": "Kênh 1",
+ *       "domain": "light",
+ *       "commandKey": "state",
+ *       "commandSuffix": "set",
+ *       "readOnly": false,
+ *       "attributes": [
+ *         { "key": "brightness", "name": "Độ sáng", "valueType": "NUMBER", "min": 0, "max": 100, "unit": "%" },
+ *         { "key": "color_temp", "name": "Nhiệt độ màu", "valueType": "NUMBER", "min": 2700, "max": 6500, "unit": "K" }
+ *       ]
+ *     }
+ *   ]
+ * }
+ */
+
 @Injectable()
 export class DeviceProvisioningService {
   constructor(
@@ -11,7 +31,7 @@ export class DeviceProvisioningService {
     private readonly redisService: RedisService,
   ) {}
 
-  // ─── EXISTING: App trực tiếp register (flow BLE cũ) ───────
+  // ─── App trực tiếp register (flow BLE/Provision Token) ───────
   async registerAndClaim(userId: string, dto: RegisterDeviceDto) {
     if (!userId) throw new BadRequestException('User không hợp lệ');
 
@@ -44,7 +64,6 @@ export class DeviceProvisioningService {
           });
 
           if (oldDevice) {
-            // Lưu lại info để cleanup Redis sau transaction
             redisCleanup = {
               oldToken: oldDevice.token,
               oldDeviceId: oldDevice.id,
@@ -75,27 +94,32 @@ export class DeviceProvisioningService {
           });
         }
 
-        // featuresConfig là array trực tiếp (từ DeviceModel)
-        const rawFeatures = Array.isArray(model.featuresConfig) ? model.featuresConfig : [];
-        const featuresToCreate = rawFeatures.map((f: any) => {
-          const featureMetaConfig = {
-            commandKey: f.command_key || f.commandKey || null,
-            commandSuffix: f.command_suffix || f.commandSuffix || null,
-            embeddedKeys: f.embedded_keys || f.embeddedKeys || [],
-            values: f.values || [],
-          };
+        // ─── Blueprint v2: parse entities from DeviceModel.featuresConfig ───
+        const blueprint = model.featuresConfig as any;
+        const rawEntities = blueprint?.entities ?? [];
 
-          return {
-            code: f.code,
-            name: f.name,
-            type: f.type,
-            readOnly: f.read_only ?? f.readOnly ?? false,
-            category: f.category || 'switch',
-            lastValue: null,
-            lastValueString: '{}',
-            config: featureMetaConfig,
-          };
-        });
+        const entitiesToCreate = rawEntities.map((e: any, idx: number) => ({
+          code: e.code,
+          name: e.name,
+          domain: e.domain,
+          commandKey: e.commandKey ?? e.command_key ?? null,
+          commandSuffix: e.commandSuffix ?? e.command_suffix ?? 'set',
+          readOnly: e.readOnly ?? e.read_only ?? false,
+          sortOrder: idx,
+          attributes: {
+            create: (e.attributes ?? []).map((a: any) => ({
+              key: a.key,
+              name: a.name,
+              valueType: a.valueType ?? a.value_type ?? 'STRING',
+              min: a.min ?? null,
+              max: a.max ?? null,
+              unit: a.unit ?? null,
+              readOnly: a.readOnly ?? a.read_only ?? false,
+              enumValues: a.enumValues ?? a.enum_values ?? [],
+              config: a.config ?? {},
+            })),
+          },
+        }));
 
         const newDevice = await tx.device.create({
           data: {
@@ -109,9 +133,14 @@ export class DeviceProvisioningService {
             owner: { connect: { id: userId } },
             home: dto.homeId ? { connect: { id: dto.homeId } } : undefined,
             room: dto.roomId ? { connect: { id: dto.roomId } } : undefined,
-            features: { create: featuresToCreate },
+            entities: { create: entitiesToCreate },
           },
-          include: { features: true },
+          include: {
+            entities: {
+              include: { attributes: true },
+              orderBy: { sortOrder: 'asc' },
+            },
+          },
         });
 
         // Query license days from quota
@@ -129,7 +158,7 @@ export class DeviceProvisioningService {
           device: {
             id: newDevice.id,
             name: newDevice.name,
-            features: newDevice.features,
+            entities: newDevice.entities,
           },
           mqtt_broker: process.env.MQTT_HOST,
           mqtt_token_device: newDeviceToken,
@@ -157,7 +186,8 @@ export class DeviceProvisioningService {
       }
 
       if (redisCleanup.oldDeviceId) {
-        const trackingKey = `device:${redisCleanup.oldDeviceId}:_fkeys`;
+        // Updated Redis key convention: _ekeys instead of _fkeys
+        const trackingKey = `device:${redisCleanup.oldDeviceId}:_ekeys`;
         cleanupTasks.push(
           this.redisService
             .smembers(trackingKey)

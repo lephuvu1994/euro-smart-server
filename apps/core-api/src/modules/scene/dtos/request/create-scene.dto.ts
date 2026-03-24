@@ -12,18 +12,18 @@ import {
 import { Type } from 'class-transformer';
 import { SceneTriggerItemDto } from './scene-trigger.dto';
 
-/** Một action trong scene: điều khiển 1 feature của 1 thiết bị */
+/** Một action trong scene: điều khiển 1 entity của 1 thiết bị */
 export class SceneActionItemDto {
   @ApiProperty({ description: 'Token thiết bị' })
   @IsString()
   deviceToken: string;
 
-  @ApiProperty({ description: 'Mã feature (vd: sw1, dim1)' })
+  @ApiProperty({ description: 'Mã entity (vd: channel_1, main)' })
   @IsString()
-  featureCode: string;
+  entityCode: string;
 
   @ApiProperty({
-    description: 'Giá trị (số, boolean, string tùy loại feature)',
+    description: 'Giá trị (số, boolean, string tùy loại entity)',
   })
   value: any;
 }
@@ -62,8 +62,8 @@ export class CreateSceneDto {
       'Danh sách action khi chạy scene (Gladys/Home Assistant style)',
     type: [SceneActionItemDto],
     example: [
-      { deviceToken: 'device-abc', featureCode: 'sw1', value: 1 },
-      { deviceToken: 'device-abc', featureCode: 'dim1', value: 80 },
+      { deviceToken: 'device-abc', entityCode: 'channel_1', value: 1 },
+      { deviceToken: 'device-abc', entityCode: 'channel_2', value: 80 },
     ],
   })
   @IsArray()

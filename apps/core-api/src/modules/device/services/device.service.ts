@@ -45,7 +45,7 @@ export class DeviceService {
       }
     }
 
-    // 1. Lấy khung dữ liệu từ DB
+    // 1. Lấy khung dữ liệu từ DB — entity-based
     const [devices, total] = await Promise.all([
       this.db.device.findMany({
         where: {
@@ -53,7 +53,10 @@ export class DeviceService {
           ...(homeId && { homeId: homeId }),
         },
         include: {
-          features: true,
+          entities: {
+            include: { attributes: true },
+            orderBy: { sortOrder: 'asc' },
+          },
           room: { select: { id: true, name: true } },
           deviceModel: { select: { code: true, name: true } },
         },
@@ -70,41 +73,57 @@ export class DeviceService {
       return { data: [], meta: { total, page, lastPage: 0 } };
     }
 
-    // 2. Sử dụng Redis Pipeline để lấy Status và Shadow của tất cả device trong 1 lần gọi
-    // Thay vì loop 10 lần gọi 10 lệnh Redis, ta gọi 1 lần duy nhất.
+    // 2. Redis Pipeline: lấy Status và Shadow cho tất cả device
     const pipeline = this.redis.getClient().pipeline();
 
     devices.forEach((device) => {
-      pipeline.get(`status:${device.token}`); // Lấy online/offline
-      pipeline.hgetall(`shadow:${device.token}`); // Lấy các giá trị tính năng
+      pipeline.get(`status:${device.token}`);
+      pipeline.hgetall(`shadow:${device.token}`);
     });
 
     const results = await pipeline.exec();
 
-    // 3. Hydrate (Trộn) dữ liệu DB và Redis
+    // 3. Hydrate: trộn DB entities + Redis state
     const enrichedDevices = devices.map((device, index) => {
       const status = (results?.[index * 2]?.[1] as string) || 'offline';
       const shadow =
         (results?.[index * 2 + 1]?.[1] as Record<string, string>) || {};
 
-      const features = device.features.map((f) => {
-        let currentValue: any = null;
-
-        // Ưu tiên lấy từ Shadow Redis
-        if (shadow[f.code]) {
+      const entities = device.entities.map((entity) => {
+        // Hydrate entity primary state from shadow
+        let currentState: any = entity.state;
+        if (entity.commandKey && shadow[entity.commandKey] !== undefined) {
           try {
-            currentValue = JSON.parse(shadow[f.code]);
+            currentState = JSON.parse(shadow[entity.commandKey]);
           } catch {
-            currentValue = shadow[f.code];
+            currentState = shadow[entity.commandKey];
           }
-        } else {
-          // Nếu Redis chưa có (thiết bị mới), lấy từ DB
-          currentValue = f.lastValue !== null ? f.lastValue : f.lastValueString;
         }
 
+        // Hydrate attributes from shadow
+        const attributes = entity.attributes.map((attr) => {
+          let currentValue: any = attr.numValue ?? attr.strValue;
+          const attrConfig = attr.config as any;
+          const attrCommandKey = attrConfig?.commandKey ?? attr.key;
+
+          if (shadow[attrCommandKey] !== undefined) {
+            try {
+              currentValue = JSON.parse(shadow[attrCommandKey]);
+            } catch {
+              currentValue = shadow[attrCommandKey];
+            }
+          }
+
+          return {
+            ...attr,
+            currentValue,
+          };
+        });
+
         return {
-          ...f,
-          currentValue: currentValue,
+          ...entity,
+          currentState,
+          attributes,
         };
       });
 
@@ -120,7 +139,7 @@ export class DeviceService {
         ownership: 'OWNER' as const,
         sortOrder: device.sortOrder,
         room: device.room,
-        features,
+        entities,
       };
     });
 
@@ -135,14 +154,16 @@ export class DeviceService {
   }
 
   async getDeviceDetail(deviceId: string, userId: string) {
-    // 1. Lấy thông tin tĩnh từ Database (tìm by device ID)
     const device = await this.db.device.findFirst({
       where: {
         id: deviceId,
-        ownerId: userId, // Bảo mật: Chỉ chủ sở hữu mới được xem
+        ownerId: userId,
       },
       include: {
-        features: true,
+        entities: {
+          include: { attributes: true },
+          orderBy: { sortOrder: 'asc' },
+        },
         room: { select: { name: true } },
         deviceModel: { select: { name: true, code: true } },
       },
@@ -152,8 +173,7 @@ export class DeviceService {
       throw new NotFoundException('Không tìm thấy thiết bị');
     }
 
-    // 2. Lấy trạng thái thời gian thực từ Redis
-    // Dùng Pipeline để lấy cả status và shadow trong 1 nốt nhạc
+    // Redis: lấy status và shadow
     const [statusRes, shadowRes] = await this.redis
       .getClient()
       .pipeline()
@@ -164,51 +184,55 @@ export class DeviceService {
     const status = (statusRes?.[1] as string) || 'offline';
     const shadow = (shadowRes?.[1] as Record<string, string>) || {};
 
-    // 3. Trộn dữ liệu (Data Hydration)
-    const features = device.features.map((f) => {
-      let currentValue: any = null;
-
-      // Kiểm tra xem Redis có giá trị mới nhất không
-      if (shadow[f.code]) {
+    // Hydrate entities
+    const entities = device.entities.map((entity) => {
+      let currentState: any = entity.state;
+      if (entity.commandKey && shadow[entity.commandKey] !== undefined) {
         try {
-          // Parse vì chúng ta lưu JSON string trong Redis Hash
-          currentValue = JSON.parse(shadow[f.code]);
+          currentState = JSON.parse(shadow[entity.commandKey]);
         } catch {
-          currentValue = shadow[f.code];
+          currentState = shadow[entity.commandKey];
         }
-      } else {
-        // Fallback về DB nếu Redis rỗng (thiết bị chưa bao giờ gửi data)
-        currentValue = f.lastValue !== null ? f.lastValue : f.lastValueString;
       }
 
-      return {
-        ...f,
-        currentValue: currentValue,
-      };
+      const attributes = entity.attributes.map((attr) => {
+        let currentValue: any = attr.numValue ?? attr.strValue;
+        const attrConfig = attr.config as any;
+        const attrCommandKey = attrConfig?.commandKey ?? attr.key;
+
+        if (shadow[attrCommandKey] !== undefined) {
+          try {
+            currentValue = JSON.parse(shadow[attrCommandKey]);
+          } catch {
+            currentValue = shadow[attrCommandKey];
+          }
+        }
+
+        return { ...attr, currentValue };
+      });
+
+      return { ...entity, currentState, attributes };
     });
 
     return {
       ...device,
       status,
-      features,
+      entities,
     };
   }
 
   /**
    * Siri Sync: trả về tất cả devices + scenes cho user
-   * Dùng bởi iOS native module để đăng ký Siri Shortcuts / INInteraction
    */
   async getSiriSyncData(userId: string) {
-    // 1. Get all devices owned by user
     const devices = await this.db.device.findMany({
       where: { ownerId: userId },
       include: {
-        features: {
+        entities: {
           select: {
             code: true,
             name: true,
-            type: true,
-            category: true,
+            domain: true,
           },
         },
         room: { select: { id: true, name: true } },
@@ -217,7 +241,6 @@ export class DeviceService {
       orderBy: { createdAt: 'desc' },
     });
 
-    // 2. Get online status from Redis (pipeline)
     const pipeline = this.redis.getClient().pipeline();
     devices.forEach((d) => pipeline.get(`status:${d.token}`));
     const statusResults = await pipeline.exec();
@@ -232,15 +255,13 @@ export class DeviceService {
       room: d.room?.name || null,
       roomId: d.room?.id || null,
       status: (statusResults?.[i]?.[1] as string) || 'offline',
-      features: d.features.map((f) => ({
-        code: f.code,
-        name: f.name,
-        type: f.type,
-        category: f.category,
+      entities: d.entities.map((e) => ({
+        code: e.code,
+        name: e.name,
+        domain: e.domain,
       })),
     }));
 
-    // 3. Get all scenes from user's homes
     const homes = await this.db.home.findMany({
       where: {
         OR: [{ ownerId: userId }, { members: { some: { userId } } }],
@@ -255,11 +276,7 @@ export class DeviceService {
         homeId: { in: homeIds },
         active: true,
       },
-      select: {
-        id: true,
-        name: true,
-        homeId: true,
-      },
+      select: { id: true, name: true, homeId: true },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -277,12 +294,7 @@ export class DeviceService {
   // DEVICE UI CONFIG (Redis cache + DB fallback)
   // ──────────────────────────────────────────────
 
-  /**
-   * Get device UI configs for app rendering.
-   * Flow: Redis cache → DB → seed default values.
-   */
   async getDeviceUiConfigs(): Promise<DeviceUiConfig[]> {
-    // 1. Try Redis cache first
     const cached = await this.redis.get(DEVICE_UI_CONFIG_REDIS_KEY);
     if (cached) {
       try {
@@ -292,7 +304,6 @@ export class DeviceService {
       }
     }
 
-    // 2. Fallback to DB
     const dbConfig = await this.db.systemConfig.findUnique({
       where: { key: DEVICE_UI_CONFIG_KEY },
     });
@@ -300,7 +311,6 @@ export class DeviceService {
     if (dbConfig?.value) {
       try {
         const configs = JSON.parse(dbConfig.value) as DeviceUiConfig[];
-        // Write to Redis cache (no TTL — manual refresh)
         await this.redis.set(DEVICE_UI_CONFIG_REDIS_KEY, dbConfig.value);
         return configs;
       } catch {
@@ -308,7 +318,6 @@ export class DeviceService {
       }
     }
 
-    // 3. Seed defaults → DB + Redis
     const defaultJson = JSON.stringify(DEFAULT_DEVICE_UI_CONFIGS);
     await this.db.systemConfig.upsert({
       where: { key: DEVICE_UI_CONFIG_KEY },
@@ -324,10 +333,6 @@ export class DeviceService {
     return DEFAULT_DEVICE_UI_CONFIGS;
   }
 
-  /**
-   * Refresh Redis cache from DB.
-   * Called after admin updates the config via dashboard.
-   */
   async refreshDeviceUiConfigCache(): Promise<{ message: string }> {
     const dbConfig = await this.db.systemConfig.findUnique({
       where: { key: DEVICE_UI_CONFIG_KEY },
@@ -336,7 +341,6 @@ export class DeviceService {
     if (dbConfig?.value) {
       await this.redis.set(DEVICE_UI_CONFIG_REDIS_KEY, dbConfig.value);
     } else {
-      // No config in DB, seed defaults
       const defaultJson = JSON.stringify(DEFAULT_DEVICE_UI_CONFIGS);
       await this.db.systemConfig.upsert({
         where: { key: DEVICE_UI_CONFIG_KEY },

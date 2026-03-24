@@ -1,0 +1,60 @@
+{
+  "modelCode": "DIMMER_LIGHT",
+  "modelName": "Đèn Dimmer (Độ sáng + Màu sắc)",
+  "protocol": "MQTT",
+  "entities": [
+    {
+      "code": "main",
+      "name": "Đèn",
+      "domain": "light",
+      "commandKey": "state",
+      "commandSuffix": "/set",
+      "readOnly": false,
+      "sortOrder": 0,
+      "attributes": [
+        {
+          "key": "brightness",
+          "name": "Độ sáng",
+          "valueType": "INTEGER",
+          "min": 0,
+          "max": 100,
+          "unit": "%",
+          "readOnly": false,
+          "commandKey": "brightness"
+        },
+        {
+          "key": "color_temp",
+          "name": "Nhiệt độ màu",
+          "valueType": "INTEGER",
+          "min": 2700,
+          "max": 6500,
+          "unit": "K",
+          "readOnly": false,
+          "commandKey": "color_temp"
+        },
+        {
+          "key": "color_hs",
+          "name": "Màu sắc (Hue/Saturation)",
+          "valueType": "STRING",
+          "readOnly": false,
+          "commandKey": "color_hs"
+        },
+        {
+          "key": "color_rgb",
+          "name": "Màu sắc (RGB)",
+          "valueType": "STRING",
+          "readOnly": false,
+          "commandKey": "color_rgb"
+        },
+        {
+          "key": "effect",
+          "name": "Hiệu ứng",
+          "valueType": "ENUM",
+          "enumValues": ["none", "colorloop", "random", "strobe", "flashing"],
+          "readOnly": false,
+          "commandKey": "effect"
+        }
+      ]
+    }
+  ]
+}

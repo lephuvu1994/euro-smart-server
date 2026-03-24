@@ -1,0 +1,68 @@
+{
+  "modelCode": "CLIMATE_AC",
+  "modelName": "Điều hoà (IR Control)",
+  "protocol": "MQTT",
+  "entities": [
+    {
+      "code": "main",
+      "name": "Điều hoà",
+      "domain": "climate",
+      "commandKey": "power",
+      "commandSuffix": "/set",
+      "readOnly": false,
+      "sortOrder": 0,
+      "attributes": [
+        {
+          "key": "temperature",
+          "name": "Nhiệt độ mục tiêu",
+          "valueType": "FLOAT",
+          "min": 16,
+          "max": 30,
+          "unit": "°C",
+          "readOnly": false,
+          "commandKey": "temperature"
+        },
+        {
+          "key": "current_temperature",
+          "name": "Nhiệt độ hiện tại",
+          "valueType": "FLOAT",
+          "unit": "°C",
+          "readOnly": true,
+          "commandKey": "current_temperature"
+        },
+        {
+          "key": "hvac_mode",
+          "name": "Chế độ",
+          "valueType": "ENUM",
+          "enumValues": ["off", "cool", "heat", "auto", "dry", "fan_only"],
+          "readOnly": false,
+          "commandKey": "mode"
+        },
+        {
+          "key": "fan_mode",
+          "name": "Tốc độ quạt",
+          "valueType": "ENUM",
+          "enumValues": ["auto", "low", "medium", "high"],
+          "readOnly": false,
+          "commandKey": "fan_speed"
+        },
+        {
+          "key": "swing_mode",
+          "name": "Hướng gió",
+          "valueType": "ENUM",
+          "enumValues": ["off", "vertical", "horizontal", "both"],
+          "readOnly": false,
+          "commandKey": "swing"
+        },
+        {
+          "key": "current_humidity",
+          "name": "Độ ẩm hiện tại",
+          "valueType": "FLOAT",
+          "unit": "%",
+          "readOnly": true,
+          "commandKey": "current_humidity"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,91 @@
+{
+  "modelCode": "CAMERA_IP",
+  "modelName": "Camera IP",
+  "protocol": "MQTT",
+  "entities": [
+    {
+      "code": "stream",
+      "name": "Camera",
+      "domain": "camera",
+      "commandKey": "stream",
+      "readOnly": true,
+      "sortOrder": 0,
+      "attributes": [
+        {
+          "key": "stream_url",
+          "name": "URL luồng",
+          "valueType": "STRING",
+          "readOnly": true,
+          "commandKey": "stream_url"
+        },
+        {
+          "key": "resolution",
+          "name": "Độ phân giải",
+          "valueType": "ENUM",
+          "enumValues": ["720p", "1080p", "2K", "4K"],
+          "readOnly": false,
+          "commandKey": "resolution"
+        }
+      ]
+    },
+    {
+      "code": "motion",
+      "name": "Phát hiện chuyển động",
+      "domain": "binary_sensor",
+      "commandKey": "motion",
+      "readOnly": true,
+      "sortOrder": 1,
+      "attributes": []
+    },
+    {
+      "code": "ptz",
+      "name": "Xoay camera (PTZ)",
+      "domain": "camera",
+      "commandKey": "ptz",
+      "commandSuffix": "/set",
+      "readOnly": false,
+      "sortOrder": 2,
+      "attributes": [
+        {
+          "key": "pan",
+          "name": "Ngang",
+          "valueType": "INTEGER",
+          "min": -180,
+          "max": 180,
+          "unit": "°",
+          "readOnly": false,
+          "commandKey": "pan"
+        },
+        {
+          "key": "tilt",
+          "name": "Dọc",
+          "valueType": "INTEGER",
+          "min": -90,
+          "max": 90,
+          "unit": "°",
+          "readOnly": false,
+          "commandKey": "tilt"
+        },
+        {
+          "key": "zoom",
+          "name": "Zoom",
+          "valueType": "INTEGER",
+          "min": 1,
+          "max": 10,
+          "readOnly": false,
+          "commandKey": "zoom"
+        }
+      ]
+    },
+    {
+      "code": "siren",
+      "name": "Còi báo động",
+      "domain": "siren",
+      "commandKey": "siren",
+      "commandSuffix": "/set",
+      "readOnly": false,
+      "sortOrder": 3,
+      "attributes": []
+    }
+  ]
+}

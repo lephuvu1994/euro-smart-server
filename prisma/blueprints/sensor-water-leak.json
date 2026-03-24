@@ -1,0 +1,25 @@
+{
+  "modelCode": "SENSOR_WATER_LEAK",
+  "modelName": "Cảm biến rò rỉ nước",
+  "protocol": "ZIGBEE",
+  "entities": [
+    {
+      "code": "water_leak",
+      "name": "Rò rỉ nước",
+      "domain": "binary_sensor",
+      "commandKey": "water_leak",
+      "readOnly": true,
+      "sortOrder": 0,
+      "attributes": []
+    },
+    {
+      "code": "battery",
+      "name": "Pin",
+      "domain": "sensor",
+      "commandKey": "battery",
+      "readOnly": true,
+      "sortOrder": 1,
+      "attributes": []
+    }
+  ]
+}

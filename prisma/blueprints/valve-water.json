@@ -1,0 +1,34 @@
+{
+  "modelCode": "VALVE_WATER",
+  "modelName": "Van nước thông minh",
+  "protocol": "MQTT",
+  "entities": [
+    {
+      "code": "main",
+      "name": "Van nước",
+      "domain": "valve",
+      "commandKey": "state",
+      "commandSuffix": "/set",
+      "readOnly": false,
+      "sortOrder": 0,
+      "attributes": [
+        {
+          "key": "flow_rate",
+          "name": "Lưu lượng",
+          "valueType": "FLOAT",
+          "unit": "L/min",
+          "readOnly": true,
+          "commandKey": "flow_rate"
+        },
+        {
+          "key": "total_consumption",
+          "name": "Tổng lượng nước",
+          "valueType": "FLOAT",
+          "unit": "L",
+          "readOnly": true,
+          "commandKey": "total_consumption"
+        }
+      ]
+    }
+  ]
+}

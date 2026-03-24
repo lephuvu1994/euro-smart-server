@@ -1,0 +1,52 @@
+{
+  "modelCode": "DOORBELL",
+  "modelName": "Chuông cửa thông minh",
+  "protocol": "MQTT",
+  "entities": [
+    {
+      "code": "button",
+      "name": "Nút chuông",
+      "domain": "binary_sensor",
+      "commandKey": "press",
+      "readOnly": true,
+      "sortOrder": 0,
+      "attributes": []
+    },
+    {
+      "code": "camera",
+      "name": "Camera",
+      "domain": "camera",
+      "commandKey": "stream",
+      "readOnly": true,
+      "sortOrder": 1,
+      "attributes": [
+        {
+          "key": "stream_url",
+          "name": "URL luồng",
+          "valueType": "STRING",
+          "readOnly": true,
+          "commandKey": "stream_url"
+        }
+      ]
+    },
+    {
+      "code": "lock",
+      "name": "Mở khoá cửa",
+      "domain": "lock",
+      "commandKey": "lock_state",
+      "commandSuffix": "/set",
+      "readOnly": false,
+      "sortOrder": 2,
+      "attributes": []
+    },
+    {
+      "code": "battery",
+      "name": "Pin",
+      "domain": "sensor",
+      "commandKey": "battery",
+      "readOnly": true,
+      "sortOrder": 3,
+      "attributes": []
+    }
+  ]
+}

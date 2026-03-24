@@ -1,0 +1,17 @@
+{
+  "modelCode": "SWITCH_1CH",
+  "modelName": "Công tắc 1 nút",
+  "protocol": "MQTT",
+  "entities": [
+    {
+      "code": "channel_1",
+      "name": "Công tắc",
+      "domain": "switch_",
+      "commandKey": "switch_1",
+      "commandSuffix": "/set",
+      "readOnly": false,
+      "sortOrder": 0,
+      "attributes": []
+    }
+  ]
+}

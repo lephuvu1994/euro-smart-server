@@ -1,0 +1,98 @@
+{
+  "modelCode": "IR_REMOTE",
+  "modelName": "Điều khiển hồng ngoại (IR Blaster)",
+  "protocol": "MQTT",
+  "entities": [
+    {
+      "code": "ac",
+      "name": "Điều hoà",
+      "domain": "climate",
+      "commandKey": "ac_power",
+      "commandSuffix": "/ir/send",
+      "readOnly": false,
+      "sortOrder": 0,
+      "attributes": [
+        {
+          "key": "temperature",
+          "name": "Nhiệt độ",
+          "valueType": "INTEGER",
+          "min": 16,
+          "max": 30,
+          "unit": "°C",
+          "readOnly": false,
+          "commandKey": "ac_temperature"
+        },
+        {
+          "key": "mode",
+          "name": "Chế độ",
+          "valueType": "ENUM",
+          "enumValues": ["cool", "heat", "auto", "dry", "fan_only"],
+          "readOnly": false,
+          "commandKey": "ac_mode"
+        },
+        {
+          "key": "fan_speed",
+          "name": "Tốc độ quạt",
+          "valueType": "ENUM",
+          "enumValues": ["auto", "low", "medium", "high"],
+          "readOnly": false,
+          "commandKey": "ac_fan"
+        }
+      ]
+    },
+    {
+      "code": "tv",
+      "name": "TV",
+      "domain": "media_player",
+      "commandKey": "tv_power",
+      "commandSuffix": "/ir/send",
+      "readOnly": false,
+      "sortOrder": 1,
+      "attributes": [
+        {
+          "key": "volume",
+          "name": "Âm lượng",
+          "valueType": "INTEGER",
+          "min": 0,
+          "max": 100,
+          "readOnly": false,
+          "commandKey": "tv_volume"
+        },
+        {
+          "key": "source",
+          "name": "Nguồn",
+          "valueType": "ENUM",
+          "enumValues": ["hdmi1", "hdmi2", "hdmi3", "tv", "av"],
+          "readOnly": false,
+          "commandKey": "tv_source"
+        }
+      ]
+    },
+    {
+      "code": "fan_ir",
+      "name": "Quạt (IR)",
+      "domain": "fan",
+      "commandKey": "fan_power",
+      "commandSuffix": "/ir/send",
+      "readOnly": false,
+      "sortOrder": 2,
+      "attributes": [
+        {
+          "key": "speed",
+          "name": "Tốc độ",
+          "valueType": "ENUM",
+          "enumValues": ["low", "medium", "high"],
+          "readOnly": false,
+          "commandKey": "fan_speed"
+        },
+        {
+          "key": "swing",
+          "name": "Xoay",
+          "valueType": "BOOLEAN",
+          "readOnly": false,
+          "commandKey": "fan_swing"
+        }
+      ]
+    }
+  ]
+}

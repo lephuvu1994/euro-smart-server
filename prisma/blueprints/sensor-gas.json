@@ -1,0 +1,25 @@
+{
+  "modelCode": "SENSOR_GAS",
+  "modelName": "Cảm biến Gas",
+  "protocol": "ZIGBEE",
+  "entities": [
+    {
+      "code": "gas",
+      "name": "Gas",
+      "domain": "binary_sensor",
+      "commandKey": "gas",
+      "readOnly": true,
+      "sortOrder": 0,
+      "attributes": [
+        {
+          "key": "gas_value",
+          "name": "Nồng độ gas",
+          "valueType": "INTEGER",
+          "unit": "ppm",
+          "readOnly": true,
+          "commandKey": "gas_value"
+        }
+      ]
+    }
+  ]
+}

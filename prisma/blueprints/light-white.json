@@ -1,0 +1,28 @@
+{
+  "modelCode": "LIGHT_WHITE",
+  "modelName": "Đèn trắng (chỉ Dimmer)",
+  "protocol": "MQTT",
+  "entities": [
+    {
+      "code": "main",
+      "name": "Đèn",
+      "domain": "light",
+      "commandKey": "state",
+      "commandSuffix": "/set",
+      "readOnly": false,
+      "sortOrder": 0,
+      "attributes": [
+        {
+          "key": "brightness",
+          "name": "Độ sáng",
+          "valueType": "INTEGER",
+          "min": 0,
+          "max": 100,
+          "unit": "%",
+          "readOnly": false,
+          "commandKey": "brightness"
+        }
+      ]
+    }
+  ]
+}

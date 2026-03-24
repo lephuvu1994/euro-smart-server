@@ -1,0 +1,47 @@
+{
+  "modelCode": "SWITCH_4CH",
+  "modelName": "Công tắc 4 nút",
+  "protocol": "MQTT",
+  "entities": [
+    {
+      "code": "channel_1",
+      "name": "Kênh 1",
+      "domain": "switch_",
+      "commandKey": "switch_1",
+      "commandSuffix": "/set",
+      "readOnly": false,
+      "sortOrder": 0,
+      "attributes": []
+    },
+    {
+      "code": "channel_2",
+      "name": "Kênh 2",
+      "domain": "switch_",
+      "commandKey": "switch_2",
+      "commandSuffix": "/set",
+      "readOnly": false,
+      "sortOrder": 1,
+      "attributes": []
+    },
+    {
+      "code": "channel_3",
+      "name": "Kênh 3",
+      "domain": "switch_",
+      "commandKey": "switch_3",
+      "commandSuffix": "/set",
+      "readOnly": false,
+      "sortOrder": 2,
+      "attributes": []
+    },
+    {
+      "code": "channel_4",
+      "name": "Kênh 4",
+      "domain": "switch_",
+      "commandKey": "switch_4",
+      "commandSuffix": "/set",
+      "readOnly": false,
+      "sortOrder": 3,
+      "attributes": []
+    }
+  ]
+}

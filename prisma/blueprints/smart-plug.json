@@ -1,0 +1,50 @@
+{
+  "modelCode": "SMART_PLUG",
+  "modelName": "Ổ cắm thông minh (đo điện năng)",
+  "protocol": "MQTT",
+  "entities": [
+    {
+      "code": "main",
+      "name": "Ổ cắm",
+      "domain": "switch_",
+      "commandKey": "state",
+      "commandSuffix": "/set",
+      "readOnly": false,
+      "sortOrder": 0,
+      "attributes": [
+        {
+          "key": "power",
+          "name": "Công suất",
+          "valueType": "FLOAT",
+          "unit": "W",
+          "readOnly": true,
+          "commandKey": "power"
+        },
+        {
+          "key": "current",
+          "name": "Dòng điện",
+          "valueType": "FLOAT",
+          "unit": "A",
+          "readOnly": true,
+          "commandKey": "current"
+        },
+        {
+          "key": "voltage",
+          "name": "Điện áp",
+          "valueType": "FLOAT",
+          "unit": "V",
+          "readOnly": true,
+          "commandKey": "voltage"
+        },
+        {
+          "key": "energy",
+          "name": "Điện năng tiêu thụ",
+          "valueType": "FLOAT",
+          "unit": "kWh",
+          "readOnly": true,
+          "commandKey": "energy"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "modelCode": "FAN",
+  "modelName": "Quạt thông minh",
+  "protocol": "MQTT",
+  "entities": [
+    {
+      "code": "main",
+      "name": "Quạt",
+      "domain": "fan",
+      "commandKey": "state",
+      "commandSuffix": "/set",
+      "readOnly": false,
+      "sortOrder": 0,
+      "attributes": [
+        {
+          "key": "speed",
+          "name": "Tốc độ",
+          "valueType": "INTEGER",
+          "min": 0,
+          "max": 100,
+          "unit": "%",
+          "readOnly": false,
+          "commandKey": "speed"
+        },
+        {
+          "key": "preset_mode",
+          "name": "Chế độ",
+          "valueType": "ENUM",
+          "enumValues": ["normal", "natural", "sleep", "baby"],
+          "readOnly": false,
+          "commandKey": "preset_mode"
+        },
+        {
+          "key": "oscillating",
+          "name": "Xoay",
+          "valueType": "BOOLEAN",
+          "readOnly": false,
+          "commandKey": "oscillating"
+        },
+        {
+          "key": "direction",
+          "name": "Chiều quay",
+          "valueType": "ENUM",
+          "enumValues": ["forward", "reverse"],
+          "readOnly": false,
+          "commandKey": "direction"
+        }
+      ]
+    }
+  ]
+}

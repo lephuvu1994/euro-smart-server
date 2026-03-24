@@ -1,0 +1,43 @@
+{
+  "modelCode": "DOOR_LOCK",
+  "modelName": "Khoá cửa thông minh",
+  "protocol": "MQTT",
+  "entities": [
+    {
+      "code": "main",
+      "name": "Khoá cửa",
+      "domain": "lock",
+      "commandKey": "state",
+      "commandSuffix": "/set",
+      "readOnly": false,
+      "sortOrder": 0,
+      "attributes": [
+        {
+          "key": "lock_state",
+          "name": "Trạng thái khoá",
+          "valueType": "ENUM",
+          "enumValues": ["locked", "unlocked", "jammed"],
+          "readOnly": true,
+          "commandKey": "lock_state"
+        },
+        {
+          "key": "battery",
+          "name": "Pin",
+          "valueType": "INTEGER",
+          "min": 0,
+          "max": 100,
+          "unit": "%",
+          "readOnly": true,
+          "commandKey": "battery"
+        },
+        {
+          "key": "last_user",
+          "name": "Người mở cuối",
+          "valueType": "STRING",
+          "readOnly": true,
+          "commandKey": "last_user"
+        }
+      ]
+    }
+  ]
+}

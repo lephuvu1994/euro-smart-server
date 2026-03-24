@@ -1,0 +1,52 @@
+{
+  "modelCode": "VACUUM",
+  "modelName": "Robot hút bụi",
+  "protocol": "MQTT",
+  "entities": [
+    {
+      "code": "main",
+      "name": "Robot hút bụi",
+      "domain": "vacuum",
+      "commandKey": "command",
+      "commandSuffix": "/set",
+      "readOnly": false,
+      "sortOrder": 0,
+      "attributes": [
+        {
+          "key": "status",
+          "name": "Trạng thái",
+          "valueType": "ENUM",
+          "enumValues": ["idle", "cleaning", "returning", "docked", "paused", "error"],
+          "readOnly": true,
+          "commandKey": "status"
+        },
+        {
+          "key": "fan_speed",
+          "name": "Công suất hút",
+          "valueType": "ENUM",
+          "enumValues": ["silent", "standard", "medium", "turbo"],
+          "readOnly": false,
+          "commandKey": "fan_speed"
+        },
+        {
+          "key": "battery",
+          "name": "Pin",
+          "valueType": "INTEGER",
+          "min": 0,
+          "max": 100,
+          "unit": "%",
+          "readOnly": true,
+          "commandKey": "battery"
+        },
+        {
+          "key": "cleaned_area",
+          "name": "Diện tích đã dọn",
+          "valueType": "FLOAT",
+          "unit": "m²",
+          "readOnly": true,
+          "commandKey": "cleaned_area"
+        }
+      ]
+    }
+  ]
+}

@@ -59,6 +59,7 @@ docker compose -f docker-compose.prod.yml -f docker-compose.vps2.yml --profile l
 │   │   └── haproxy.cfg           # HAProxy: MQTTS 8883, WS sticky, API LB
 │   └── docker/
 │       ├── nginx.conf            # Nginx reverse proxy
+│       ├── init-emqx-auth.sh     # EMQX MQTT user provisioning
 │       └── ssl/                  # TLS certificates
 │           └── mqtt.pem          # MQTT TLS cert (HAProxy)
 └── .github/workflows/
@@ -182,6 +183,22 @@ DATABASE_URL=postgresql://postgres:PASSWORD@100.117.220.15:5432/aurathink?schema
 REDIS_HOST=100.117.220.15
 MQTT_HOST=mqtt://localhost
 ```
+
+---
+
+## EMQX Authentication
+
+MQTT user is auto-provisioned by the `emqx-init` one-shot service:
+
+```bash
+# Manual provision (if needed)
+docker compose -f docker-compose.prod.yml up emqx-init
+
+# Verify MQTT user
+docker exec aurathink-emqx-prod emqx_ctl clients list
+```
+
+Credentials come from `.env`: `MQTT_USER` / `MQTT_PASS`. The init script is idempotent — safe to run multiple times.
 
 ---
 

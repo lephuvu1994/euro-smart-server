@@ -25,6 +25,20 @@ export class TokenDto {
   refreshToken: string;
 }
 
+export class AuthHomeDto {
+  @ApiProperty({ example: faker.string.uuid() })
+  @Expose()
+  id: string;
+
+  @ApiProperty({ example: 'Nhà của tôi' })
+  @Expose()
+  name: string;
+
+  @ApiProperty({ example: 'OWNER', enum: ['OWNER', 'MEMBER'] })
+  @Expose()
+  role: string;
+}
+
 export class AuthResponseDto extends TokenDto {
   @ApiProperty({
     type: () => UserResponseDto,
@@ -34,6 +48,14 @@ export class AuthResponseDto extends TokenDto {
   @Type(() => UserResponseDto)
   @ValidateNested()
   user: UserResponseDto;
+
+  @ApiProperty({
+    type: () => [AuthHomeDto],
+    description: 'List of homes the user belongs to (as owner or member)',
+  })
+  @Expose()
+  @Type(() => AuthHomeDto)
+  homes: AuthHomeDto[];
 }
 
 export class AuthRefreshResponseDto extends TokenDto {}

@@ -1,0 +1,44 @@
+{
+  "modelCode": "WATER_HEATER",
+  "modelName": "Bình nóng lạnh",
+  "protocol": "MQTT",
+  "entities": [
+    {
+      "code": "main",
+      "name": "Bình nóng lạnh",
+      "domain": "water_heater",
+      "commandKey": "state",
+      "commandSuffix": "/set",
+      "readOnly": false,
+      "sortOrder": 0,
+      "attributes": [
+        {
+          "key": "temperature",
+          "name": "Nhiệt độ mục tiêu",
+          "valueType": "INTEGER",
+          "min": 30,
+          "max": 75,
+          "unit": "°C",
+          "readOnly": false,
+          "commandKey": "temperature"
+        },
+        {
+          "key": "current_temperature",
+          "name": "Nhiệt độ hiện tại",
+          "valueType": "FLOAT",
+          "unit": "°C",
+          "readOnly": true,
+          "commandKey": "current_temperature"
+        },
+        {
+          "key": "operation_mode",
+          "name": "Chế độ",
+          "valueType": "ENUM",
+          "enumValues": ["eco", "performance", "electric", "gas", "heat_pump"],
+          "readOnly": false,
+          "commandKey": "operation_mode"
+        }
+      ]
+    }
+  ]
+}

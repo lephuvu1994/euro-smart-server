@@ -1,0 +1,42 @@
+{
+  "modelCode": "SENSOR_TH",
+  "modelName": "Cảm biến Nhiệt độ & Độ ẩm",
+  "protocol": "ZIGBEE",
+  "entities": [
+    {
+      "code": "temperature",
+      "name": "Nhiệt độ",
+      "domain": "sensor",
+      "commandKey": "temperature",
+      "readOnly": true,
+      "sortOrder": 0,
+      "attributes": [
+        {
+          "key": "unit",
+          "name": "Đơn vị",
+          "valueType": "STRING",
+          "readOnly": true,
+          "commandKey": "unit"
+        }
+      ]
+    },
+    {
+      "code": "humidity",
+      "name": "Độ ẩm",
+      "domain": "sensor",
+      "commandKey": "humidity",
+      "readOnly": true,
+      "sortOrder": 1,
+      "attributes": []
+    },
+    {
+      "code": "battery",
+      "name": "Pin",
+      "domain": "sensor",
+      "commandKey": "battery",
+      "readOnly": true,
+      "sortOrder": 2,
+      "attributes": []
+    }
+  ]
+}

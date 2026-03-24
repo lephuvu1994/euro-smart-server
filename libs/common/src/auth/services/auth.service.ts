@@ -89,9 +89,12 @@ export class AuthService implements IAuthService {
       },
     );
 
+    const homes = await this.getUserHomes(user.id);
+
     return {
       ...tokens,
       user: userDto,
+      homes,
     };
   }
 
@@ -196,9 +199,13 @@ export class AuthService implements IAuthService {
       },
     );
 
+    // Trả về home vừa tạo
+    const homes = [{ id: defaultHome.id, name: defaultHome.name, role: 'OWNER' }];
+
     return {
       ...tokens,
       user: userDto,
+      homes,
     };
   }
 
@@ -406,5 +413,24 @@ export class AuthService implements IAuthService {
       where: { id: userId },
       data: { password: hashedPassword },
     });
+  }
+
+  /**
+   * Helper: Lấy danh sách homes của user (owner + member)
+   */
+  private async getUserHomes(userId: string) {
+    const memberships = await this.databaseService.homeMember.findMany({
+      where: { userId },
+      select: {
+        role: true,
+        home: { select: { id: true, name: true } },
+      },
+    });
+
+    return memberships.map((m) => ({
+      id: m.home.id,
+      name: m.home.name,
+      role: m.role,
+    }));
   }
 }

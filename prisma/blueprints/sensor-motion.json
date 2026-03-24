@@ -1,0 +1,34 @@
+{
+  "modelCode": "SENSOR_MOTION",
+  "modelName": "Cảm biến chuyển động (PIR)",
+  "protocol": "ZIGBEE",
+  "entities": [
+    {
+      "code": "motion",
+      "name": "Chuyển động",
+      "domain": "binary_sensor",
+      "commandKey": "occupancy",
+      "readOnly": true,
+      "sortOrder": 0,
+      "attributes": [
+        {
+          "key": "illuminance",
+          "name": "Độ sáng",
+          "valueType": "INTEGER",
+          "unit": "lx",
+          "readOnly": true,
+          "commandKey": "illuminance"
+        }
+      ]
+    },
+    {
+      "code": "battery",
+      "name": "Pin",
+      "domain": "sensor",
+      "commandKey": "battery",
+      "readOnly": true,
+      "sortOrder": 1,
+      "attributes": []
+    }
+  ]
+}

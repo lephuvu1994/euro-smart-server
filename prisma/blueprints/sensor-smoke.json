@@ -1,0 +1,25 @@
+{
+  "modelCode": "SENSOR_SMOKE",
+  "modelName": "Cảm biến khói",
+  "protocol": "ZIGBEE",
+  "entities": [
+    {
+      "code": "smoke",
+      "name": "Khói",
+      "domain": "binary_sensor",
+      "commandKey": "smoke",
+      "readOnly": true,
+      "sortOrder": 0,
+      "attributes": []
+    },
+    {
+      "code": "battery",
+      "name": "Pin",
+      "domain": "sensor",
+      "commandKey": "battery",
+      "readOnly": true,
+      "sortOrder": 1,
+      "attributes": []
+    }
+  ]
+}

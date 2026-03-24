@@ -1,0 +1,27 @@
+{
+  "modelCode": "SWITCH_2CH",
+  "modelName": "Công tắc 2 nút",
+  "protocol": "MQTT",
+  "entities": [
+    {
+      "code": "channel_1",
+      "name": "Kênh 1",
+      "domain": "switch_",
+      "commandKey": "switch_1",
+      "commandSuffix": "/set",
+      "readOnly": false,
+      "sortOrder": 0,
+      "attributes": []
+    },
+    {
+      "code": "channel_2",
+      "name": "Kênh 2",
+      "domain": "switch_",
+      "commandKey": "switch_2",
+      "commandSuffix": "/set",
+      "readOnly": false,
+      "sortOrder": 1,
+      "attributes": []
+    }
+  ]
+}

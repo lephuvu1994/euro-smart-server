@@ -1,0 +1,38 @@
+{
+  "modelCode": "LIGHT_CCT",
+  "modelName": "Đèn CCT (Dimmer + Nhiệt độ màu)",
+  "protocol": "MQTT",
+  "entities": [
+    {
+      "code": "main",
+      "name": "Đèn",
+      "domain": "light",
+      "commandKey": "state",
+      "commandSuffix": "/set",
+      "readOnly": false,
+      "sortOrder": 0,
+      "attributes": [
+        {
+          "key": "brightness",
+          "name": "Độ sáng",
+          "valueType": "INTEGER",
+          "min": 0,
+          "max": 100,
+          "unit": "%",
+          "readOnly": false,
+          "commandKey": "brightness"
+        },
+        {
+          "key": "color_temp",
+          "name": "Nhiệt độ màu",
+          "valueType": "INTEGER",
+          "min": 2700,
+          "max": 6500,
+          "unit": "K",
+          "readOnly": false,
+          "commandKey": "color_temp"
+        }
+      ]
+    }
+  ]
+}

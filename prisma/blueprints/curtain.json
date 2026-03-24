@@ -1,0 +1,38 @@
+{
+  "modelCode": "CURTAIN",
+  "modelName": "Rèm cửa thông minh",
+  "protocol": "MQTT",
+  "entities": [
+    {
+      "code": "main",
+      "name": "Rèm",
+      "domain": "cover",
+      "commandKey": "state",
+      "commandSuffix": "/set",
+      "readOnly": false,
+      "sortOrder": 0,
+      "attributes": [
+        {
+          "key": "position",
+          "name": "Vị trí",
+          "valueType": "INTEGER",
+          "min": 0,
+          "max": 100,
+          "unit": "%",
+          "readOnly": false,
+          "commandKey": "position"
+        },
+        {
+          "key": "current_position",
+          "name": "Vị trí hiện tại",
+          "valueType": "INTEGER",
+          "min": 0,
+          "max": 100,
+          "unit": "%",
+          "readOnly": true,
+          "commandKey": "current_position"
+        }
+      ]
+    }
+  ]
+}

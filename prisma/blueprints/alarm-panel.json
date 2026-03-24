@@ -1,0 +1,60 @@
+{
+  "modelCode": "ALARM_PANEL",
+  "modelName": "Bảng báo động (Alarm Panel)",
+  "protocol": "MQTT",
+  "entities": [
+    {
+      "code": "main",
+      "name": "Báo động",
+      "domain": "alarm_control_panel",
+      "commandKey": "command",
+      "commandSuffix": "/set",
+      "readOnly": false,
+      "sortOrder": 0,
+      "attributes": [
+        {
+          "key": "state",
+          "name": "Trạng thái",
+          "valueType": "ENUM",
+          "enumValues": ["disarmed", "armed_home", "armed_away", "armed_night", "triggered", "pending"],
+          "readOnly": true,
+          "commandKey": "state"
+        },
+        {
+          "key": "code_required",
+          "name": "Yêu cầu mã",
+          "valueType": "BOOLEAN",
+          "readOnly": true,
+          "commandKey": "code_required"
+        }
+      ]
+    },
+    {
+      "code": "siren",
+      "name": "Còi",
+      "domain": "siren",
+      "commandKey": "siren",
+      "commandSuffix": "/set",
+      "readOnly": false,
+      "sortOrder": 1,
+      "attributes": [
+        {
+          "key": "volume",
+          "name": "Âm lượng",
+          "valueType": "ENUM",
+          "enumValues": ["low", "medium", "high"],
+          "readOnly": false,
+          "commandKey": "siren_volume"
+        },
+        {
+          "key": "tone",
+          "name": "Âm báo",
+          "valueType": "ENUM",
+          "enumValues": ["default", "fire", "emergency", "burglar"],
+          "readOnly": false,
+          "commandKey": "siren_tone"
+        }
+      ]
+    }
+  ]
+}

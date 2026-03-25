@@ -12,7 +12,7 @@
 #
 # Cập nhật:
 #   docker compose -f docker-compose.prod.yml build
-#   docker compose -f docker-compose.prod.yml up -d --no-deps core-api socket-gateway iot-gateway worker-service
+#   docker compose -f docker-compose.prod.yml up -d --no-deps core-api iot-gateway worker-service
 #
 # Logs:
 #   docker compose -f docker-compose.prod.yml logs -f --tail=100

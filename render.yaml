@@ -25,23 +25,6 @@ services:
       - fromGroup: aurathink-env
     dockerCommand: node dist/apps/core-api/main.js
 
-  # ── socket-gateway: WebSocket server (public) ──
-  - type: web
-    name: euro-socket-gateway
-    runtime: docker
-    dockerfilePath: ./Dockerfile
-    dockerContext: .
-    plan: starter
-    region: singapore
-    branch: main
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: SOCKET_GATEWAY_PORT
-        value: "10000"
-      - fromGroup: aurathink-env
-    dockerCommand: node dist/apps/socket-gateway/main.js
-
   # ── iot-gateway: MQTT bridge (private – internal only) ──
   - type: pserv
     name: euro-iot-gateway

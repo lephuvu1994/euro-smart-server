@@ -18,6 +18,7 @@ import { DeviceControlService } from '../services/device-control.service';
 import { SetFeatureValueDto } from '../dto/set-feature-value.dto';
 import { DeviceService } from '../services/device.service';
 import { GetDevicesDto } from '../dto/get-devices.dto';
+import { EmqxAuthService } from '../../emqx-auth/services/emqx-auth.service';
 
 @ApiTags('Devices')
 @UseGuards(JwtAccessGuard, RolesGuard)
@@ -28,6 +29,7 @@ export class DeviceController {
     private readonly provisioningService: DeviceProvisioningService,
     private readonly deviceControlService: DeviceControlService,
     private readonly deviceService: DeviceService,
+    private readonly emqxAuthService: EmqxAuthService,
   ) {}
 
   /**
@@ -47,6 +49,26 @@ export class DeviceController {
     return {
       statusCode: HttpStatus.OK,
       data,
+    };
+  }
+
+  /**
+   * API: Get MQTT credentials for app to connect EMQX directly.
+   * GET /v1/devices/mqtt-credentials
+   * Returns HMAC-signed credentials (0 DB query).
+   * MUST be before :id route to avoid route conflict.
+   */
+  @Get('mqtt-credentials')
+  @ApiOperation({
+    summary: 'Get MQTT credentials for real-time device updates',
+    description:
+      'Returns WSS URL, username, HMAC password, and clientId for direct EMQX connection.',
+  })
+  getMqttCredentials(@Req() req: any) {
+    const userId = req.user.userId;
+    return {
+      statusCode: HttpStatus.OK,
+      data: this.emqxAuthService.generateCredentials(userId),
     };
   }
 

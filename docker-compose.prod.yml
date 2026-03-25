@@ -110,11 +110,25 @@ services:
       # Dashboard
       EMQX_DASHBOARD__DEFAULT_USERNAME: ${EMQX_DASHBOARD_USER:-admin}
       EMQX_DASHBOARD__DEFAULT_PASSWORD: ${EMQX_DASHBOARD_PASS:?EMQX_DASHBOARD_PASS is required}
-      # Cấu hình authentication
+      # HTTP Auth → core-api (HMAC verification)
       EMQX_AUTHENTICATION__1__MECHANISM: password_based
-      EMQX_AUTHENTICATION__1__BACKEND: built_in_database
-      EMQX_AUTHENTICATION__1__USER_ID_TYPE: username
-      EMQX_AUTHENTICATION__1__PASSWORD_HASH_ALGORITHM__NAME: bcrypt
+      EMQX_AUTHENTICATION__1__BACKEND: http
+      EMQX_AUTHENTICATION__1__METHOD: post
+      EMQX_AUTHENTICATION__1__URL: "http://core-api:3001/internal/emqx/auth"
+      EMQX_AUTHENTICATION__1__BODY__USERNAME: "$${username}"
+      EMQX_AUTHENTICATION__1__BODY__PASSWORD: "$${password}"
+      EMQX_AUTHENTICATION__1__BODY__CLIENTID: "$${clientid}"
+      EMQX_AUTHENTICATION__1__HEADERS__CONTENT_TYPE: "application/json"
+      # HTTP ACL → core-api (ownership check)
+      EMQX_AUTHORIZATION__NO_MATCH: deny
+      EMQX_AUTHORIZATION__SOURCES__1__TYPE: http
+      EMQX_AUTHORIZATION__SOURCES__1__ENABLE: "true"
+      EMQX_AUTHORIZATION__SOURCES__1__METHOD: post
+      EMQX_AUTHORIZATION__SOURCES__1__URL: "http://core-api:3001/internal/emqx/acl"
+      EMQX_AUTHORIZATION__SOURCES__1__BODY__USERNAME: "$${username}"
+      EMQX_AUTHORIZATION__SOURCES__1__BODY__TOPIC: "$${topic}"
+      EMQX_AUTHORIZATION__SOURCES__1__BODY__ACTION: "$${action}"
+      EMQX_AUTHORIZATION__SOURCES__1__HEADERS__CONTENT_TYPE: "application/json"
       # Performance tuning
       EMQX_BROKER__SHARED_SUBSCRIPTION: 'true'
       EMQX_LOG__CONSOLE__LEVEL: warning
@@ -143,27 +157,6 @@ services:
           memory: 256M
           cpus: '0.25'
 
-  # ─────────────────────────────────────────────
-  # EMQX AUTH INIT (chạy 1 lần, tạo MQTT user)
-  # ─────────────────────────────────────────────
-  emqx-init:
-    image: curlimages/curl:latest
-    container_name: aurathink-emqx-init-prod
-    restart: 'no'
-    env_file:
-      - .env
-    environment:
-      EMQX_API_URL: http://emqx:18083
-      EMQX_DASHBOARD_USER: ${EMQX_DASHBOARD_USER:-admin}
-      EMQX_DASHBOARD_PASS: ${EMQX_DASHBOARD_PASS:?EMQX_DASHBOARD_PASS is required}
-    volumes:
-      - ./deploy/docker/init-emqx-auth.sh:/init.sh:ro
-    entrypoint: ['/bin/sh', '/init.sh']
-    depends_on:
-      emqx:
-        condition: service_healthy
-    networks:
-      - euro-internal
 
   # ─────────────────────────────────────────────
   # DATABASE MIGRATION (chạy 1 lần rồi thoát)
@@ -242,35 +235,6 @@ services:
         max-size: '50m'
         max-file: '5'
 
-  socket-gateway:
-    image: ${IMAGE:-ghcr.io/lephuvu1994/aurathink-server:latest}
-    container_name: aurathink-socket-gateway-prod
-    restart: unless-stopped
-    env_file:
-      - .env
-    environment:
-      NODE_ENV: production
-      REDIS_HOST: redis
-      REDIS_PORT: '6379'
-    command: ['node', 'dist/apps/socket-gateway/main.js']
-    depends_on:
-      core-api:
-        condition: service_healthy
-    networks:
-      - euro-internal
-    deploy:
-      resources:
-        limits:
-          memory: 384M
-          cpus: '0.5'
-        reservations:
-          memory: 128M
-          cpus: '0.1'
-    logging:
-      driver: json-file
-      options:
-        max-size: '30m'
-        max-file: '5'
 
   iot-gateway:
     image: ${IMAGE:-ghcr.io/lephuvu1994/aurathink-server:latest}

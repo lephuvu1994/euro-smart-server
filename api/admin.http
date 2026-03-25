@@ -2,9 +2,9 @@
 # ADMIN – Partner, Device Model, Quota, MQTT Config
 # ==========================================
 # Chạy request "Login Admin" trước để có accessToken
-@baseUrl = http://localhost:3001/v1
+@baseUrl = https://aurathink.ddns.net/api/v1
 @adminEmail = vulewenlian94@gmail.com
-@adminPassword = Aa123456789@
+@adminPassword = Vu31101994@
 @companyCode = BKTech
 @deviceModelCode = 1001
 
@@ -75,44 +75,52 @@ Content-Type: application/json
     "code": "{{deviceModelCode}}",
     "name": "Công tắc WiFi 4 nút Pro",
     "featuresConfig": [
-            {
-                "code": "shutter_main",
-                "name": "Điều khiển cửa",
-                "type": "SHUTTER",
-                "category": "curtain",
-                "read_only": false,
-                "command_suffix": "set",
-                "command_key": "state",
-                "values": ["OPEN", "CLOSE", "STOP"]
-            },
-            {
-                "code": "security_lock",
-                "name": "Khóa trẻ em",
-                "type": "BINARY",
-                "category": "lock",
-                "read_only": false,
-                "command_suffix": "set",
-                "command_key": "child_lock",
-                "values": []
-            },
-            {
-                "code": "sys_config",
-                "name": "Cấu hình hệ thống",
-                "type": "CONFIG",
-                "category": "switch",
-                "read_only": false,
-                "command_suffix": "config",
-                "embedded_keys": [
-                    "req_open_clicks",
-                    "req_close_clicks",
-                    "def_open_clicks",
-                    "def_close_clicks",
-                    "time_mode",
-                    "start_hour",
-                    "end_hour"
-                ]
-            }
-        ]
+        {
+  "modelCode": "SHUTTER_DOOR",
+  "modelName": "Cửa cuốn thông minh",
+  "protocol": "MQTT",
+  "entities": [
+    {
+      "code": "main",
+      "name": "Cửa cuốn",
+      "domain": "cover",
+      "commandKey": "state",
+      "commandSuffix": "/set",
+      "readOnly": false,
+      "sortOrder": 0,
+      "attributes": [
+        {
+          "key": "position",
+          "name": "Vị trí",
+          "valueType": "INTEGER",
+          "min": 0,
+          "max": 100,
+          "unit": "%",
+          "readOnly": false,
+          "commandKey": "position"
+        },
+        {
+          "key": "current_position",
+          "name": "Vị trí hiện tại",
+          "valueType": "INTEGER",
+          "min": 0,
+          "max": 100,
+          "unit": "%",
+          "readOnly": true,
+          "commandKey": "current_position"
+        },
+        {
+          "key": "obstacle_detected",
+          "name": "Phát hiện vật cản",
+          "valueType": "BOOLEAN",
+          "readOnly": true,
+          "commandKey": "obstacle"
+        }
+      ]
+    }
+  ]
+}
+    ]
 }
 
 ###

@@ -92,7 +92,7 @@ services:
       EMQX_AUTHENTICATION__1__MECHANISM: password_based
       EMQX_AUTHENTICATION__1__BACKEND: http
       EMQX_AUTHENTICATION__1__METHOD: post
-      EMQX_AUTHENTICATION__1__URL: "http://core-api:3001/internal/emqx/auth"
+      EMQX_AUTHENTICATION__1__URL: "http://core-api:3001/v1/internal/emqx/auth"
       EMQX_AUTHENTICATION__1__BODY__USERNAME: "$${username}"
       EMQX_AUTHENTICATION__1__BODY__PASSWORD: "$${password}"
       EMQX_AUTHENTICATION__1__BODY__CLIENTID: "$${clientid}"
@@ -102,7 +102,7 @@ services:
       EMQX_AUTHORIZATION__SOURCES__1__TYPE: http
       EMQX_AUTHORIZATION__SOURCES__1__ENABLE: "true"
       EMQX_AUTHORIZATION__SOURCES__1__METHOD: post
-      EMQX_AUTHORIZATION__SOURCES__1__URL: "http://core-api:3001/internal/emqx/acl"
+      EMQX_AUTHORIZATION__SOURCES__1__URL: "http://core-api:3001/v1/internal/emqx/acl"
       EMQX_AUTHORIZATION__SOURCES__1__BODY__USERNAME: "$${username}"
       EMQX_AUTHORIZATION__SOURCES__1__BODY__TOPIC: "$${topic}"
       EMQX_AUTHORIZATION__SOURCES__1__BODY__ACTION: "$${action}"

@@ -3,7 +3,7 @@
 # ==========================================
 # Gồm: CRUD scene, chạy tay, trigger LOCATION (API báo vị trí), SCHEDULE (lập lịch), DEVICE_STATE (cảm biến/trạng thái thiết bị)
 # Chạy request "Login User" trước để lấy token.
-@baseUrl = http://localhost:3001/v1
+@baseUrl = https://aurathink.ddns.net/api/v1
 @userEmail = cursor2@test.com
 @userPassword = Password@123!
 @homeId = 00000000-0000-0000-0000-000000000000

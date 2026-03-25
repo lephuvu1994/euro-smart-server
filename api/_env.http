@@ -1,7 +1,7 @@
 # ==========================================
 # Biến dùng chung – có thể copy vào từng file hoặc dùng khi gọi từ workspace
 # ==========================================
-@baseUrl = https://nestjs-smarthome.onrender.com
+@baseUrl = https://aurathink.ddns.net/api/v1
 @adminEmail = admin@bktech.com
 @adminPassword = AdminPassword123!
 @userEmail = cursor2@test.com

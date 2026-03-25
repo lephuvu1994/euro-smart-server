@@ -2,7 +2,7 @@
 # DEVICE – Đăng ký thiết bị, danh sách, điều khiển
 # ==========================================
 # Chạy "Login User" trước để có accessToken
-@baseUrl = http://localhost:3001/v1
+@baseUrl = https://aurathink.ddns.net/api/v1
 @userEmail = vulewenlian942@gmail.com
 @userPassword = Vu31101994@
 @macAddress = AA:BB:CC:11:22:33

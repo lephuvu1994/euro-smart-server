@@ -47,8 +47,11 @@ export class SocketGateway
    */
   async handleConnection(client: Socket) {
     try {
-      // 1. Lấy token từ handshake (Client gửi lên: io("url", { query: { token: "..." } }))
+      // 1. Lấy token từ handshake
+      // Client gửi qua: io("url", { auth: { token: "..." } }) → handshake.auth.token
+      // Hoặc fallback: query param hoặc Authorization header
       const token =
+        (client.handshake.auth?.token as string) ||
         (client.handshake.query.token as string) ||
         client.handshake.headers.authorization;
 

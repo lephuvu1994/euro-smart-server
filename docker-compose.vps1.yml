@@ -2,7 +2,7 @@
 # VPS1 "Hậu cung" — Override
 # ══════════════════════════════════════════════════════════════
 # Chạy: postgres, redis, emqx, iot-gateway, worker-service
-# Tắt: core-api, socket-gateway, nginx, haproxy
+# Tắt: core-api, nginx, haproxy
 #
 # Usage:
 #   docker compose -f docker-compose.prod.yml -f docker-compose.vps1.yml up -d
@@ -25,9 +25,6 @@ services:
 
   # ── Tắt service không cần trên VPS1 ──
   core-api:
-    profiles: ['disabled']
-
-  socket-gateway:
     profiles: ['disabled']
 
   nginx:

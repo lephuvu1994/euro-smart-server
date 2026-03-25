@@ -121,16 +121,6 @@ describe('MqttInboundService', () => {
         JSON.stringify(expectedNewState),
       );
 
-      // Verify Socket publish
-      expect(redis.publish).toHaveBeenCalledWith(
-        'socket:emit',
-        expect.stringContaining('"event":"DEVICE_UPDATE"'),
-      );
-      expect(redis.publish).toHaveBeenCalledWith(
-        'socket:emit',
-        expect.stringContaining('"entityCode":"light_1"'),
-      );
-
       // Verify BullMQ job
       expect(controlQueue.add).toHaveBeenCalledWith(
         DEVICE_JOBS.CHECK_DEVICE_STATE_TRIGGERS,

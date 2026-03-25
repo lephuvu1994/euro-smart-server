@@ -11,7 +11,6 @@
               │                        │
               │  Nginx (TLS) → HAProxy │
               │   ├─ core-api (:3001)  │
-              │   ├─ socket-gw (:3002) │
               │   └─ EMQX Node 1      │
               └──────────┬─────────────┘
                          │ Tailscale VPN
@@ -56,7 +55,7 @@ docker compose -f docker-compose.prod.yml -f docker-compose.vps2.yml --profile l
 ├── docker-compose.vps2.yml       # Override: VPS2 Mặt tiền
 ├── deploy/
 │   ├── haproxy/
-│   │   └── haproxy.cfg           # HAProxy: MQTTS 8883, WS sticky, API LB
+│   │   └── haproxy.cfg           # HAProxy: MQTTS 8883, API LB
 │   └── docker/
 │       ├── nginx.conf            # Nginx reverse proxy
 │       ├── init-emqx-auth.sh     # EMQX MQTT user provisioning
@@ -114,7 +113,6 @@ Runs on **VPS2** only. Handles:
 | Frontend | Port | Backend | Mode |
 |----------|------|---------|------|
 | HTTP API | 8080 | core-api:3001 | HTTP round-robin |
-| WebSocket | 8082 | socket-gw:3002 | HTTP sticky (cookie) |
 | IoT Gateway | 8083 | iot-gw:3003 (VPS1) | HTTP round-robin |
 | **MQTTS** | **8883** | emqx:1883 (cluster) | **TCP + TLS** |
 | Stats | 8404 | - | Dashboard |
@@ -144,7 +142,7 @@ cat cert.pem privkey.pem > deploy/docker/ssl/mqtt.pem
 git push main
     ├─ Build Docker image → push ghcr.io
     ├─ Deploy VPS1 (iot-gateway, worker-service, emqx)
-    └─ Deploy VPS2 (core-api, socket-gateway, emqx, nginx, haproxy)
+    └─ Deploy VPS2 (core-api, emqx, nginx, haproxy)
 ```
 
 ### GitHub Secrets Required
@@ -188,17 +186,17 @@ MQTT_HOST=mqtt://localhost
 
 ## EMQX Authentication
 
-MQTT user is auto-provisioned by the `emqx-init` one-shot service:
+EMQX uses **HTTP Auth** backed by `core-api`:
+
+- **Auth**: `POST http://core-api:3001/internal/emqx/auth` — HMAC-SHA256 verification (stateless)
+- **ACL**: `POST http://core-api:3001/internal/emqx/acl` — Device ownership + shared check
+
+Server services (iot-gateway, worker) authenticate with `MQTT_USER`/`MQTT_PASS`. App users authenticate with HMAC credentials from `GET /v1/devices/mqtt-credentials`.
 
 ```bash
-# Manual provision (if needed)
-docker compose -f docker-compose.prod.yml up emqx-init
-
-# Verify MQTT user
+# Verify MQTT clients
 docker exec aurathink-emqx-prod emqx_ctl clients list
 ```
-
-Credentials come from `.env`: `MQTT_USER` / `MQTT_PASS`. The init script is idempotent — safe to run multiple times.
 
 ---
 

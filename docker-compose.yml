@@ -88,10 +88,25 @@ services:
       EMQX_NODE_NAME: 'emqx@node1.emqx.io'
       EMQX_DASHBOARD__DEFAULT_USERNAME: ${EMQX_DASHBOARD_USER:-admin}
       EMQX_DASHBOARD__DEFAULT_PASSWORD: ${EMQX_DASHBOARD_PASS:-admin123}
-      # Tắt anonymous access — bắt buộc xác thực
+      # Tắt anonymous access — HTTP Auth → core-api
       EMQX_AUTHENTICATION__1__MECHANISM: password_based
-      EMQX_AUTHENTICATION__1__BACKEND: built_in_database
-      EMQX_AUTHENTICATION__1__USER_ID_TYPE: username
+      EMQX_AUTHENTICATION__1__BACKEND: http
+      EMQX_AUTHENTICATION__1__METHOD: post
+      EMQX_AUTHENTICATION__1__URL: "http://core-api:3001/internal/emqx/auth"
+      EMQX_AUTHENTICATION__1__BODY__USERNAME: "$${username}"
+      EMQX_AUTHENTICATION__1__BODY__PASSWORD: "$${password}"
+      EMQX_AUTHENTICATION__1__BODY__CLIENTID: "$${clientid}"
+      EMQX_AUTHENTICATION__1__HEADERS__CONTENT_TYPE: "application/json"
+      # HTTP ACL → core-api
+      EMQX_AUTHORIZATION__NO_MATCH: deny
+      EMQX_AUTHORIZATION__SOURCES__1__TYPE: http
+      EMQX_AUTHORIZATION__SOURCES__1__ENABLE: "true"
+      EMQX_AUTHORIZATION__SOURCES__1__METHOD: post
+      EMQX_AUTHORIZATION__SOURCES__1__URL: "http://core-api:3001/internal/emqx/acl"
+      EMQX_AUTHORIZATION__SOURCES__1__BODY__USERNAME: "$${username}"
+      EMQX_AUTHORIZATION__SOURCES__1__BODY__TOPIC: "$${topic}"
+      EMQX_AUTHORIZATION__SOURCES__1__BODY__ACTION: "$${action}"
+      EMQX_AUTHORIZATION__SOURCES__1__HEADERS__CONTENT_TYPE: "application/json"
     volumes:
       - emqx_data:/opt/emqx/data
       - emqx_log:/opt/emqx/log
@@ -145,22 +160,6 @@ services:
       retries: 3
       start_period: 30s
 
-  socket-gateway:
-    image: aurathink-server:dev
-    container_name: aurathink-socket-gateway
-    restart: unless-stopped
-    ports:
-      - '${SOCKET_GATEWAY_PORT:-3002}:${SOCKET_GATEWAY_PORT:-3002}'
-    env_file:
-      - .env.docker
-    environment:
-      NODE_ENV: development
-    command: ['node', 'dist/apps/socket-gateway/main.js']
-    depends_on:
-      core-api:
-        condition: service_healthy
-    networks:
-      - euro-network
 
   iot-gateway:
     image: aurathink-server:dev

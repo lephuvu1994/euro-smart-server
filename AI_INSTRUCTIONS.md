@@ -8,7 +8,7 @@
 
 | Mục             | Giá trị                                                      |
 | --------------- | ------------------------------------------------------------ |
-| Architecture    | **NX Monorepo** (4 apps + 3 shared libs)                    |
+| Architecture    | **NX Monorepo** (3 apps + 3 shared libs)                    |
 | Framework       | NestJS 11                                                    |
 | Runtime         | Node.js ≥ 22 (Alpine Docker)                                |
 | Package Manager | Yarn ≥ 4.9 (Corepack, `.yarnrc.yml`)                        |
@@ -16,7 +16,7 @@
 | ORM             | Prisma 6 (PostgreSQL + TimescaleDB)                         |
 | Queue           | BullMQ (Redis)                                               |
 | Cache           | `cache-manager` + `ioredis`                                  |
-| Real-time       | Socket.IO (`@nestjs/websockets` + Redis Adapter)             |
+| Real-time       | MQTT Direct (EMQX WSS, HMAC auth)                            |
 | MQTT            | `mqtt` package (kết nối EMQX broker)                         |
 | Auth            | Passport JWT (access + refresh tokens), Argon2 hashing       |
 | Email           | `@nestjs-modules/mailer` + BullMQ queue                      |
@@ -58,13 +58,6 @@
 │   │       ├── listeners/             # MQTT inbound message handlers
 │   │       ├── interfaces/
 │   │       └── registry/
-│   ├── socket-gateway/                # ⚡ WebSocket Gateway (port 3002)
-│   │   └── src/
-│   │       ├── main.ts
-│   │       ├── app.module.ts
-│   │       ├── adapters/              # Socket.IO Redis adapter
-│   │       ├── gateways/              # WebSocket gateway handlers
-│   │       └── services/              # Socket service
 │   └── worker-service/                # ⚙️ Background Workers (port 3004)
 │       └── src/
 │           ├── main.ts
@@ -193,9 +186,8 @@ yarn test                     # All tests
 
 | App | Port | Vai trò | Key Imports |
 |-----|------|---------|-------------|
-| **core-api** | 3001 | REST API chính: auth, user, device, home, scene | Database, Redis, Auth, BullMQ (tất cả queues) |
+| **core-api** | 3001 | REST API chính: auth, user, device, home, scene, EMQX auth/ACL | Database, Redis, Auth, BullMQ (tất cả queues) |
 | **iot-gateway** | 3003 | Nhận MQTT messages từ thiết bị IoT, dispatch BullMQ jobs | Database, Redis, MQTT, BullMQ, IntegrationModule |
-| **socket-gateway** | 3002 | WebSocket real-time: push device state/events tới mobile app | Redis (adapter), JWT, Helper |
 | **worker-service** | 3004 | Background jobs: email, device control, cron schedulers | Database, Redis, BullMQ, ScheduleModule, IntegrationModule |
 
 ### Cross-app Communication
@@ -219,8 +211,8 @@ yarn test                     # All tests
 
 - **core-api → worker-service**: BullMQ queues (`email_queue`, `device_controll`, `device_status`)
 - **iot-gateway → worker-service**: BullMQ queues (device status, control)
-- **core-api/worker → socket-gateway**: Redis Pub/Sub (SocketEventPublisher)
 - **iot-gateway ↔ EMQX**: MQTT protocol (subscribe/publish device topics)
+- **EMQX → App (WSS)**: Direct MQTT over WebSocket (HMAC auth)
 
 ---
 

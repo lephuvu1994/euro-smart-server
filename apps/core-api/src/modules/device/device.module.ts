@@ -8,6 +8,7 @@ import { RedisModule } from '@app/redis-cache';
 // import { SocketModule } from '../socket/socket.module';
 // import { IntegrationModule } from '../integration/integration.module';
 import { SceneModule } from '../scene/scene.module';
+import { EmqxAuthModule } from '../emqx-auth/emqx-auth.module';
 import { DeviceProvisioningService } from './services/device-provisioning.service';
 import { DeviceControlService } from './services/device-control.service';
 import { DeviceService } from './services/device.service';
@@ -22,6 +23,7 @@ import { DeviceService } from './services/device.service';
     }),
     // IntegrationModule,
     SceneModule,
+    EmqxAuthModule,
   ],
   controllers: [DeviceController],
   providers: [

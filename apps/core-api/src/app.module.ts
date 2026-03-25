@@ -22,6 +22,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { DeviceModule } from './modules/device/device.module';
 import { HomeModule } from './modules/home/home.module';
 import { SceneModule } from './modules/scene/scene.module';
+import { EmqxAuthModule } from './modules/emqx-auth/emqx-auth.module';
 
 @Module({
   imports: [
@@ -72,6 +73,7 @@ import { SceneModule } from './modules/scene/scene.module';
     DeviceModule,
     HomeModule,
     SceneModule,
+    EmqxAuthModule,
   ],
   controllers: [HealthController],
 })

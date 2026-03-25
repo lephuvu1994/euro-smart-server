@@ -81,39 +81,12 @@ export class DeviceControlProcessor extends WorkerHost {
       const driver = this.integrationManager.getDriver(device.protocol);
       await driver.setValue(device, entity, value);
 
-      this.redisService.publish(
-        'socket:emit',
-        JSON.stringify({
-          room: `device_${device.token}`,
-          event: 'COMMAND_SENT',
-          data: {
-            deviceId: device.id,
-            entityCode,
-            value,
-            timestamp: new Date(),
-            status: 'sent',
-          },
-        }),
-      );
-
       this.logger.log(
         `✅ [${driver.name}] Command dispatched for ${device.token}`,
       );
       return { success: true };
     } catch (error) {
       this.logger.error(`❌ Failed to control device: ${error.message}`);
-
-      this.redisService.publish(
-        'socket:emit',
-        JSON.stringify({
-          room: `device_${device.token}`,
-          event: 'COMMAND_ERROR',
-          data: {
-            deviceId: device.id,
-            error: error.message,
-          },
-        }),
-      );
 
       throw error;
     }
@@ -163,41 +136,12 @@ export class DeviceControlProcessor extends WorkerHost {
 
       await driver.setValueBulk(device, newEntities);
 
-      this.redisService.publish(
-        'socket:emit',
-        JSON.stringify({
-          room: `device_${device.token}`,
-          event: 'COMMAND_SENT',
-          data: {
-            deviceId: device.id,
-            values: entityPayloads.map((ep: any) => ({
-              entityCode: ep.entityCode,
-              value: ep.value,
-            })),
-            timestamp: new Date(),
-            status: 'sent',
-          },
-        }),
-      );
-
       this.logger.log(
         `✅ [${driver.name}] Command dispatched for ${device.token}`,
       );
       return { success: true };
     } catch (error) {
       this.logger.error(`❌ Failed to control device: ${error.message}`);
-
-      this.redisService.publish(
-        'socket:emit',
-        JSON.stringify({
-          room: `device_${device.token}`,
-          event: 'COMMAND_ERROR',
-          data: {
-            deviceId: device.id,
-            error: error.message,
-          },
-        }),
-      );
 
       throw error;
     }
@@ -300,22 +244,6 @@ export class DeviceControlProcessor extends WorkerHost {
     try {
       const driver = this.integrationManager.getDriver(device.protocol);
       await driver.setValueBulk(device, newEntities);
-      this.redisService.publish(
-        'socket:emit',
-        JSON.stringify({
-          room: `device_${device.token}`,
-          event: 'COMMAND_SENT',
-          data: {
-            deviceId: device.id,
-            values: newEntities.map((e) => ({
-              entityCode: e.code,
-              value: e.state ?? e.stateText,
-            })),
-            timestamp: new Date(),
-            status: 'sent',
-          },
-        }),
-      );
       this.logger.log(
         `✅ Scene device ${deviceToken}: ${newEntities.length} entity(ies)`,
       );
@@ -326,17 +254,6 @@ export class DeviceControlProcessor extends WorkerHost {
       };
     } catch (err: any) {
       this.logger.error(`❌ Scene device ${deviceToken}: ${err?.message}`);
-      this.redisService.publish(
-        'socket:emit',
-        JSON.stringify({
-          room: `device_${device.token}`,
-          event: 'COMMAND_ERROR',
-          data: {
-            deviceId: device.id,
-            error: err?.message,
-          },
-        }),
-      );
       throw err;
     }
   }

@@ -61,15 +61,6 @@ export class MqttInboundService implements OnApplicationBootstrap {
         rawData: fullState,
       });
 
-      this.redisService.publish(
-        'socket:emit',
-        JSON.stringify({
-          room: `device_${deviceToken}`,
-          event: 'DEVICE_UPDATE',
-          data: fullState,
-        }),
-      );
-
       this.logger.log(
         `Device ${deviceToken} status updated: ${JSON.stringify(rawData)}`,
       );
@@ -176,23 +167,9 @@ export class MqttInboundService implements OnApplicationBootstrap {
         }
       }
 
-      // 5. Socket emit — gửi 1 lần gói gọn các entity thay đổi
+      // 5. Trigger scene + BullMQ updates
       if (updates.length > 0) {
-        this.redisService.publish(
-          'socket:emit',
-          JSON.stringify({
-            room: `device_${token}`,
-            event: 'DEVICE_UPDATE',
-            data: {
-              deviceId: device.id,
-              token: token,
-              updates: updates,
-              timestamp: new Date(),
-            },
-          }),
-        );
-
-        // 6. Trigger scene DEVICE_STATE evaluation
+        // Trigger scene DEVICE_STATE evaluation
         await this.deviceControlQueue.add(
           DEVICE_JOBS.CHECK_DEVICE_STATE_TRIGGERS,
           {

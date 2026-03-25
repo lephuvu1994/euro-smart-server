@@ -1,7 +1,7 @@
 # ══════════════════════════════════════════════════════════════
 # VPS2 "Mặt tiền" — Override
 # ══════════════════════════════════════════════════════════════
-# Chạy: core-api, socket-gateway, emqx, nginx, haproxy
+# Chạy: core-api, emqx, nginx, haproxy
 # Tắt: postgres, redis, iot-gateway, worker-service
 #
 # Usage:
@@ -15,13 +15,6 @@ services:
 
   # ── core-api: DB/Redis trỏ về VPS1 Tailscale ──
   core-api:
-    environment:
-      DATABASE_URL: 'postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@100.117.220.15:5432/${POSTGRES_DB}?schema=public'
-      REDIS_HOST: '100.117.220.15'
-      MQTT_HOST: 'mqtt://localhost'
-
-  # ── socket-gateway: DB/Redis trỏ về VPS1 Tailscale ──
-  socket-gateway:
     environment:
       DATABASE_URL: 'postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@100.117.220.15:5432/${POSTGRES_DB}?schema=public'
       REDIS_HOST: '100.117.220.15'

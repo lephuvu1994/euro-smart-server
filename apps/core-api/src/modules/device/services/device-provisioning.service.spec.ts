@@ -196,4 +196,52 @@ describe('DeviceProvisioningService', () => {
       service.registerAndClaim(mockUserId, mockDto as any),
     ).rejects.toThrow(BadRequestException);
   });
+
+  it('should pass homeId to device.create when provided', async () => {
+    db.deviceModel.findUnique.mockResolvedValue({
+      id: 'model-id',
+      code: 'model-1',
+      config: { entities: [] },
+    });
+    db.partner.findUnique.mockResolvedValue({ id: 'partner-id', code: 'partner-1' });
+
+    mockTx.hardwareRegistry.findUnique.mockResolvedValue(null);
+    mockTx.hardwareRegistry.create.mockResolvedValue({ id: 'hw-id' });
+    mockTx.device.create.mockResolvedValue({ id: 'dev-3', name: 'Device', entities: [] });
+    mockTx.licenseQuota.findUnique.mockResolvedValue({ licenseDays: 365 });
+
+    const dtoWithHome = { ...mockDto, homeId: 'home-abc' };
+    await service.registerAndClaim(mockUserId, dtoWithHome as any);
+
+    expect(mockTx.device.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          home: { connect: { id: 'home-abc' } },
+        }),
+      }),
+    );
+  });
+
+  it('should not include home connect when homeId is not provided', async () => {
+    db.deviceModel.findUnique.mockResolvedValue({
+      id: 'model-id',
+      code: 'model-1',
+      config: { entities: [] },
+    });
+    db.partner.findUnique.mockResolvedValue({ id: 'partner-id', code: 'partner-1' });
+
+    mockTx.hardwareRegistry.findUnique.mockResolvedValue(null);
+    mockTx.hardwareRegistry.create.mockResolvedValue({ id: 'hw-id' });
+    mockTx.device.create.mockResolvedValue({ id: 'dev-4', name: 'Device', entities: [] });
+    mockTx.licenseQuota.findUnique.mockResolvedValue({ licenseDays: 365 });
+
+    // Explicitly omit homeId and roomId
+    const { homeId: _h, roomId: _r, ...dtoNoHome } = mockDto;
+    await service.registerAndClaim(mockUserId, dtoNoHome as any);
+
+    const callArg = mockTx.device.create.mock.calls[0][0];
+    expect(callArg.data.home).toBeUndefined();
+  });
 });
+
+

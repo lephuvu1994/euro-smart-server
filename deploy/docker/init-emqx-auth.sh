@@ -34,11 +34,28 @@ if [ -z "$TOKEN" ]; then
 fi
 echo "[emqx-init] Login successful."
 
+# Check if the authenticator 'password_based:built_in_database' exists
+echo "[emqx-init] Checking if authenticator 'password_based:built_in_database' exists..."
+AUTH_CHECK=$(curl -s -X GET "$EMQX_API/api/v5/authentication/password_based%3Abuilt_in_database" \
+  -H "Authorization: Bearer $TOKEN" || echo "")
+
+if echo "$AUTH_CHECK" | grep -q "not_found"; then
+  echo "[emqx-init] Authenticator not found. Creating 'password_based:built_in_database'..."
+  curl -sf -o /dev/null -X POST "$EMQX_API/api/v5/authentication" \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer $TOKEN" \
+    -d '{"mechanism":"password_based","backend":"built_in_database","user_id_type":"username","password_hash_algorithm":{"name":"sha256","salt_position":"suffix"}}'
+  echo "[emqx-init] Authenticator created successfully."
+else
+  echo "[emqx-init] Authenticator 'password_based:built_in_database' already exists."
+fi
+
 # Check if user already exists
 echo "[emqx-init] Checking if MQTT user '$MQTT_USER' exists..."
 HTTP_CODE=$(curl -sf -o /dev/null -w "%{http_code}" \
   "$AUTH_ENDPOINT/$MQTT_USER" \
-  -H "Authorization: Bearer $TOKEN" 2>/dev/null || echo "000")
+  -H "Authorization: Bearer $TOKEN" \
+  2>/dev/null || echo "000")
 
 if [ "$HTTP_CODE" = "200" ]; then
   echo "[emqx-init] MQTT user '$MQTT_USER' already exists. Skipping."

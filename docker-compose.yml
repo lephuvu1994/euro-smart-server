@@ -92,28 +92,30 @@ services:
       EMQX_AUTHENTICATION__1__MECHANISM: password_based
       EMQX_AUTHENTICATION__1__BACKEND: http
       EMQX_AUTHENTICATION__1__METHOD: post
-      EMQX_AUTHENTICATION__1__URL: "http://core-api:3001/v1/internal/emqx/auth"
-      EMQX_AUTHENTICATION__1__BODY__USERNAME: "$${username}"
-      EMQX_AUTHENTICATION__1__BODY__PASSWORD: "$${password}"
-      EMQX_AUTHENTICATION__1__BODY__CLIENTID: "$${clientid}"
-      EMQX_AUTHENTICATION__1__HEADERS__CONTENT_TYPE: "application/json"
+      EMQX_AUTHENTICATION__1__URL: 'http://${EMQX_AUTH_API_HOST:-core-api}:${HTTP_PORT:-3001}/v1/internal/emqx/auth'
+      EMQX_AUTHENTICATION__1__BODY__USERNAME: '$${username}'
+      EMQX_AUTHENTICATION__1__BODY__PASSWORD: '$${password}'
+      EMQX_AUTHENTICATION__1__BODY__CLIENTID: '$${clientid}'
+      EMQX_AUTHENTICATION__1__HEADERS__CONTENT_TYPE: 'application/json'
       # HTTP ACL → core-api
       EMQX_AUTHORIZATION__NO_MATCH: deny
       EMQX_AUTHORIZATION__SOURCES__1__TYPE: http
-      EMQX_AUTHORIZATION__SOURCES__1__ENABLE: "true"
+      EMQX_AUTHORIZATION__SOURCES__1__ENABLE: 'true'
       EMQX_AUTHORIZATION__SOURCES__1__METHOD: post
-      EMQX_AUTHORIZATION__SOURCES__1__URL: "http://core-api:3001/v1/internal/emqx/acl"
-      EMQX_AUTHORIZATION__SOURCES__1__BODY__USERNAME: "$${username}"
-      EMQX_AUTHORIZATION__SOURCES__1__BODY__TOPIC: "$${topic}"
-      EMQX_AUTHORIZATION__SOURCES__1__BODY__ACTION: "$${action}"
-      EMQX_AUTHORIZATION__SOURCES__1__HEADERS__CONTENT_TYPE: "application/json"
+      EMQX_AUTHORIZATION__SOURCES__1__URL: 'http://${EMQX_AUTH_API_HOST:-core-api}:${HTTP_PORT:-3001}/v1/internal/emqx/acl'
+      EMQX_AUTHORIZATION__SOURCES__1__BODY__USERNAME: '$${username}'
+      EMQX_AUTHORIZATION__SOURCES__1__BODY__TOPIC: '$${topic}'
+      EMQX_AUTHORIZATION__SOURCES__1__BODY__ACTION: '$${action}'
+      EMQX_AUTHORIZATION__SOURCES__1__HEADERS__CONTENT_TYPE: 'application/json'
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
     volumes:
       - emqx_data:/opt/emqx/data
       - emqx_log:/opt/emqx/log
     networks:
       - euro-network
     healthcheck:
-      test: ['CMD', 'emqx', 'ping']
+      test: ['CMD-SHELL', 'curl -sf http://localhost:18083/status || exit 1']
       interval: 30s
       timeout: 10s
       retries: 5
@@ -159,7 +161,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
-
 
   iot-gateway:
     image: aurathink-server:dev
@@ -207,6 +208,27 @@ services:
     command: ['npx', 'prisma', 'migrate', 'deploy']
     depends_on:
       postgres:
+        condition: service_healthy
+    networks:
+      - euro-network
+
+  # ─────────────────────────────────────────────
+  # EMQX LOCAL SETUP (run once then exit)
+  # ─────────────────────────────────────────────
+  emqx-setup:
+    image: alpine:latest
+    container_name: aurathink-emqx-setup
+    restart: 'no'
+    volumes:
+      - ./deploy/docker/init-emqx-auth.sh:/app/init-emqx-auth.sh:ro
+    env_file:
+      - .env
+    environment:
+      EMQX_API_URL: "http://emqx:18083"
+    command: >
+      sh -c "apk add --no-cache curl && /app/init-emqx-auth.sh"
+    depends_on:
+      emqx:
         condition: service_healthy
     networks:
       - euro-network

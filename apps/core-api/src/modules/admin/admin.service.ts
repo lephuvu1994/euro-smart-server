@@ -15,6 +15,7 @@ import { UpdateSystemConfigDto } from './dtos/request/update-system-config.dto';
 import { PartnerUsageResponseDto } from './dtos/response/partner-usage.response.dto';
 import { SystemConfigResponseDto } from './dtos/response/system-config.response.dto';
 import { UpdateDeviceUiConfigDto } from './dtos/request/update-device-ui-config.dto';
+import { Prisma } from '@prisma/client';
 import {
   DEFAULT_DEVICE_UI_CONFIGS,
   DEVICE_UI_CONFIG_KEY,
@@ -162,7 +163,7 @@ export class AdminService {
         code: data.code,
         name: data.name,
         description: data.description,
-        config: data.config ?? [],
+        config: data.config as Prisma.InputJsonValue,
       },
     });
   }
@@ -187,7 +188,7 @@ export class AdminService {
           description: data.description,
         }),
         ...(data.config !== undefined && {
-          config: data.config,
+          config: data.config as Prisma.InputJsonValue,
         }),
       },
     });

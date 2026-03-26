@@ -198,6 +198,8 @@ services:
       REDIS_PORT: '6379'
       MQTT_HOST: mqtt://emqx
       MQTT_PORT: '1883'
+      APP_MQTT_SECRET: ${APP_MQTT_SECRET}
+      MQTT_WSS_URL: ${MQTT_WSS_URL}
     command: ['/app/entrypoint.sh', 'dist/apps/core-api/main.js']
     depends_on:
       postgres:
@@ -248,6 +250,8 @@ services:
       REDIS_PORT: '6379'
       MQTT_HOST: mqtt://emqx
       MQTT_PORT: '1883'
+      APP_MQTT_SECRET: ${APP_MQTT_SECRET}
+      MQTT_WSS_URL: ${MQTT_WSS_URL}
     command: ['node', 'dist/apps/iot-gateway/main.js']
     depends_on:
       core-api:

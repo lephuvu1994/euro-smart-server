@@ -36,7 +36,7 @@ export class AdminService {
     const exists = await this.db.partner.findUnique({
       where: { code: data.code },
     });
-    if (exists) throw new ConflictException('Partner Code already exists');
+    if (exists) throw new ConflictException('admin.error.partnerCodeExists');
 
     return this.db.partner.create({
       data: { code: data.code, name: data.name, isActive: true },
@@ -83,7 +83,7 @@ export class AdminService {
       where: { code: partnerCode },
     });
     if (!existing)
-      throw new HttpException('Partner not found', HttpStatus.NOT_FOUND);
+      throw new HttpException('admin.error.partnerNotFound', HttpStatus.NOT_FOUND);
 
     return this.db.$transaction(async (prisma) => {
       if (data.name) {
@@ -155,7 +155,7 @@ export class AdminService {
     const exists = await this.db.deviceModel.findUnique({
       where: { code: data.code },
     });
-    if (exists) throw new ConflictException('Device Model Code already exists');
+    if (exists) throw new ConflictException('admin.error.modelCodeExists');
 
     return this.db.deviceModel.create({
       data: {
@@ -177,7 +177,7 @@ export class AdminService {
   async updateDeviceModel(code: string, data: CreateDeviceModelDto) {
     const existing = await this.db.deviceModel.findUnique({ where: { code } });
     if (!existing)
-      throw new HttpException('Device Model not found', HttpStatus.NOT_FOUND);
+      throw new HttpException('admin.error.modelNotFound', HttpStatus.NOT_FOUND);
 
     return this.db.deviceModel.update({
       where: { code },

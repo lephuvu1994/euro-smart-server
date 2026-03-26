@@ -1,14 +1,17 @@
+
 import {
   Controller,
   Post,
   Body,
   Param,
-  Req,
   UseGuards,
   Get,
   Query,
   HttpStatus,
 } from '@nestjs/common';
+import { DocResponse } from '@app/common';
+import { AuthUser } from '@app/common/request/decorators/request.user.decorator';
+import { IAuthUser } from '@app/common/request/interfaces/request.interface';
 import { RegisterDeviceDto } from '../dto/register-device.dto';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAccessGuard } from '@app/common/request/guards/jwt.access.guard';
@@ -44,12 +47,9 @@ export class DeviceController {
     description:
       'Returns JSON config mapping device types to UI properties. Cached in Redis, stored in DB (SystemConfig).',
   })
+  @DocResponse({ messageKey: 'device.config.success', httpStatus: HttpStatus.OK })
   async getDeviceConfig() {
-    const data = await this.deviceService.getDeviceUiConfigs();
-    return {
-      statusCode: HttpStatus.OK,
-      data,
-    };
+    return await this.deviceService.getDeviceUiConfigs();
   }
 
   /**
@@ -64,12 +64,10 @@ export class DeviceController {
     description:
       'Returns WSS URL, username, HMAC password, and clientId for direct EMQX connection.',
   })
-  getMqttCredentials(@Req() req: any) {
-    const userId = req.user.userId;
-    return {
-      statusCode: HttpStatus.OK,
-      data: this.emqxAuthService.generateCredentials(userId),
-    };
+  @DocResponse({ messageKey: 'device.mqtt.success', httpStatus: HttpStatus.OK })
+  getMqttCredentials(@AuthUser() user: IAuthUser) {
+    const userId = user.userId;
+    return this.emqxAuthService.generateCredentials(userId);
   }
 
   /**
@@ -83,12 +81,9 @@ export class DeviceController {
     description:
       'Re-reads SystemConfig from DB and updates Redis cache. Use after config changes.',
   })
+  @DocResponse({ messageKey: 'device.config.refreshSuccess', httpStatus: HttpStatus.OK })
   async refreshDeviceConfig() {
-    const result = await this.deviceService.refreshDeviceUiConfigCache();
-    return {
-      statusCode: HttpStatus.OK,
-      ...result,
-    };
+    return await this.deviceService.refreshDeviceUiConfigCache();
   }
 
   @Post('register')
@@ -96,11 +91,12 @@ export class DeviceController {
     summary:
       'Đăng ký và chiếm quyền sở hữu thiết bị (Claim) — dùng cho cả BLE và AP mode',
   })
-  async registerDevice(@Req() req: any, @Body() dto: RegisterDeviceDto) {
-    return await this.provisioningService.registerAndClaim(
-      req.user.userId,
-      dto,
-    );
+  @DocResponse({ messageKey: 'device.register.success', httpStatus: HttpStatus.OK })
+  async registerDevice(
+    @AuthUser() user: IAuthUser,
+    @Body() dto: RegisterDeviceDto,
+  ) {
+    return await this.provisioningService.registerAndClaim(user.userId, dto);
   }
 
   /**
@@ -113,13 +109,14 @@ export class DeviceController {
       'Điều khiển entity thiết bị (Bật/Tắt, Điều chỉnh độ sáng, đóng mở cửa...)',
     description: 'Điều khiển 1 entity của thiết bị theo entity code',
   })
+  @DocResponse({ messageKey: 'device.control.success', httpStatus: HttpStatus.OK })
   async setEntityValue(
     @Param('deviceToken') deviceToken: string,
     @Param('entityCode') entityCode: string,
     @Body() body: SetEntityValueDto,
-    @Req() req: any,
+    @AuthUser() user: IAuthUser,
   ) {
-    const userId = req.user.userId;
+    const userId = user.userId;
     return await this.deviceControlService.sendControlCommand(
       deviceToken,
       userId,
@@ -139,12 +136,13 @@ export class DeviceController {
     description:
       'Gửi lệnh cho nhiều entities cùng lúc (VD: bật + chỉnh độ sáng)',
   })
+  @DocResponse({ messageKey: 'device.control.success', httpStatus: HttpStatus.OK })
   async setDeviceValue(
     @Param('deviceToken') deviceToken: string,
     @Body() body: SetEntityValueDto,
-    @Req() req: any,
+    @AuthUser() user: IAuthUser,
   ) {
-    const userId = req.user.userId;
+    const userId = user.userId;
     return await this.deviceControlService.sendDeviceValueCommand(
       deviceToken,
       userId,
@@ -161,14 +159,10 @@ export class DeviceController {
   @ApiOperation({
     summary: 'Get all devices + scenes for Siri/Google Assistant sync',
   })
-  async getSiriSync(@Req() req: any) {
-    const userId = req.user.userId || req.user.id;
-    const result = await this.deviceService.getSiriSyncData(userId);
-
-    return {
-      statusCode: HttpStatus.OK,
-      data: result,
-    };
+  @DocResponse({ messageKey: 'device.siriSync.success', httpStatus: HttpStatus.OK })
+  async getSiriSync(@AuthUser() user: IAuthUser) {
+    const userId = user.userId;
+    return await this.deviceService.getSiriSyncData(userId);
   }
 
   /**
@@ -176,30 +170,27 @@ export class DeviceController {
    * GET /v1/devices?page=1&limit=10
    */
   @Get()
-  async getMyDevices(@Req() req: any, @Query() query: GetDevicesDto) {
-    const userId = req.user.userId;
-    const result = await this.deviceService.getUserDevices(userId, query);
-
-    return {
-      statusCode: HttpStatus.OK,
-      message: 'Lấy danh sách thiết bị thành công',
-      data: result.data,
-      meta: result.meta,
-    };
+  @ApiOperation({ summary: 'Lấy danh sách thiết bị của User (có phân trang)' })
+  @DocResponse({ messageKey: 'device.list.success', httpStatus: HttpStatus.OK })
+  async getMyDevices(
+    @AuthUser() user: IAuthUser,
+    @Query() query: GetDevicesDto,
+  ) {
+    const userId = user.userId;
+    return await this.deviceService.getUserDevices(userId, query);
   }
   /**
    * API: Lấy chi tiết một thiết bị
    * GET /v1/devices/:id
    */
   @Get(':id')
-  async getDeviceDetail(@Param('id') id: string, @Req() req: any) {
-    const userId = req.user.userId;
-    const device = await this.deviceService.getDeviceDetail(id, userId);
-
-    return {
-      statusCode: HttpStatus.OK,
-      message: 'Lấy thông tin thiết bị thành công',
-      data: { device },
-    };
+  @ApiOperation({ summary: 'Lấy chi tiết một thiết bị' })
+  @DocResponse({ messageKey: 'device.detail.success', httpStatus: HttpStatus.OK })
+  async getDeviceDetail(
+    @Param('id') id: string,
+    @AuthUser() user: IAuthUser,
+  ) {
+    const userId = user.userId;
+    return await this.deviceService.getDeviceDetail(id, userId);
   }
 }

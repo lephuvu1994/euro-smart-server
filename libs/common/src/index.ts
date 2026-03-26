@@ -13,6 +13,9 @@ export * from './enums/scene.enum';
 export * from './dtos/user.response.dto';
 export * from './dtos/home.response.dto';
 
+// Doc
+export * from './doc/decorators/doc.response.decorator';
+
 // Events (cross-app communication)
 export * from './events/socket-event.publisher';
 

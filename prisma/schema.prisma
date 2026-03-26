@@ -143,7 +143,7 @@ model DeviceModel {
 
   // [BLUEPRINT v2] JSON quy định entities + attributes
   // VD: { "entities": [{ "code": "channel_1", "domain": "light", "attributes": [...] }] }
-  config Json @default("{}") @map("features_config") @db.JsonB
+  config Json @default("{}") @db.JsonB
 
   quotas    LicenseQuota[]
   hardwares HardwareRegistry[]

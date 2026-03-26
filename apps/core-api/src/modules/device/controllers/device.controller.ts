@@ -15,7 +15,7 @@ import { JwtAccessGuard } from '@app/common/request/guards/jwt.access.guard';
 import { RolesGuard } from '@app/common/request/guards/roles.guard';
 import { DeviceProvisioningService } from '../services/device-provisioning.service';
 import { DeviceControlService } from '../services/device-control.service';
-import { SetFeatureValueDto } from '../dto/set-feature-value.dto';
+import { SetEntityValueDto } from '../dto/set-entity-value.dto';
 import { DeviceService } from '../services/device.service';
 import { GetDevicesDto } from '../dto/get-devices.dto';
 import { EmqxAuthService } from '../../emqx-auth/services/emqx-auth.service';
@@ -116,7 +116,7 @@ export class DeviceController {
   async setEntityValue(
     @Param('deviceToken') deviceToken: string,
     @Param('entityCode') entityCode: string,
-    @Body() body: SetFeatureValueDto,
+    @Body() body: SetEntityValueDto,
     @Req() req: any,
   ) {
     const userId = req.user.userId;
@@ -141,7 +141,7 @@ export class DeviceController {
   })
   async setDeviceValue(
     @Param('deviceToken') deviceToken: string,
-    @Body() body: SetFeatureValueDto,
+    @Body() body: SetEntityValueDto,
     @Req() req: any,
   ) {
     const userId = req.user.userId;

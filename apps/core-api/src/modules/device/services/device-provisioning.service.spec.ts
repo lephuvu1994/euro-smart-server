@@ -98,7 +98,7 @@ describe('DeviceProvisioningService', () => {
     db.deviceModel.findUnique.mockResolvedValue({
       id: 'model-id',
       code: 'model-1',
-      featuresConfig: mockBlueprint,
+      config: mockBlueprint,
     });
     db.partner.findUnique.mockResolvedValue({
       id: 'partner-id',
@@ -160,7 +160,7 @@ describe('DeviceProvisioningService', () => {
     db.deviceModel.findUnique.mockResolvedValue({
       id: 'model-id',
       code: 'model-1',
-      featuresConfig: mockBlueprint,
+      config: mockBlueprint,
     });
     db.partner.findUnique.mockResolvedValue({
       id: 'partner-id',

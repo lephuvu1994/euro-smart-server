@@ -58,8 +58,8 @@ Authorization: Bearer {{loginUser.response.body.data.accessToken}}
 ###
 # --- ĐIỀU KHIỂN ---
 
-# Set một feature (theo featureCode) – ví dụ shutter
-POST {{baseUrl}}/devices/{{deviceToken}}/features/shutter_main/setValue
+# Set một entity (theo entityCode) – ví dụ shutter
+POST {{baseUrl}}/devices/{{deviceToken}}/entities/main/setValue
 Authorization: Bearer {{loginUser.response.body.data.accessToken}}
 Content-Type: application/json
 
@@ -68,8 +68,8 @@ Content-Type: application/json
 }
 
 ###
-# Set feature dạng BINARY (bật/tắt, khóa trẻ em...)
-POST {{baseUrl}}/devices/{{deviceToken}}/features/security_lock/setValue
+# Set entity dạng BINARY (bật/tắt, khóa trẻ em...)
+POST {{baseUrl}}/devices/{{deviceToken}}/entities/security_lock/setValue
 Authorization: Bearer {{loginUser.response.body.data.accessToken}}
 Content-Type: application/json
 
@@ -78,8 +78,8 @@ Content-Type: application/json
 }
 
 ###
-# Set feature dạng CONFIG (object)
-POST {{baseUrl}}/devices/{{deviceToken}}/features/sys_config/setValue
+# Set entity dạng CONFIG (object)
+POST {{baseUrl}}/devices/{{deviceToken}}/entities/sys_config/setValue
 Authorization: Bearer {{loginUser.response.body.data.accessToken}}
 Content-Type: application/json
 

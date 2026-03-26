@@ -107,11 +107,10 @@ export class DeviceService {
           }
         }
 
-        // Hydrate attributes from shadow
-        const attributes = entity.attributes.map((attr) => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        // Hydrate attributes from shadow and flatten into a dictionary
+        const attributes: Record<string, any> = {};
+        entity.attributes.forEach((attr) => {
           let currentValue: any = attr.numValue ?? attr.strValue;
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const attrConfig = attr.config as any;
           const attrCommandKey = attrConfig?.commandKey ?? attr.key;
 
@@ -122,11 +121,8 @@ export class DeviceService {
               currentValue = shadow[attrCommandKey];
             }
           }
-
-          return {
-            ...attr,
-            currentValue,
-          };
+          
+          attributes[attr.key] = currentValue;
         });
 
         return {
@@ -210,10 +206,9 @@ export class DeviceService {
         }
       }
 
-      const attributes = entity.attributes.map((attr) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const attributes: Record<string, any> = {};
+      entity.attributes.forEach((attr) => {
         let currentValue: any = attr.numValue ?? attr.strValue;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const attrConfig = attr.config as any;
         const attrCommandKey = attrConfig?.commandKey ?? attr.key;
 
@@ -225,7 +220,7 @@ export class DeviceService {
           }
         }
 
-        return { ...attr, currentValue };
+        attributes[attr.key] = currentValue;
       });
 
       return { ...entity, currentState, attributes };

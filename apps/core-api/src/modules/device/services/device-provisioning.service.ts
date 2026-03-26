@@ -3,25 +3,17 @@ import { DatabaseService } from '@app/database';
 import { RedisService } from '@app/redis-cache';
 import { RegisterDeviceDto } from '../dto/register-device.dto';
 import { v4 as uuidv4 } from 'uuid';
+import type { EntityDomain, AttributeValueType, Prisma } from '@prisma/client';
+
+import type {
+  IDeviceModelConfig,
+  IBlueprintEntity,
+  IBlueprintAttribute,
+} from '../interfaces/device-model-config.interface';
 
 /**
  * Blueprint v2 entity format (from DeviceModel.config):
- * {
- *   "entities": [
- *     {
- *       "code": "channel_1",
- *       "name": "Kênh 1",
- *       "domain": "light",
- *       "commandKey": "state",
- *       "commandSuffix": "set",
- *       "readOnly": false,
- *       "attributes": [
- *         { "key": "brightness", "name": "Độ sáng", "valueType": "NUMBER", "min": 0, "max": 100, "unit": "%" },
- *         { "key": "color_temp", "name": "Nhiệt độ màu", "valueType": "NUMBER", "min": 2700, "max": 6500, "unit": "K" }
- *       ]
- *     }
- *   ]
- * }
+ * @see IDeviceModelConfig
  */
 
 @Injectable()
@@ -30,6 +22,18 @@ export class DeviceProvisioningService {
     private readonly databaseService: DatabaseService,
     private readonly redisService: RedisService,
   ) {}
+
+  /**
+   * Trích xuất danh sách entities từ DeviceModel.config.
+   * Hỗ trợ cả 2 format:
+   *   - Object chuẩn: { entities: [...] }
+   *   - Legacy array:  [{ code, name, domain, ... }]
+   */
+  private extractEntities(config: unknown): IBlueprintEntity[] {
+    if (Array.isArray(config)) return config;
+    const obj = config as IDeviceModelConfig | null;
+    return obj?.entities ?? [];
+  }
 
   // ─── App trực tiếp register (flow BLE/Provision Token) ───────
   async registerAndClaim(userId: string, dto: RegisterDeviceDto) {
@@ -99,37 +103,28 @@ export class DeviceProvisioningService {
           });
         }
 
-        // ─── Blueprint v2: parse entities from DeviceModel.config ───
-        // Supports both formats:
-        //   - Object: { entities: [...] }
-        //   - Array:  [{ code, name, domain, ... }]
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const blueprint = model.config as any;
-        const rawEntities = Array.isArray(blueprint)
-          ? blueprint
-          : (blueprint?.entities ?? []);
+        // ─── Parse entities from DeviceModel.config (Blueprint) ───
+        const rawEntities = this.extractEntities(model.config);
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const entitiesToCreate = rawEntities.map((e: any, idx: number) => ({
+        const entitiesToCreate = rawEntities.map((e: IBlueprintEntity, idx: number) => ({
           code: e.code,
           name: e.name,
-          domain: e.domain,
-          commandKey: e.commandKey ?? e.command_key ?? null,
-          commandSuffix: e.commandSuffix ?? e.command_suffix ?? 'set',
-          readOnly: e.readOnly ?? e.read_only ?? false,
+          domain: e.domain as EntityDomain,
+          commandKey: (e.commandKey ?? e.command_key ?? null) as string | null,
+          commandSuffix: (e.commandSuffix ?? e.command_suffix ?? 'set') as string | null,
+          readOnly: (e.readOnly ?? e.read_only ?? false) as boolean,
           sortOrder: idx,
           attributes: {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            create: (e.attributes ?? []).map((a: any) => ({
-              key: a.key,
-              name: a.name,
-              valueType: a.valueType ?? a.value_type ?? 'STRING',
-              min: a.min ?? null,
-              max: a.max ?? null,
-              unit: a.unit ?? null,
-              readOnly: a.readOnly ?? a.read_only ?? false,
-              enumValues: a.enumValues ?? a.enum_values ?? [],
-              config: a.config ?? {},
+            create: ((e.attributes ?? []) as IBlueprintAttribute[]).map((a) => ({
+              key: a.key as string,
+              name: a.name as string,
+              valueType: (a.valueType ?? a.value_type ?? 'STRING') as AttributeValueType,
+              min: (a.min ?? null) as number | null,
+              max: (a.max ?? null) as number | null,
+              unit: (a.unit ?? null) as string | null,
+              readOnly: (a.readOnly ?? a.read_only ?? false) as boolean,
+              enumValues: (a.enumValues ?? a.enum_values ?? []) as string[],
+              config: (a.config ?? {}) as Prisma.InputJsonValue,
             })),
           },
         }));

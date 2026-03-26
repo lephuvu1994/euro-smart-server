@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsArray, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class CreateDeviceModelDto {
   @ApiProperty({ example: '1001', description: 'Mã model duy nhất' })
@@ -18,11 +18,10 @@ export class CreateDeviceModelDto {
   description?: string;
 
   @ApiProperty({
-    description: 'Cấu hình tính năng JSON (Blueprint)',
-    example: [{ code: 'sw1', name: 'Switch 1', type: 'BINARY' }],
+    description: 'Cấu hình tính năng JSON (Blueprint) — object {entities: [...]} hoặc array trực tiếp',
+    example: { entities: [{ code: 'sw1', name: 'Switch 1', domain: 'switch_' }] },
     required: false,
   })
-  @IsArray()
   @IsOptional()
-  config?: any[];
+  config?: any;
 }

@@ -100,9 +100,14 @@ export class DeviceProvisioningService {
         }
 
         // ─── Blueprint v2: parse entities from DeviceModel.config ───
+        // Supports both formats:
+        //   - Object: { entities: [...] }
+        //   - Array:  [{ code, name, domain, ... }]
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const blueprint = model.config as any;
-        const rawEntities = blueprint?.entities ?? [];
+        const rawEntities = Array.isArray(blueprint)
+          ? blueprint
+          : (blueprint?.entities ?? []);
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const entitiesToCreate = rawEntities.map((e: any, idx: number) => ({

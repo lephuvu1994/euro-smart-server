@@ -81,11 +81,21 @@ export class ResponseInterceptor implements NestInterceptor {
           });
         }
 
+        // Unpack double 'data' wrapper for paginated endpoints
+        let actualData = data;
+        let meta = undefined;
+
+        if (data && typeof data === 'object' && 'data' in data && 'meta' in data) {
+          actualData = data.data;
+          meta = data.meta;
+        }
+
         return {
           statusCode,
           message,
           timestamp: new Date().toISOString(),
-          data,
+          data: actualData,
+          ...(meta ? { meta } : {}),
         };
       }),
     );

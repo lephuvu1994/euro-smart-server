@@ -33,7 +33,7 @@ export class DeviceProvisioningService {
 
   // ─── App trực tiếp register (flow BLE/Provision Token) ───────
   async registerAndClaim(userId: string, dto: RegisterDeviceDto) {
-    if (!userId) throw new BadRequestException('User không hợp lệ');
+    if (!userId) throw new BadRequestException('device.error.invalidUser');
 
     const [model, partner] = await Promise.all([
       this.databaseService.deviceModel.findUnique({
@@ -45,7 +45,7 @@ export class DeviceProvisioningService {
     ]);
 
     if (!model || !partner)
-      throw new BadRequestException('Model hoặc Partner không hợp lệ');
+      throw new BadRequestException('device.error.invalidModelOrPartner');
 
     // Thu thập thông tin cần cleanup Redis (sẽ thực hiện SAU transaction)
     let redisCleanup: { oldToken?: string; oldDeviceId?: string } = {};
@@ -100,9 +100,11 @@ export class DeviceProvisioningService {
         }
 
         // ─── Blueprint v2: parse entities from DeviceModel.config ───
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const blueprint = model.config as any;
         const rawEntities = blueprint?.entities ?? [];
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const entitiesToCreate = rawEntities.map((e: any, idx: number) => ({
           code: e.code,
           name: e.name,
@@ -112,6 +114,7 @@ export class DeviceProvisioningService {
           readOnly: e.readOnly ?? e.read_only ?? false,
           sortOrder: idx,
           attributes: {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             create: (e.attributes ?? []).map((a: any) => ({
               key: a.key,
               name: a.name,
@@ -163,7 +166,8 @@ export class DeviceProvisioningService {
           device: {
             id: newDevice.id,
             name: newDevice.name,
-            entities: newDevice.entities,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            entities: (newDevice as any).entities,
           },
           mqtt_broker: process.env.MQTT_HOST,
           mqtt_token_device: newDeviceToken,
@@ -177,6 +181,7 @@ export class DeviceProvisioningService {
 
     // Redis cleanup SAU khi transaction DB đã commit thành công
     if (redisCleanup.oldToken || redisCleanup.oldDeviceId) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const cleanupTasks: Promise<any>[] = [];
 
       if (redisCleanup.oldToken) {

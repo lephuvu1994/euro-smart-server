@@ -42,7 +42,7 @@ export class DeviceControlService {
     deviceToken: string,
     userId: string,
     entityCode: string,
-    value: any,
+    value: string | number | boolean,
   ) {
     const device = await this.databaseService.device.findFirst({
       where: { token: deviceToken, ownerId: userId },
@@ -64,7 +64,7 @@ export class DeviceControlService {
     }
 
     if (entity.readOnly) {
-      throw new BadRequestException('Entity này chỉ đọc (Read-only)');
+      throw new BadRequestException('device.error.readOnlyEntity');
     }
 
     // Validate value theo entity domain
@@ -113,7 +113,7 @@ export class DeviceControlService {
   async sendDeviceValueCommand(
     deviceToken: string,
     userId: string,
-    values: { entityCode: string; value: any }[],
+    values: { entityCode: string; value: string | number | boolean }[],
   ) {
     const device = await this.databaseService.device.findFirst({
       where: { token: deviceToken, ownerId: userId },
@@ -184,7 +184,7 @@ export class DeviceControlService {
   /**
    * Validate giá trị dựa trên EntityDomain
    */
-  private validateEntityValue(domain: string, value: any) {
+  private validateEntityValue(domain: string, value: string | number | boolean) {
     switch (domain) {
       case 'switch_':
       case 'button':
@@ -197,7 +197,7 @@ export class DeviceControlService {
       case 'light':
         // Light có thể nhận on/off (0/1) hoặc brightness/color qua attribute
         if (typeof value === 'number' && (value < 0 || value > 100)) {
-          throw new BadRequestException('Giá trị light phải từ 0 đến 100');
+          throw new BadRequestException('device.error.invalidLightValue');
         }
         break;
       case 'curtain': {

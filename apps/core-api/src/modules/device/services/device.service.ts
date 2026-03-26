@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { DatabaseService } from '@app/database';
 import { RedisService } from '@app/redis-cache';
+import { EHomeRole } from '@app/common';
 import { GetDevicesDto } from '../dto/get-devices.dto';
 import {
   DEFAULT_DEVICE_UI_CONFIGS,
@@ -42,13 +43,21 @@ export class DeviceService {
       }
     }
 
+    // Điều kiện chung: thiết bị mà user có thể thấy (owner root, được share, hoặc là OWNER của Home đó)
+    const accessibleCondition = {
+      ...(homeId && { homeId: homeId }),
+      OR: [
+        { ownerId: userId },
+        { sharedUsers: { some: { userId } } },
+        { home: { ownerId: userId } },
+        { home: { members: { some: { userId, role: EHomeRole.OWNER } } } },
+      ],
+    };
+
     // 1. Lấy khung dữ liệu từ DB — entity-based
     const [devices, total] = await Promise.all([
       this.db.device.findMany({
-        where: {
-          ownerId: userId,
-          ...(homeId && { homeId: homeId }),
-        },
+        where: accessibleCondition,
         include: {
           entities: {
             include: { attributes: true },
@@ -62,7 +71,7 @@ export class DeviceService {
         orderBy: { sortOrder: 'asc' },
       }),
       this.db.device.count({
-        where: { ownerId: userId, ...(homeId && { homeId: homeId }) },
+        where: accessibleCondition,
       }),
     ]);
 
@@ -88,6 +97,7 @@ export class DeviceService {
 
       const entities = device.entities.map((entity) => {
         // Hydrate entity primary state from shadow
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let currentState: any = entity.state;
         if (entity.commandKey && shadow[entity.commandKey] !== undefined) {
           try {
@@ -99,7 +109,9 @@ export class DeviceService {
 
         // Hydrate attributes from shadow
         const attributes = entity.attributes.map((attr) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           let currentValue: any = attr.numValue ?? attr.strValue;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const attrConfig = attr.config as any;
           const attrCommandKey = attrConfig?.commandKey ?? attr.key;
 
@@ -154,7 +166,12 @@ export class DeviceService {
     const device = await this.db.device.findFirst({
       where: {
         id: deviceId,
-        ownerId: userId,
+        OR: [
+          { ownerId: userId },
+          { sharedUsers: { some: { userId } } },
+          { home: { ownerId: userId } },
+          { home: { members: { some: { userId, role: EHomeRole.OWNER } } } },
+        ],
       },
       include: {
         entities: {
@@ -167,7 +184,7 @@ export class DeviceService {
     });
 
     if (!device) {
-      throw new NotFoundException('Không tìm thấy thiết bị');
+      throw new NotFoundException('device.error.notFound');
     }
 
     // Redis: lấy status và shadow
@@ -183,6 +200,7 @@ export class DeviceService {
 
     // Hydrate entities
     const entities = device.entities.map((entity) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let currentState: any = entity.state;
       if (entity.commandKey && shadow[entity.commandKey] !== undefined) {
         try {
@@ -193,7 +211,9 @@ export class DeviceService {
       }
 
       const attributes = entity.attributes.map((attr) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         let currentValue: any = attr.numValue ?? attr.strValue;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const attrConfig = attr.config as any;
         const attrCommandKey = attrConfig?.commandKey ?? attr.key;
 
@@ -223,7 +243,14 @@ export class DeviceService {
    */
   async getSiriSyncData(userId: string) {
     const devices = await this.db.device.findMany({
-      where: { ownerId: userId },
+      where: {
+        OR: [
+          { ownerId: userId },
+          { sharedUsers: { some: { userId } } },
+          { home: { ownerId: userId } },
+          { home: { members: { some: { userId, role: EHomeRole.OWNER } } } },
+        ],
+      },
       include: {
         entities: {
           select: {

@@ -110,29 +110,15 @@ services:
       # Dashboard
       EMQX_DASHBOARD__DEFAULT_USERNAME: ${EMQX_DASHBOARD_USER:-admin}
       EMQX_DASHBOARD__DEFAULT_PASSWORD: ${EMQX_DASHBOARD_PASS:?EMQX_DASHBOARD_PASS is required}
-      # HTTP Auth → core-api (HMAC verification)
-      EMQX_AUTHENTICATION__1__MECHANISM: password_based
-      EMQX_AUTHENTICATION__1__BACKEND: http
-      EMQX_AUTHENTICATION__1__METHOD: post
-      EMQX_AUTHENTICATION__1__URL: "http://core-api:3001/v1/internal/emqx/auth"
-      EMQX_AUTHENTICATION__1__BODY__USERNAME: "$${username}"
-      EMQX_AUTHENTICATION__1__BODY__PASSWORD: "$${password}"
-      EMQX_AUTHENTICATION__1__BODY__CLIENTID: "$${clientid}"
-      EMQX_AUTHENTICATION__1__HEADERS__CONTENT_TYPE: "application/json"
-      # HTTP ACL → core-api (ownership check)
-      EMQX_AUTHORIZATION__NO_MATCH: deny
-      EMQX_AUTHORIZATION__SOURCES__1__TYPE: http
-      EMQX_AUTHORIZATION__SOURCES__1__ENABLE: "true"
-      EMQX_AUTHORIZATION__SOURCES__1__METHOD: post
-      EMQX_AUTHORIZATION__SOURCES__1__URL: "http://core-api:3001/v1/internal/emqx/acl"
-      EMQX_AUTHORIZATION__SOURCES__1__BODY__USERNAME: "$${username}"
-      EMQX_AUTHORIZATION__SOURCES__1__BODY__TOPIC: "$${topic}"
-      EMQX_AUTHORIZATION__SOURCES__1__BODY__ACTION: "$${action}"
-      EMQX_AUTHORIZATION__SOURCES__1__HEADERS__CONTENT_TYPE: "application/json"
+      
+      # Custom HOCON configuration for Authentication/Authorization webhooks
+      EMQX_CUSTOM_CONFIG: "/opt/emqx/etc/emqx-custom.conf"
+
       # Performance tuning
       EMQX_BROKER__SHARED_SUBSCRIPTION: 'true'
       EMQX_LOG__CONSOLE__LEVEL: warning
     volumes:
+      - ./deploy/docker/emqx-custom.conf:/opt/emqx/etc/emqx-custom.conf:ro
       - emqx_data:/opt/emqx/data
       - emqx_log:/opt/emqx/log
     networks:

@@ -162,7 +162,7 @@ export class AdminService {
         code: data.code,
         name: data.name,
         description: data.description,
-        featuresConfig: data.featuresConfig ?? [],
+        config: data.config ?? [],
       },
     });
   }
@@ -186,8 +186,8 @@ export class AdminService {
         ...(data.description !== undefined && {
           description: data.description,
         }),
-        ...(data.featuresConfig !== undefined && {
-          featuresConfig: data.featuresConfig,
+        ...(data.config !== undefined && {
+          config: data.config,
         }),
       },
     });

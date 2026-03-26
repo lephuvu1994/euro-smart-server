@@ -74,7 +74,7 @@ Content-Type: application/json
 {
     "code": "{{deviceModelCode}}",
     "name": "Công tắc WiFi 4 nút Pro",
-    "featuresConfig": {
+    "config": {
         "modelCode": "SHUTTER_DOOR",
         "modelName": "Cửa cuốn thông minh",
         "protocol": "MQTT",
@@ -128,8 +128,8 @@ GET {{baseUrl}}/admin/options/device-models
 Authorization: Bearer {{loginAdmin.response.body.data.accessToken}}
 
 ###
-# ⚡ Cập nhật Device Model (featuresConfig, name...)
-# Dùng khi model đã tồn tại nhưng featuresConfig bị trống
+# ⚡ Cập nhật Device Model (config, name...)
+# Dùng khi model đã tồn tại nhưng config bị trống
 PUT {{baseUrl}}/admin/device-models/{{deviceModelCode}}
 Authorization: Bearer {{loginAdmin.response.body.data.accessToken}}
 Content-Type: application/json
@@ -137,7 +137,7 @@ Content-Type: application/json
 {
     "name": "Công tắc WiFi 4 nút Pro",
     "code": "1001",
-    "featuresConfig": {
+    "config": {
         "modelCode": "SHUTTER_DOOR",
         "modelName": "Cửa cuốn thông minh",
         "protocol": "MQTT",

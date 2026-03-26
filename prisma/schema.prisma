@@ -19,9 +19,9 @@ enum UserRole {
 }
 
 enum SharePermission {
-  ADMIN    // Toàn quyền
-  EDITOR   // Được điều khiển
-  VIEWER   // Chỉ xem
+  ADMIN // Toàn quyền
+  EDITOR // Được điều khiển
+  VIEWER // Chỉ xem
 }
 
 enum DeviceProtocol {
@@ -33,24 +33,24 @@ enum DeviceProtocol {
 
 // Domain của entity (tương đương HA entity domain)
 enum EntityDomain {
-  light       // Đèn: on/off + brightness + color + color_temp
-  switch_     // Công tắc: on/off
-  sensor      // Cảm biến: read-only values
-  camera      // Camera: stream
-  lock        // Khoá: lock/unlock
-  curtain     // Rèm/cửa cuốn: open/close/stop + position
-  climate     // Điều hoà: on/off + temp + mode + fan
-  button      // Nút bấm: trigger action
+  light // Đèn: on/off + brightness + color + color_temp
+  switch_ // Công tắc: on/off
+  sensor // Cảm biến: read-only values
+  camera // Camera: stream
+  lock // Khoá: lock/unlock
+  curtain // Rèm/cửa cuốn: open/close/stop + position
+  climate // Điều hoà: on/off + temp + mode + fan
+  button // Nút bấm: trigger action
 }
 
 // Loại giá trị attribute
 enum AttributeValueType {
-  BOOLEAN     // true/false
-  NUMBER      // integer/float
-  STRING      // text
-  ENUM        // one of predefined values
-  COLOR       // hex/rgb
-  JSON        // complex object
+  BOOLEAN // true/false
+  NUMBER // integer/float
+  STRING // text
+  ENUM // one of predefined values
+  COLOR // hex/rgb
+  JSON // complex object
 }
 
 // ==========================================
@@ -58,39 +58,39 @@ enum AttributeValueType {
 // ==========================================
 
 model User {
-  id               String    @id @default(uuid()) @db.Uuid
-  firstName        String? @map("first_name")
-  lastName         String? @map("last_name")
-  email            String?   @unique
-  phone            String?   @unique
-  password         String
-  role             UserRole  @default(USER)
-  avatar           String?   @map("avatar")
+  id        String   @id @default(uuid()) @db.Uuid
+  firstName String?  @map("first_name")
+  lastName  String?  @map("last_name")
+  email     String?  @unique
+  phone     String?  @unique
+  password  String
+  role      UserRole @default(USER)
+  avatar    String?  @map("avatar")
 
   // OTP
-  otpCode          String?   @map("otp_code")
-  otpExpire        DateTime? @map("otp_expire")
-  otpProvider      String?   @map("otp_provider")
+  otpCode     String?   @map("otp_code")
+  otpExpire   DateTime? @map("otp_expire")
+  otpProvider String?   @map("otp_provider")
 
   // Vị trí (Cache nhanh)
-  lastLatitude         Float? @map("last_latitude")
-  lastLongitude        Float? @map("last_longitude")
-  lastAltitude         Float? @map("last_altitude")
-  lastAccuracy         Float? @map("last_accuracy")
+  lastLatitude        Float?    @map("last_latitude")
+  lastLongitude       Float?    @map("last_longitude")
+  lastAltitude        Float?    @map("last_altitude")
+  lastAccuracy        Float?    @map("last_accuracy")
   lastLocationChanged DateTime? @map("last_location_changed")
 
   // Quan hệ
-  locations        Location[]
-  ownedDevices    Device[]      @relation("UserInventory")
-  sharedDevices   DeviceShare[] @relation("SharedToUser")
-  ownedHomes      Home[]        @relation("UserHomes")
+  locations       Location[]
+  ownedDevices    Device[]         @relation("UserInventory")
+  sharedDevices   DeviceShare[]    @relation("SharedToUser")
+  ownedHomes      Home[]           @relation("UserHomes")
   homeMemberships HomeMember[]
-  sessions         Session[]
-  calendars        Calendar[]
-  provisionTokens  ProvisionToken[]
+  sessions        Session[]
+  calendars       Calendar[]
+  provisionTokens ProvisionToken[]
 
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("t_user")
 }
@@ -98,16 +98,16 @@ model User {
 model Session {
   id                 String   @id @default(uuid()) @db.Uuid
   hashedRefreshToken String   @unique @map("hashed_refresh_token")
-  deviceName         String? @map("device_name")
-  ipAddress          String? @map("ip_address")
-  userAgent          String? @map("user_agent")
+  deviceName         String?  @map("device_name")
+  ipAddress          String?  @map("ip_address")
+  userAgent          String?  @map("user_agent")
   expiresAt          DateTime @map("expires_at")
 
-  userId             String   @db.Uuid @map("user_id")
-  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([userId])
   @@map("t_session")
@@ -119,59 +119,59 @@ model Session {
 
 // Công ty / Đối tác
 model Partner {
-  id          String   @id @default(uuid()) @db.Uuid
-  code        String   @unique // VD: "COMPANY_A"
-  name        String
-  isActive    Boolean  @default(true) @map("is_active")
+  id       String  @id @default(uuid()) @db.Uuid
+  code     String  @unique // VD: "COMPANY_A"
+  name     String
+  isActive Boolean @default(true) @map("is_active")
 
-  quotas      LicenseQuota[]
-  hardwares   HardwareRegistry[]
-  devices     Device[]
+  quotas    LicenseQuota[]
+  hardwares HardwareRegistry[]
+  devices   Device[]
 
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("t_partner")
 }
 
 // Khuôn mẫu thiết bị (Blueprint)
 model DeviceModel {
-  id          String   @id @default(uuid()) @db.Uuid
-  code        String   @unique // VD: "WIFI_SWITCH_4"
-  name        String   // VD: "Công tắc WiFi 4 nút"
+  id          String  @id @default(uuid()) @db.Uuid
+  code        String  @unique // VD: "WIFI_SWITCH_4"
+  name        String // VD: "Công tắc WiFi 4 nút"
   description String?
 
   // [BLUEPRINT v2] JSON quy định entities + attributes
   // VD: { "entities": [{ "code": "channel_1", "domain": "light", "attributes": [...] }] }
-  featuresConfig Json    @default("{}") @db.JsonB @map("features_config")
+  config Json @default("{}") @map("features_config") @db.JsonB
 
-  quotas      LicenseQuota[]
-  hardwares   HardwareRegistry[]
-  devices     Device[] // Quan hệ với các thiết bị thực tế đang chạy
+  quotas    LicenseQuota[]
+  hardwares HardwareRegistry[]
+  devices   Device[] // Quan hệ với các thiết bị thực tế đang chạy
 
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("t_device_model")
 }
 
 // Quản lý số lượng License
 model LicenseQuota {
-  id              String   @id @default(uuid()) @db.Uuid
+  id String @id @default(uuid()) @db.Uuid
 
-  partnerId       String   @db.Uuid @map("partner_id")
-  partner         Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  partnerId String  @map("partner_id") @db.Uuid
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
 
-  deviceModelId   String   @db.Uuid @map("device_model_id")
-  deviceModel     DeviceModel @relation(fields: [deviceModelId], references: [id], onDelete: Cascade)
+  deviceModelId String      @map("device_model_id") @db.Uuid
+  deviceModel   DeviceModel @relation(fields: [deviceModelId], references: [id], onDelete: Cascade)
 
-  maxQuantity     Int      @default(0) @map("max_quantity")
-  activatedCount  Int      @default(0) @map("activated_count")
-  licenseDays     Int      @default(90) @map("license_days")
-  isActive        Boolean  @default(true) @map("is_active")
+  maxQuantity    Int     @default(0) @map("max_quantity")
+  activatedCount Int     @default(0) @map("activated_count")
+  licenseDays    Int     @default(90) @map("license_days")
+  isActive       Boolean @default(true) @map("is_active")
 
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@unique([partnerId, deviceModelId])
   @@map("t_license_quota")
@@ -179,31 +179,31 @@ model LicenseQuota {
 
 // Sổ cái phần cứng (Chip vật lý)
 model HardwareRegistry {
-  id            String   @id @default(uuid()) @db.Uuid
+  id String @id @default(uuid()) @db.Uuid
 
   // Định danh vật lý gốc (MAC Address / IMEI)
-  identifier          String   @unique
+  identifier String @unique
 
   // Credentials kết nối MQTT (Cấp cho Chip)
-  deviceToken   String   @unique @map("device_token")
-  mqttUsername  String? @map("mqtt_username")
-  mqttPassword  String? @map("mqtt_password")
-  mqttBroker    String? @map("mqtt_broker")
+  deviceToken  String  @unique @map("device_token")
+  mqttUsername String? @map("mqtt_username")
+  mqttPassword String? @map("mqtt_password")
+  mqttBroker   String? @map("mqtt_broker")
 
   // Thông tin quản lý
-  partnerId     String   @db.Uuid @map("partner_id")
-  partner       Partner  @relation(fields: [partnerId], references: [id])
+  partnerId String  @map("partner_id") @db.Uuid
+  partner   Partner @relation(fields: [partnerId], references: [id])
 
-  deviceModelId String   @db.Uuid @map("device_model_id")
+  deviceModelId String      @map("device_model_id") @db.Uuid
   deviceModel   DeviceModel @relation(fields: [deviceModelId], references: [id])
 
   // Link tới Device Logic (1-1): Khi User add vào App thì field này sẽ có dữ liệu
-  device        Device?
+  device Device?
 
-  firmwareVer   String? @map("firmware_ver")
-  ipAddress     String? @map("ip_address")
-  isBanned      Boolean  @default(false) @map("is_banned")
-  activatedAt   DateTime @default(now()) @map("activated_at")
+  firmwareVer String?  @map("firmware_ver")
+  ipAddress   String?  @map("ip_address")
+  isBanned    Boolean  @default(false) @map("is_banned")
+  activatedAt DateTime @default(now()) @map("activated_at")
 
   @@map("t_hardware_registry")
 }
@@ -213,60 +213,60 @@ model HardwareRegistry {
 // ==========================================
 
 model Device {
-  id           String   @id @default(uuid()) @db.Uuid
+  id String @id @default(uuid()) @db.Uuid
 
   // Tên hiển thị trong App (User có thể đổi)
-  name         String
+  name String
 
   // 1. ĐỊNH DANH LOGIC (Dùng để giao tiếp API/MQTT Topic)
-  token        String         @unique @default(uuid())
+  token String @unique @default(uuid())
 
   // 2. ĐỊNH DANH VẬT LÝ & GIAO THỨC
-  identifier   String         // Copy từ HardwareRegistry sang hoặc tự nhập (nếu là Virtual)
-  protocol     DeviceProtocol @default(MQTT)
+  identifier String // Copy từ HardwareRegistry sang hoặc tự nhập (nếu là Virtual)
+  protocol   DeviceProtocol @default(MQTT)
 
   // 3. LIÊN KẾT MODEL (Để biết nó là loại gì)
-  deviceModelId String      @db.Uuid @map("device_model_id")
-  deviceModel     DeviceModel @relation(fields: [deviceModelId], references: [id])
+  deviceModelId String      @map("device_model_id") @db.Uuid
+  deviceModel   DeviceModel @relation(fields: [deviceModelId], references: [id])
 
   // --- [NEW] LIÊN KẾT ĐỐI TÁC (Multi-tenancy) ---
   // Thiết bị này thuộc quyền quản lý/phân phối của công ty nào?
-  partnerId   String   @db.Uuid @map("partner_id")
-  partner      Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  partnerId String  @map("partner_id") @db.Uuid
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
 
   // 4. LIÊN KẾT PHẦN CỨNG (Nếu là thiết bị thật)
-  hardwareId  String?        @unique @db.Uuid @map("hardware_id")
-  hardware     HardwareRegistry? @relation(fields: [hardwareId], references: [id])
+  hardwareId String?           @unique @map("hardware_id") @db.Uuid
+  hardware   HardwareRegistry? @relation(fields: [hardwareId], references: [id])
 
   // Sở hữu
-  ownerId     String   @db.Uuid @map("owner_id")
-  owner        User     @relation("UserInventory", fields: [ownerId], references: [id])
+  ownerId     String        @map("owner_id") @db.Uuid
+  owner       User          @relation("UserInventory", fields: [ownerId], references: [id])
   sharedUsers DeviceShare[]
 
   // Vị trí
-  homeId      String?  @db.Uuid @map("home_id")
-  home         Home?    @relation(fields: [homeId], references: [id], onDelete: SetNull)
-  roomId      String?  @db.Uuid @map("room_id")
-  room         Room?    @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  homeId String? @map("home_id") @db.Uuid
+  home   Home?   @relation(fields: [homeId], references: [id], onDelete: SetNull)
+  roomId String? @map("room_id") @db.Uuid
+  room   Room?   @relation(fields: [roomId], references: [id], onDelete: SetNull)
 
   // Kỹ thuật
-  serviceId   String?  @db.Uuid // Gladys service ID (Optional) @map("service_id")
-  service      Service? @relation(fields: [serviceId], references: [id])
+  serviceId String?  @db.Uuid // Gladys service ID (Optional) @map("service_id")
+  service   Service? @relation(fields: [serviceId], references: [id])
 
   // [OVERRIDE CONFIG]
   // Dùng để ghi đè config của Model.
   // VD: Modbus Slave ID riêng cho từng thiết bị lắp đặt
   // { "modbus": { "slaveId": 2 }, "zigbee": { "endpoint": 1 } }
-  customConfig Json?   @db.JsonB @map("custom_config")
+  customConfig Json? @map("custom_config") @db.JsonB
 
   // Thứ tự hiển thị (Owner's sort order)
-  sortOrder    Int      @default(0) @map("sort_order")
+  sortOrder Int @default(0) @map("sort_order")
 
   // Dữ liệu runtime (HA-style 3-tier: Device → Entity → Attribute)
-  entities     DeviceEntity[]
+  entities DeviceEntity[]
 
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Ràng buộc duy nhất: Một ID chỉ tồn tại duy nhất trong 1 protocol
   @@unique([identifier, protocol])
@@ -277,32 +277,32 @@ model Device {
 
 // HA-style Entity: đại diện 1 unit điều khiển (kênh đèn, kênh switch, cảm biến...)
 model DeviceEntity {
-  id            String       @id @default(uuid()) @db.Uuid
+  id String @id @default(uuid()) @db.Uuid
 
   // Mã entity (VD: channel_1, main, sensor_temp)
-  code          String
-  name          String       // Tên hiển thị (VD: Kênh 1, Đèn chính)
-  domain        EntityDomain // light, switch_, sensor, climate...
+  code   String
+  name   String // Tên hiển thị (VD: Kênh 1, Đèn chính)
+  domain EntityDomain // light, switch_, sensor, climate...
 
   // Primary state (tương đương HA entity state)
-  state         Float?       // Giá trị số (0/1 cho on/off, 24 cho temp...)
-  stateText     String?      @map("state_text") // Giá trị text ("cool", "#FF0000"...)
+  state     Float? // Giá trị số (0/1 cho on/off, 24 cho temp...)
+  stateText String? @map("state_text") // Giá trị text ("cool", "#FF0000"...)
 
   // MQTT config cho primary state
-  commandKey    String?      @map("command_key")     // VD: "state"
-  commandSuffix String?      @map("command_suffix")  // VD: "set"
+  commandKey    String? @map("command_key") // VD: "state"
+  commandSuffix String? @map("command_suffix") // VD: "set"
 
   // Read-only flag (cho sensor entities)
-  readOnly      Boolean      @default(false) @map("read_only")
+  readOnly Boolean @default(false) @map("read_only")
 
   // Quan hệ
-  deviceId      String       @db.Uuid @map("device_id")
-  device        Device       @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  deviceId String @map("device_id") @db.Uuid
+  device   Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
 
-  attributes    EntityAttribute[]
-  stateHistory  EntityStateHistory[]
+  attributes   EntityAttribute[]
+  stateHistory EntityStateHistory[]
 
-  sortOrder     Int          @default(0) @map("sort_order")
+  sortOrder Int @default(0) @map("sort_order")
 
   @@unique([deviceId, code])
   @@index([deviceId])
@@ -311,29 +311,29 @@ model DeviceEntity {
 
 // Entity Attribute: thuộc tính phụ (brightness, color_temp, mode...)
 model EntityAttribute {
-  id          String              @id @default(uuid()) @db.Uuid
+  id String @id @default(uuid()) @db.Uuid
 
-  key         String              // VD: "brightness", "color_temp", "mode"
-  name        String              // VD: "Độ sáng", "Nhiệt độ màu"
-  valueType   AttributeValueType  @map("value_type")
+  key       String // VD: "brightness", "color_temp", "mode"
+  name      String // VD: "Độ sáng", "Nhiệt độ màu"
+  valueType AttributeValueType @map("value_type")
 
   // Giá trị hiện tại
-  numValue    Float?              @map("num_value")
-  strValue    String?             @map("str_value")
+  numValue Float?  @map("num_value")
+  strValue String? @map("str_value")
 
   // Constraints
-  min         Float?
-  max         Float?
-  unit        String?             // "%", "°C", "K"
-  readOnly    Boolean             @default(false) @map("read_only")
-  enumValues  String[]            @default([]) @map("enum_values") // ["cool","heat","auto"]
+  min        Float?
+  max        Float?
+  unit       String? // "%", "°C", "K"
+  readOnly   Boolean  @default(false) @map("read_only")
+  enumValues String[] @default([]) @map("enum_values") // ["cool","heat","auto"]
 
   // MQTT config (commandKey cho attribute nếu khác entity commandKey)
-  config      Json?               @default("{}")
+  config Json? @default("{}")
 
   // Quan hệ
-  entityId    String              @db.Uuid @map("entity_id")
-  entity      DeviceEntity        @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  entityId String       @map("entity_id") @db.Uuid
+  entity   DeviceEntity @relation(fields: [entityId], references: [id], onDelete: Cascade)
 
   @@unique([entityId, key])
   @@index([entityId])
@@ -342,14 +342,14 @@ model EntityAttribute {
 
 // Lịch sử trạng thái entity (thay thế DeviceFeatureState)
 model EntityStateHistory {
-  id         String       @default(uuid()) @db.Uuid
-  value      Float?
-  valueText  String?      @map("value_text")
+  id        String  @default(uuid()) @db.Uuid
+  value     Float?
+  valueText String? @map("value_text")
 
-  entityId   String       @db.Uuid @map("entity_id")
-  entity     DeviceEntity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  entityId String       @map("entity_id") @db.Uuid
+  entity   DeviceEntity @relation(fields: [entityId], references: [id], onDelete: Cascade)
 
-  createdAt  DateTime     @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@id([id, createdAt])
   @@index([entityId, createdAt(sort: Desc)])
@@ -357,13 +357,13 @@ model EntityStateHistory {
 }
 
 model DeviceShare {
-  id          String          @id @default(uuid()) @db.Uuid
-  deviceId   String          @db.Uuid @map("device_id")
-  device      Device          @relation(fields: [deviceId], references: [id], onDelete: Cascade)
-  userId     String          @db.Uuid @map("user_id")
-  user        User            @relation("SharedToUser", fields: [userId], references: [id], onDelete: Cascade)
-  permission  SharePermission @default(EDITOR)
-  sortOrder   Int             @default(0) @map("sort_order")
+  id         String          @id @default(uuid()) @db.Uuid
+  deviceId   String          @map("device_id") @db.Uuid
+  device     Device          @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  userId     String          @map("user_id") @db.Uuid
+  user       User            @relation("SharedToUser", fields: [userId], references: [id], onDelete: Cascade)
+  permission SharePermission @default(EDITOR)
+  sortOrder  Int             @default(0) @map("sort_order")
   createdAt  DateTime        @default(now()) @map("created_at")
 
   @@unique([deviceId, userId])
@@ -375,20 +375,20 @@ model DeviceShare {
 // ==========================================
 
 model Home {
-  id        String   @id @default(uuid()) @db.Uuid
+  id        String @id @default(uuid()) @db.Uuid
   name      String
   latitude  Float?
   longitude Float?
-  radius    Int      @default(100)
+  radius    Int    @default(100)
 
-  ownerId  String   @db.Uuid @map("owner_id")
-  owner     User     @relation("UserHomes", fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerId String @map("owner_id") @db.Uuid
+  owner   User   @relation("UserHomes", fields: [ownerId], references: [id], onDelete: Cascade)
 
-  members   HomeMember[]
-  floors    Floor[]
-  rooms     Room[]
-  devices   Device[]
-  scenes    Scene[]
+  members HomeMember[]
+  floors  Floor[]
+  rooms   Room[]
+  devices Device[]
+  scenes  Scene[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -397,13 +397,13 @@ model Home {
 }
 
 model Floor {
-  id        String   @id @default(uuid()) @db.Uuid
+  id        String @id @default(uuid()) @db.Uuid
   name      String
-  sortOrder Int     @default(0) @map("sort_order")
+  sortOrder Int    @default(0) @map("sort_order")
 
-  homeId   String   @db.Uuid @map("home_id")
-  home      Home     @relation(fields: [homeId], references: [id], onDelete: Cascade)
-  rooms     Room[]
+  homeId String @map("home_id") @db.Uuid
+  home   Home   @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  rooms  Room[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -413,12 +413,12 @@ model Floor {
 }
 
 model HomeMember {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId   String   @db.Uuid @map("user_id")
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  homeId   String   @db.Uuid @map("home_id")
-  home      Home     @relation(fields: [homeId], references: [id], onDelete: Cascade)
-  role      String   @default("MEMBER")
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  homeId String @map("home_id") @db.Uuid
+  home   Home   @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  role   String @default("MEMBER")
 
   @@unique([userId, homeId])
   @@map("t_home_member")
@@ -428,9 +428,9 @@ model Room {
   id        String   @id @default(uuid()) @db.Uuid
   name      String
   sortOrder Int      @default(0) @map("sort_order")
-  homeId   String   @db.Uuid @map("home_id")
+  homeId    String   @map("home_id") @db.Uuid
   home      Home     @relation(fields: [homeId], references: [id], onDelete: Cascade)
-  floorId  String?  @db.Uuid @map("floor_id")
+  floorId   String?  @map("floor_id") @db.Uuid
   floor     Floor?   @relation(fields: [floorId], references: [id], onDelete: SetNull)
   devices   Device[]
   createdAt DateTime @default(now()) @map("created_at")
@@ -449,19 +449,20 @@ model Service {
   name    String   @unique
   status  String?
   devices Device[]
+
   @@map("t_service")
 }
 
 model Scene {
-  id          String   @id @default(uuid()) @db.Uuid
-  name        String
-  active      Boolean  @default(true)
-  triggers    Json     @default("[]")
-  actions     Json     @default("[]")
-  homeId     String   @db.Uuid @map("home_id")
-  home        Home     @relation(fields: [homeId], references: [id], onDelete: Cascade)
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  active    Boolean  @default(true)
+  triggers  Json     @default("[]")
+  actions   Json     @default("[]")
+  homeId    String   @map("home_id") @db.Uuid
+  home      Home     @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("t_scene")
 }
@@ -472,7 +473,7 @@ model Location {
   longitude Float
   accuracy  Float?
   battery   Int?
-  userId   String   @db.Uuid @map("user_id")
+  userId    String   @map("user_id") @db.Uuid
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -481,32 +482,35 @@ model Location {
 }
 
 model Calendar {
-  id          String   @id @default(uuid()) @db.Uuid
-  name        String
-  userId     String   @db.Uuid @map("user_id")
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  events      CalendarEvent[]
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  id        String          @id @default(uuid()) @db.Uuid
+  name      String
+  userId    String          @map("user_id") @db.Uuid
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events    CalendarEvent[]
+  createdAt DateTime        @default(now()) @map("created_at")
+  updatedAt DateTime        @updatedAt @map("updated_at")
+
   @@map("t_calendar")
 }
 
 model CalendarEvent {
-  id          String   @id @default(uuid()) @db.Uuid
-  name        String
-  start       DateTime
-  end         DateTime
+  id         String   @id @default(uuid()) @db.Uuid
+  name       String
+  start      DateTime
+  end        DateTime
   allDay     Boolean  @default(false) @map("all_day")
-  calendarId String   @db.Uuid @map("calendar_id")
-  calendar    Calendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+  calendarId String   @map("calendar_id") @db.Uuid
+  calendar   Calendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+
   @@index([start, end])
   @@map("t_calendar_event")
 }
 
 model SystemConfig {
-  key         String @id
+  key         String  @id
   value       String
   description String?
+
   @@map("t_system_config")
 }
 
@@ -521,24 +525,24 @@ enum ProvisionTokenStatus {
 }
 
 model ProvisionToken {
-  id          String               @id @default(uuid()) @db.Uuid
-  token       String               @unique @default(uuid())
+  id    String @id @default(uuid()) @db.Uuid
+  token String @unique @default(uuid())
 
-  status      ProvisionTokenStatus @default(PENDING)
+  status ProvisionTokenStatus @default(PENDING)
 
   // User đang thực hiện pairing
-  userId      String               @db.Uuid @map("user_id")
-  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Device được tạo sau khi chip activate (null khi pending)
-  deviceId    String?              @db.Uuid @map("device_id")
-  deviceName  String?              // App gửi tên thiết bị lúc provision @map("device_name")
+  deviceId   String? @map("device_id") @db.Uuid
+  deviceName String? // App gửi tên thiết bị lúc provision @map("device_name")
 
   // MQTT broker info cho chip
-  mqttBroker  String? @map("mqtt_broker")
+  mqttBroker String? @map("mqtt_broker")
 
-  expiresAt   DateTime @map("expires_at")
-  createdAt   DateTime             @default(now()) @map("created_at")
+  expiresAt   DateTime  @map("expires_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
   activatedAt DateTime? @map("activated_at")
 
   @@index([token])

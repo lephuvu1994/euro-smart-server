@@ -84,8 +84,8 @@ export class AdminController {
 
   @Put('device-models/:code')
   @ApiOperation({
-    summary: 'Update Device Model (name, featuresConfig...)',
-    description: 'Dùng khi cần cập nhật featuresConfig cho model đã tồn tại.',
+    summary: 'Update Device Model (name, config...)',
+    description: 'Dùng khi cần cập nhật config cho model đã tồn tại.',
   })
   updateDeviceModel(
     @Param('code') code: string,

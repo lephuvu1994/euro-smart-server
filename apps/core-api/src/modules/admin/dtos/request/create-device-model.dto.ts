@@ -24,5 +24,5 @@ export class CreateDeviceModelDto {
   })
   @IsArray()
   @IsOptional()
-  featuresConfig?: any[];
+  config?: any[];
 }

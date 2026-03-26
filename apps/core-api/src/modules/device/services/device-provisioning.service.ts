@@ -5,7 +5,7 @@ import { RegisterDeviceDto } from '../dto/register-device.dto';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
- * Blueprint v2 entity format (from DeviceModel.featuresConfig):
+ * Blueprint v2 entity format (from DeviceModel.config):
  * {
  *   "entities": [
  *     {
@@ -60,7 +60,12 @@ export class DeviceProvisioningService {
 
         if (hardware) {
           const oldDevice = await tx.device.findUnique({
-            where: { hardwareId: hardware.id },
+            where: { 
+              identifier_protocol: { 
+                identifier: dto.identifier,
+                protocol: dto.protocol
+              } 
+            },
           });
 
           if (oldDevice) {
@@ -94,8 +99,8 @@ export class DeviceProvisioningService {
           });
         }
 
-        // ─── Blueprint v2: parse entities from DeviceModel.featuresConfig ───
-        const blueprint = model.featuresConfig as any;
+        // ─── Blueprint v2: parse entities from DeviceModel.config ───
+        const blueprint = model.config as any;
         const rawEntities = blueprint?.entities ?? [];
 
         const entitiesToCreate = rawEntities.map((e: any, idx: number) => ({

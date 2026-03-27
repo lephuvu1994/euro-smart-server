@@ -39,10 +39,21 @@ export class DeviceControlProcessor extends WorkerHost {
       case DEVICE_JOBS.CHECK_DEVICE_STATE_TRIGGERS:
         return await this.handleCheckDeviceStateTriggers(job);
 
+      case DEVICE_JOBS.UPDATE_LAST_SEEN:
+        return await this.handleUpdateLastSeen(job);
+
       default:
         this.logger.warn(`Unknown job name: ${job.name}`);
         return;
     }
+  }
+
+  private async handleUpdateLastSeen(job: Job): Promise<void> {
+    const { token } = job.data as { token: string };
+    if (!token) return;
+    // Status is tracked via Redis TTL in IoT gateway (status:{token} = 'online', 120s)
+    // This job is a hook for future DB lastSeenAt if the field is added to the schema.
+    this.logger.log(`[UPDATE_LAST_SEEN] Device ${token} heartbeat acknowledged`);
   }
 
   /**

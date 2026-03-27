@@ -49,16 +49,18 @@ export class MqttInboundService implements OnApplicationBootstrap {
 
     try {
       const rawData = JSON.parse(payload.toString());
-      const redisKey = `device:shadow:${deviceToken}`;
 
-      const currentState = await this.redisService.hgetall(redisKey);
-      await this.redisService.hset(redisKey, rawData);
+      // 1. Write status:online with TTL (auto-expire → 'offline' when chip disconnects)
+      //    device.service reads: GET `status:{token}` → 'online' | null(offline)
+      await this.redisService.set(`status:${deviceToken}`, 'online', 120);
 
-      const fullState = { ...currentState, ...rawData };
+      // 2. Write shadow − using the key device.service also reads: hgetall `shadow:{token}`
+      await this.redisService.hmset(`shadow:${deviceToken}`, rawData);
 
+      // 3. Queue lastSeen DB update (debounced in worker)
       await this.statusQueue.add(DEVICE_JOBS.UPDATE_LAST_SEEN, {
         token: deviceToken,
-        rawData: fullState,
+        rawData,
       });
 
       this.logger.log(

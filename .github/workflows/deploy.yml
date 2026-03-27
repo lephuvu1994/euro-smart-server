@@ -105,7 +105,7 @@ jobs:
             echo "==> [VPS1] Restarting ALL services (GĐ1 — single node)..."
             IMAGE=$IMAGE docker compose \
               -f docker-compose.prod.yml \
-              up -d --no-build --force-recreate \
+              up -d --no-build --force-recreate --no-deps \
               core-api iot-gateway worker-service
 
             echo "==> [VPS1] Cleanup..."

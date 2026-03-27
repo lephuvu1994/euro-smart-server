@@ -186,20 +186,25 @@ export class DeviceControlService {
    */
   private validateEntityValue(domain: string, value: string | number | boolean) {
     switch (domain) {
+      case 'switch':
       case 'switch_':
-      case 'button':
-        if (value !== 0 && value !== 1 && value !== true && value !== false) {
-          throw new BadRequestException(
-            'Giá trị switch phải là 0/1 hoặc true/false',
-          );
+        if (value !== 0 && value !== 1 && value !== true && value !== false && value !== 'on' && value !== 'off') {
+          throw new BadRequestException('Giá trị switch phải là 0/1, true/false, hoặc on/off');
         }
         break;
+
+      case 'button':
+        // Trigger action: string command (e.g. RF learn: 'open'/'close') hoặc 1/true
+        if (typeof value !== 'string' && value !== 1 && value !== true)
+          throw new BadRequestException('Giá trị button phải là string hoặc 1/true');
+        break;
+
       case 'light':
-        // Light có thể nhận on/off (0/1) hoặc brightness/color qua attribute
         if (typeof value === 'number' && (value < 0 || value > 100)) {
           throw new BadRequestException('device.error.invalidLightValue');
         }
         break;
+
       case 'curtain': {
         const allowed = ['OPEN', 'CLOSE', 'STOP'];
         if (typeof value === 'string' && !allowed.includes(value)) {
@@ -209,11 +214,30 @@ export class DeviceControlService {
         }
         break;
       }
+
+      case 'lock':
+        // child_lock: chip nhận number 0 hoặc 1
+        if (value !== 0 && value !== 1) {
+          throw new BadRequestException('Giá trị lock phải là 0 hoặc 1');
+        }
+        break;
+
+      case 'config':
+        // Pass-through: server không validate nội dung, chip tự xử lý
+        if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+          throw new BadRequestException('Giá trị config phải là object');
+        }
+        break;
+
+
+      case 'update':
+        if (typeof value !== 'string' || !value.startsWith('http')) {
+          throw new BadRequestException('Giá trị update (OTA) phải là HTTP/HTTPS URL');
+        }
+        break;
+
       case 'sensor':
-        throw new BadRequestException(
-          'Sensor là read-only, không thể điều khiển',
-        );
-      // climate, camera, lock — flexible validation
+        throw new BadRequestException('Sensor là read-only, không thể điều khiển');
     }
   }
 

@@ -16,7 +16,7 @@ export class MqttGenericDriver implements IDeviceDriver {
    */
   async setValue(device: any, entity: any, value: any): Promise<boolean> {
     try {
-      const suffix = entity.commandSuffix ?? 'set';
+      const suffix = (entity.commandSuffix ?? 'set').replace(/^\//, '');
       const topic = `${device.partner.code}/${device.deviceModel.code}/${device.token}/${suffix}`;
 
       let payloadStr = '';
@@ -45,7 +45,7 @@ export class MqttGenericDriver implements IDeviceDriver {
       if (entities.length === 0) return true;
 
       // Dùng commandSuffix của entity đầu tiên (bulk thường cùng suffix)
-      const suffix = (entities[0] as any).commandSuffix ?? 'set';
+      const suffix = ((entities[0] as any).commandSuffix ?? 'set').replace(/^\//, '');
       const topic = `${device.partner.code}/${device.deviceModel.code}/${device.token}/${suffix}`;
 
       // Gộp payload: { commandKey1: value1, commandKey2: value2, ... }

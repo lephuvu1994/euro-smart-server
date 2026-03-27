@@ -84,7 +84,7 @@ export class DeviceService {
 
     devices.forEach((device) => {
       pipeline.get(`status:${device.token}`);
-      pipeline.hgetall(`shadow:${device.token}`);
+      pipeline.hgetall(`device:shadow:${device.token}`);
     });
 
     const results = await pipeline.exec();
@@ -192,7 +192,7 @@ export class DeviceService {
       .getClient()
       .pipeline()
       .get(`status:${device.token}`)
-      .hgetall(`shadow:${device.token}`)
+      .hgetall(`device:shadow:${device.token}`)
       .exec();
 
     const status = (statusRes?.[1] as string) || 'offline';

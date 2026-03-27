@@ -201,7 +201,7 @@ Authorization: Bearer {{loginAdmin.response.body.data.accessToken}}
 Content-Type: application/json
 
 {
-    "host": "mqtts://aurathink.ddns.net:8883",
+    "host": "mqtt://aurathink.ddns.net:1883",
     "user": "admin_mqtt",
     "pass": "password_mqtt"
 }
@@ -228,7 +228,7 @@ Authorization: Bearer {{loginAdmin.response.body.data.accessToken}}
 Content-Type: application/json
 
 {
-    "mqttHost": "mqtts://aurathink.ddns.net:8883",
+    "mqttHost": "mqtt://aurathink.ddns.net:1883",
     "mqttUser": "admin_mqtt",
     "mqttPass": "password_mqtt",
     "otpExpire": 10

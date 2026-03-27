@@ -104,7 +104,7 @@ describe('MqttInboundService', () => {
 
       // Verify Redis interactions
       expect(redis.hmset).toHaveBeenCalledWith(
-        `shadow:${mockDeviceToken}`,
+        `device:shadow:${mockDeviceToken}`,
         payloadObj,
       );
 

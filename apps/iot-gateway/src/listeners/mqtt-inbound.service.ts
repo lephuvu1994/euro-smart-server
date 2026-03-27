@@ -72,7 +72,7 @@ export class MqttInboundService implements OnApplicationBootstrap {
   }
 
   // Telemetry (nhiệt độ, độ ẩm...) — TODO: push to TimescaleDB
-  private async handleTelemetryMessage(topic: string, payload: Buffer) {
+  private async handleTelemetryMessage(_topic: string, _payload: Buffer) {
     // Parse JSON -> Update Redis Shadow -> Push to TimescaleDB Worker
   }
 
@@ -106,8 +106,8 @@ export class MqttInboundService implements OnApplicationBootstrap {
       const updates: Array<{
         entityId: string;
         entityCode: string;
-        state?: any;
-        attributes?: Array<{ key: string; value: any }>;
+        state?: number | string | boolean;
+        attributes?: Array<{ key: string; value: number | string | boolean }>;
       }> = [];
 
       // 3. ENTITY MAPPING LOOP
@@ -125,9 +125,9 @@ export class MqttInboundService implements OnApplicationBootstrap {
         }
 
         // --- Case B: Attributes (attr commandKey or attr.key → MQTT key) ---
-        const attrUpdates: Array<{ key: string; value: any }> = [];
+        const attrUpdates: Array<{ key: string; value: number | string | boolean }> = [];
         for (const attr of entity.attributes) {
-          const attrConfig = attr.config as any;
+          const attrConfig = attr.config as { commandKey?: string } | null;
           const mqttKey = attrConfig?.commandKey ?? attr.key;
 
           if (rawData[mqttKey] !== undefined) {

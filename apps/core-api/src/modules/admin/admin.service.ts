@@ -279,6 +279,12 @@ export class AdminService {
         value: data.otpExpire.toString(),
         description: 'OTP Expiration (minutes)',
       });
+    if (data.mqttWssUrl !== undefined)
+      updates.push({
+        key: 'MQTT_WSS_URL',
+        value: data.mqttWssUrl,
+        description: 'MQTT Broker WebSocket URL (App mobile)',
+      });
 
     await Promise.all(
       updates.map((u) =>

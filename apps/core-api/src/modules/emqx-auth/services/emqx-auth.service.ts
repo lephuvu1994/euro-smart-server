@@ -11,14 +11,21 @@ export class EmqxAuthService {
   constructor(private readonly db: DatabaseService) {}
 
   // ═══════════════════════════════════════════
-  // AUTH: HMAC verification (stateless, 0 I/O)
+  // AUTH: Verify credentials
   // ═══════════════════════════════════════════
-  authenticate(dto: EmqxAuthDto): { result: 'allow' | 'deny' } {
-    // Case 1: Server services (iot-gateway, worker-service)
-    if (dto.username === process.env.MQTT_USER) {
-      return {
-        result: dto.password === process.env.MQTT_PASS ? 'allow' : 'deny',
-      };
+  async authenticate(dto: EmqxAuthDto): Promise<{ result: 'allow' | 'deny' }> {
+    // Case 1: Server services (iot-gateway, worker-service) — global superuser
+    const mqttUserCfg = await this.db.systemConfig.findUnique({
+      where: { key: 'MQTT_USER' },
+    });
+    const mqttPassCfg = await this.db.systemConfig.findUnique({
+      where: { key: 'MQTT_PASS' },
+    });
+    const globalUser = mqttUserCfg?.value || process.env.MQTT_USER;
+    const globalPass = mqttPassCfg?.value || process.env.MQTT_PASS;
+
+    if (dto.username === globalUser) {
+      return { result: dto.password === globalPass ? 'allow' : 'deny' };
     }
 
     // Case 2: App user — username format "user_{userId}"
@@ -40,6 +47,22 @@ export class EmqxAuthService {
       return { result: expected === dto.password ? 'allow' : 'deny' };
     }
 
+    // Case 3: Embedded device — username format "device_{token}"
+    if (dto.username.startsWith('device_')) {
+      const token = dto.username.replace('device_', '');
+      // Password must equal the token itself
+      if (dto.password !== token) {
+        this.logger.warn(`Auth denied: bad password for device token`);
+        return { result: 'deny' };
+      }
+      // Verify the token exists in the Device table
+      const device = await this.db.device.findUnique({
+        where: { token },
+        select: { id: true },
+      });
+      return { result: device ? 'allow' : 'deny' };
+    }
+
     this.logger.warn(`Auth denied: unknown username format="${dto.username}"`);
     return { result: 'deny' };
   }
@@ -51,8 +74,24 @@ export class EmqxAuthService {
     dto: EmqxAclDto,
   ): Promise<{ result: 'allow' | 'deny' }> {
     // Server services → allow all
-    if (dto.username === process.env.MQTT_USER) {
+    const mqttUserCfg = await this.db.systemConfig.findUnique({
+      where: { key: 'MQTT_USER' },
+    });
+    const globalUser = mqttUserCfg?.value || process.env.MQTT_USER;
+    if (dto.username === globalUser) {
       return { result: 'allow' };
+    }
+
+    // Embedded device — username format "device_{token}"
+    if (dto.username.startsWith('device_')) {
+      const token = dto.username.replace('device_', '');
+      // Devices can only subscribe to their own topics; deny publish
+      if (dto.action === 'publish') {
+        return { result: 'deny' };
+      }
+      // Topic must contain the device token
+      const topicToken = this.extractTokenFromTopic(dto.topic);
+      return { result: topicToken === token ? 'allow' : 'deny' };
     }
 
     // App user
@@ -103,14 +142,20 @@ export class EmqxAuthService {
   }
 
   // ═══════════════════════════════════════════
-  // CREDENTIALS: Generate for app user (0 DB query)
+  // CREDENTIALS: Generate for app user (WSS)
   // ═══════════════════════════════════════════
-  generateCredentials(userId: string): {
+  async generateCredentials(userId: string): Promise<{
     url: string;
     username: string;
     password: string;
     clientId: string;
-  } {
+  }> {
+    // Fetch WSS URL from Admin DB config (fallback to ENV)
+    const wssCfg = await this.db.systemConfig.findUnique({
+      where: { key: 'MQTT_WSS_URL' },
+    });
+    const url = wssCfg?.value || process.env.MQTT_WSS_URL || '';
+
     const timestamp = Date.now().toString();
     const password = crypto
       .createHmac('sha256', process.env.APP_MQTT_SECRET)
@@ -118,7 +163,7 @@ export class EmqxAuthService {
       .digest('hex');
 
     return {
-      url: process.env.MQTT_WSS_URL,
+      url,
       username: `user_${userId}`,
       password,
       clientId: `app_${userId}_${timestamp}`,

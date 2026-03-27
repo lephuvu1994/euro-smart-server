@@ -298,9 +298,11 @@ services:
     container_name: aurathink-haproxy-prod
     restart: unless-stopped
     network_mode: host
+    command: >
+      /bin/sh -c "cat /etc/haproxy/certs/fullchain.pem /etc/haproxy/certs/privkey.pem > /etc/haproxy/certs/mqtt.pem && chmod 644 /etc/haproxy/certs/mqtt.pem && haproxy -f /usr/local/etc/haproxy/haproxy.cfg"
     volumes:
       - ./deploy/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
-      - ${SSL_CERT_PATH:-./deploy/docker/ssl}:/etc/haproxy/certs:ro
+      - ${SSL_CERT_PATH:-./deploy/docker/ssl}:/etc/haproxy/certs:rw
     healthcheck:
       test: ['CMD', 'haproxy', '-c', '-f', '/usr/local/etc/haproxy/haproxy.cfg']
       interval: 30s

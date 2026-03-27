@@ -33,14 +33,17 @@ enum DeviceProtocol {
 
 // Domain của entity (tương đương HA entity domain)
 enum EntityDomain {
-  light // Đèn: on/off + brightness + color + color_temp
-  switch_ // Công tắc: on/off
-  sensor // Cảm biến: read-only values
-  camera // Camera: stream
-  lock // Khoá: lock/unlock
-  curtain // Rèm/cửa cuốn: open/close/stop + position
-  climate // Điều hoà: on/off + temp + mode + fan
-  button // Nút bấm: trigger action
+  light    // Đèn: on/off + brightness + color + color_temp
+  switch_  // Công tắc: on/off (legacy)
+  switch   // Công tắc: on/off / "on"/"off"
+  sensor   // Cảm biến: read-only values
+  camera   // Camera: stream
+  lock     // Khoá: child_lock (0/1)
+  curtain  // Rèm/cửa cuốn: OPEN/CLOSE/STOP + position
+  climate  // Điều hoà: on/off + temp + mode + fan
+  button   // Nút bấm / trigger action (RF learn, scene trigger...)
+  config   // JSON config pass-through → chip xử lý nội dung
+  update   // OTA firmware update (HA standard: update domain)
 }
 
 // Loại giá trị attribute

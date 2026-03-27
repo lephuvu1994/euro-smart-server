@@ -73,7 +73,7 @@ Content-Type: application/json
 
 {
     "code": "{{deviceModelCode}}",
-    "name": "Công tắc WiFi 4 nút Pro",
+    "name": "Cửa cuốn thông minh WiFi",
     "config": {
         "modelCode": "SHUTTER_DOOR",
         "modelName": "Cửa cuốn thông minh",
@@ -84,38 +84,61 @@ Content-Type: application/json
                 "name": "Cửa cuốn",
                 "domain": "curtain",
                 "commandKey": "state",
-                "commandSuffix": "/set",
+                "commandSuffix": "set",
                 "readOnly": false,
                 "sortOrder": 0,
                 "attributes": [
                     {
                         "key": "position",
-                        "name": "Vị trí",
+                        "name": "Vị trí (%)",
                         "valueType": "NUMBER",
-                        "min": 0,
-                        "max": 100,
-                        "unit": "%",
-                        "readOnly": false,
-                        "commandKey": "position"
+                        "min": 0, "max": 100, "unit": "%",
+                        "readOnly": true
                     },
                     {
-                        "key": "current_position",
-                        "name": "Vị trí hiện tại",
+                        "key": "travel",
+                        "name": "Thời gian di chuyển (ms)",
                         "valueType": "NUMBER",
-                        "min": 0,
-                        "max": 100,
-                        "unit": "%",
-                        "readOnly": true,
-                        "commandKey": "current_position"
-                    },
-                    {
-                        "key": "obstacle_detected",
-                        "name": "Phát hiện vật cản",
-                        "valueType": "BOOLEAN",
-                        "readOnly": true,
-                        "commandKey": "obstacle"
+                        "unit": "ms",
+                        "readOnly": true
                     }
                 ]
+            },
+            {
+                "code": "child_lock",
+                "name": "Khoá trẻ em",
+                "domain": "lock",
+                "commandKey": "child_lock",
+                "commandSuffix": "set",
+                "readOnly": false,
+                "sortOrder": 1
+            },
+            {
+                "code": "ble_mode",
+                "name": "Chế độ BLE",
+                "domain": "switch",
+                "commandKey": "ble",
+                "commandSuffix": "set",
+                "readOnly": false,
+                "sortOrder": 2
+            },
+            {
+                "code": "config",
+                "name": "Cấu hình bảo mật",
+                "domain": "config",
+                "commandKey": "config",
+                "commandSuffix": "set",
+                "readOnly": false,
+                "sortOrder": 3
+            },
+            {
+                "code": "learn",
+                "name": "Học lệnh RF",
+                "domain": "rf_learn",
+                "commandKey": "learn_cmd",
+                "commandSuffix": "set",
+                "readOnly": false,
+                "sortOrder": 4
             }
         ]
     }
@@ -128,15 +151,18 @@ GET {{baseUrl}}/admin/options/device-models
 Authorization: Bearer {{loginAdmin.response.body.data.accessToken}}
 
 ###
-# ⚡ Cập nhật Device Model (config, name...)
-# Dùng khi model đã tồn tại nhưng config bị trống
+# ⚡ Cập nhật Device Model
+# Dùng khi model đã tồn tại nhưng cần cập nhật entities
+# TODO: Sau khi deploy + chạy add_entity_domains.sql → thêm lại:
+#   - ble_mode domain: "switch" (hiện dùng "switch_")
+#   - config entity: domain "config"
 PUT {{baseUrl}}/admin/device-models/{{deviceModelCode}}
 Authorization: Bearer {{loginAdmin.response.body.data.accessToken}}
 Content-Type: application/json
 
 {
-    "name": "Công tắc WiFi 4 nút Pro",
-    "code": "1001",
+    "code": "{{deviceModelCode}}",
+    "name": "Cửa cuốn thông minh WiFi",
     "config": {
         "modelCode": "SHUTTER_DOOR",
         "modelName": "Cửa cuốn thông minh",
@@ -147,38 +173,52 @@ Content-Type: application/json
                 "name": "Cửa cuốn",
                 "domain": "curtain",
                 "commandKey": "state",
-                "commandSuffix": "/set",
+                "commandSuffix": "set",
                 "readOnly": false,
                 "sortOrder": 0,
                 "attributes": [
                     {
                         "key": "position",
-                        "name": "Vị trí",
+                        "name": "Vị trí (%)",
                         "valueType": "NUMBER",
-                        "min": 0,
-                        "max": 100,
-                        "unit": "%",
-                        "readOnly": false,
-                        "commandKey": "position"
+                        "min": 0, "max": 100, "unit": "%",
+                        "readOnly": true
                     },
                     {
-                        "key": "current_position",
-                        "name": "Vị trí hiện tại",
+                        "key": "travel",
+                        "name": "Thời gian di chuyển (ms)",
                         "valueType": "NUMBER",
-                        "min": 0,
-                        "max": 100,
-                        "unit": "%",
-                        "readOnly": true,
-                        "commandKey": "current_position"
-                    },
-                    {
-                        "key": "obstacle_detected",
-                        "name": "Phát hiện vật cản",
-                        "valueType": "BOOLEAN",
-                        "readOnly": true,
-                        "commandKey": "obstacle"
+                        "unit": "ms",
+                        "readOnly": true
                     }
                 ]
+            },
+            {
+                "code": "child_lock",
+                "name": "Khoá trẻ em",
+                "domain": "lock",
+                "commandKey": "child_lock",
+                "commandSuffix": "set",
+                "readOnly": false,
+                "sortOrder": 1
+            },
+            {
+                "code": "ble_mode",
+                "name": "Chế độ BLE",
+                "domain": "switch_",
+                "commandKey": "ble",
+                "commandSuffix": "set",
+                "readOnly": false,
+                "sortOrder": 2
+            },
+            {
+                "code": "learn",
+                "name": "Học lệnh RF",
+                "domain": "button",
+                "commandKey": "learn_cmd",
+                "commandSuffix": "set",
+                "readOnly": false,
+                "sortOrder": 4
             }
         ]
     }

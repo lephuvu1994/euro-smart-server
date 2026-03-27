@@ -54,8 +54,8 @@ export class MqttInboundService implements OnApplicationBootstrap {
       //    device.service reads: GET `status:{token}` → 'online' | null(offline)
       await this.redisService.set(`status:${deviceToken}`, 'online', 120);
 
-      // 2. Write shadow − using the key device.service also reads: hgetall `shadow:{token}`
-      await this.redisService.hmset(`shadow:${deviceToken}`, rawData);
+      // 2. Write shadow − using the key device.service also reads: hgetall `device:shadow:{token}`
+      await this.redisService.hmset(`device:shadow:${deviceToken}`, rawData);
 
       // 3. Queue lastSeen DB update (debounced in worker)
       await this.statusQueue.add(DEVICE_JOBS.UPDATE_LAST_SEEN, {
@@ -88,7 +88,7 @@ export class MqttInboundService implements OnApplicationBootstrap {
       // rawData ví dụ: { "state": 1, "brightness": 80, "color_temp": 4000 }
 
       // 1. Lưu Shadow State thô (debug)
-      await this.redisService.hmset(`shadow:${token}`, rawData);
+      await this.redisService.hmset(`device:shadow:${token}`, rawData);
 
       // 2. Lấy Device + Entities + Attributes
       // TODO: Cache entity structure trong Redis để tránh query DB mỗi message

@@ -201,9 +201,19 @@ Authorization: Bearer {{loginAdmin.response.body.data.accessToken}}
 Content-Type: application/json
 
 {
-    "host": "mqtts://n1e72d70.ala.asia-southeast1.emqxsl.com:8883",
+    "host": "mqtts://aurathink.ddns.net:8883",
     "user": "admin_mqtt",
     "pass": "password_mqtt"
+}
+
+###
+# Cập nhật WSS URL (dùng cho App mobile kết nối MQTT qua WebSocket)
+PUT {{baseUrl}}/admin/configs
+Authorization: Bearer {{loginAdmin.response.body.data.accessToken}}
+Content-Type: application/json
+
+{
+    "mqttWssUrl": "wss://aurathink.ddns.net/mqtt"
 }
 
 ###
@@ -218,7 +228,7 @@ Authorization: Bearer {{loginAdmin.response.body.data.accessToken}}
 Content-Type: application/json
 
 {
-    "mqttHost": "mqtts://n1e72d70.ala.asia-southeast1.emqxsl.com:8883",
+    "mqttHost": "mqtts://aurathink.ddns.net:8883",
     "mqttUser": "admin_mqtt",
     "mqttPass": "password_mqtt",
     "otpExpire": 10

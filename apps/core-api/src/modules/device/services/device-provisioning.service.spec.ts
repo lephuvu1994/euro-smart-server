@@ -39,6 +39,9 @@ const mockBlueprint = {
 };
 
 const createMockDatabaseService = () => ({
+  systemConfig: {
+    findUnique: jest.fn().mockResolvedValue(null), // default: no DB config, use ENV fallback
+  },
   deviceModel: { findUnique: jest.fn() },
   partner: { findUnique: jest.fn() },
   $transaction: jest.fn((callback) => callback(mockTx)),
@@ -118,6 +121,10 @@ describe('DeviceProvisioningService', () => {
 
     expect(result.device.id).toBe('dev-1');
     expect(result.license_days).toBe(365);
+    // Should return unique per-device credentials
+    expect(result.mqtt_username).toMatch(/^device_/);
+    expect(result.mqtt_pass).toBe(result.mqtt_token_device);
+    expect(result.mqtt_broker).toBeDefined();
 
     // Verify entity mapping
     expect(mockTx.device.create).toHaveBeenCalledWith(
@@ -241,6 +248,52 @@ describe('DeviceProvisioningService', () => {
 
     const callArg = mockTx.device.create.mock.calls[0][0];
     expect(callArg.data.home).toBeUndefined();
+  });
+
+  it('should handle redis del failure gracefully (status/shadow cleanup)', async () => {
+    db.deviceModel.findUnique.mockResolvedValue({ id: 'model-id', code: 'model-1', config: { entities: [] } });
+    db.partner.findUnique.mockResolvedValue({ id: 'partner-id', code: 'partner-1' });
+
+    mockTx.hardwareRegistry.findUnique.mockResolvedValue({ id: 'hw-id' });
+    mockTx.device.findUnique.mockResolvedValue({ id: 'old-dev', token: 'old-token' });
+    mockTx.hardwareRegistry.update.mockResolvedValue({ id: 'hw-id' });
+    mockTx.device.create.mockResolvedValue({ id: 'dev-5', name: 'Device', entities: [] });
+    // Redis del fails — should not throw
+    redis.del.mockRejectedValue(new Error('Redis unavailable'));
+    redis.smembers.mockResolvedValue([]);
+
+    await expect(service.registerAndClaim(mockUserId, mockDto as any)).resolves.not.toThrow();
+  });
+
+  it('should handle empty smembers list for _ekeys cleanup (no entity keys)', async () => {
+    db.deviceModel.findUnique.mockResolvedValue({ id: 'model-id', code: 'model-1', config: { entities: [] } });
+    db.partner.findUnique.mockResolvedValue({ id: 'partner-id', code: 'partner-1' });
+
+    mockTx.hardwareRegistry.findUnique.mockResolvedValue({ id: 'hw-id' });
+    mockTx.device.findUnique.mockResolvedValue({ id: 'old-dev', token: 'old-token' });
+    mockTx.hardwareRegistry.update.mockResolvedValue({ id: 'hw-id' });
+    mockTx.device.create.mockResolvedValue({ id: 'dev-6', name: 'Device', entities: [] });
+    // No tracking keys
+    redis.smembers.mockResolvedValue([]);
+
+    await service.registerAndClaim(mockUserId, mockDto as any);
+    // Should call smembers but del only for the tracking key itself (empty list case)
+    expect(redis.smembers).toHaveBeenCalled();
+  });
+
+  it('should use MQTT_HOST from DB config when available', async () => {
+    db.systemConfig.findUnique.mockResolvedValue({ key: 'MQTT_HOST', value: 'mqtts://admin-db-host:8883' });
+    db.deviceModel.findUnique.mockResolvedValue({ id: 'model-id', code: 'model-1', config: { entities: [] } });
+    db.partner.findUnique.mockResolvedValue({ id: 'partner-id', code: 'partner-1' });
+
+    mockTx.hardwareRegistry.findUnique.mockResolvedValue(null);
+    mockTx.hardwareRegistry.create.mockResolvedValue({ id: 'hw-id' });
+    mockTx.device.create.mockResolvedValue({ id: 'dev-7', name: 'Device', entities: [] });
+    mockTx.licenseQuota.findUnique.mockResolvedValue(null);
+
+    const result = await service.registerAndClaim(mockUserId, mockDto as any);
+    expect(result.mqtt_broker).toBe('mqtts://admin-db-host:8883');
+    expect(result.license_days).toBe(90); // default when no quota
   });
 });
 

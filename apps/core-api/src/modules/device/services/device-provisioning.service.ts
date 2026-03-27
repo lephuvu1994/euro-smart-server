@@ -39,6 +39,12 @@ export class DeviceProvisioningService {
   async registerAndClaim(userId: string, dto: RegisterDeviceDto) {
     if (!userId) throw new BadRequestException('device.error.invalidUser');
 
+    // Fetch MQTT Host from admin DB config (fallback to ENV)
+    const mqttConfig = await this.databaseService.systemConfig.findUnique({
+      where: { key: 'MQTT_HOST' },
+    });
+    const mqttHost = mqttConfig?.value || process.env.MQTT_HOST || 'localhost';
+
     const [model, partner] = await Promise.all([
       this.databaseService.deviceModel.findUnique({
         where: { code: dto.deviceCode },
@@ -98,7 +104,7 @@ export class DeviceProvisioningService {
               deviceToken: newDeviceToken,
               partnerId: partner.id,
               deviceModelId: model.id,
-              mqttBroker: process.env.MQTT_HOST_PUBLIC || 'localhost',
+              mqttBroker: mqttHost,
             },
           });
         }
@@ -169,10 +175,11 @@ export class DeviceProvisioningService {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             entities: (newDevice as any).entities,
           },
-          mqtt_broker: process.env.MQTT_HOST,
+          mqtt_broker: mqttHost,
           mqtt_token_device: newDeviceToken,
-          mqtt_username: process.env.MQTT_USER,
-          mqtt_pass: process.env.MQTT_PASS,
+          // Unique per-device credentials — safer than shared superuser
+          mqtt_username: `device_${newDeviceToken}`,
+          mqtt_pass: newDeviceToken,
           license_days: quota?.licenseDays ?? 90,
         };
       },

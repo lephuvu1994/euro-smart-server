@@ -90,9 +90,9 @@ Content-Type: application/json
             "req_close_clicks": 5,
             "def_open_clicks": 1,
             "def_close_clicks": 1,
-            "time_mode": false,
-            "start_hour": 0,
-            "end_hour": 0
+            "time_mode": 1,
+            "start_time": "22:15",
+            "end_time": "06:00"
         }
     }
 }

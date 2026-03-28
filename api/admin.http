@@ -153,9 +153,6 @@ Authorization: Bearer {{loginAdmin.response.body.data.accessToken}}
 ###
 # ⚡ Cập nhật Device Model
 # Dùng khi model đã tồn tại nhưng cần cập nhật entities
-# TODO: Sau khi deploy + chạy add_entity_domains.sql → thêm lại:
-#   - ble_mode domain: "switch" (hiện dùng "switch_")
-#   - config entity: domain "config"
 PUT {{baseUrl}}/admin/device-models/{{deviceModelCode}}
 Authorization: Bearer {{loginAdmin.response.body.data.accessToken}}
 Content-Type: application/json
@@ -205,7 +202,7 @@ Content-Type: application/json
             {
                 "code": "ble_mode",
                 "name": "Chế độ BLE",
-                "domain": "switch_",
+                "domain": "switch",
                 "commandKey": "ble",
                 "commandSuffix": "set",
                 "readOnly": false,
@@ -219,6 +216,24 @@ Content-Type: application/json
                 "commandSuffix": "set",
                 "readOnly": false,
                 "sortOrder": 4
+            },
+            {
+                "code": "config",
+                "name": "Cấu hình rèm",
+                "domain": "config",
+                "commandKey": "config",
+                "commandSuffix": "set",
+                "readOnly": false,
+                "sortOrder": 5,
+                "attributes": [
+                    { "key": "req_open_clicks", "name": "Số lần bấm nút mở ưu tiên", "valueType": "NUMBER" },
+                    { "key": "req_close_clicks", "name": "Số lần bấm nút đóng ưu tiên", "valueType": "NUMBER" },
+                    { "key": "def_open_clicks", "name": "Số lần bấm nút mở mặc định", "valueType": "NUMBER" },
+                    { "key": "def_close_clicks", "name": "Số lần bấm nút đóng mặc định", "valueType": "NUMBER" },
+                    { "key": "time_mode", "name": "Chế độ giới hạn giờ", "valueType": "NUMBER" },
+                    { "key": "start_time", "name": "Khung giờ bắt đầu giới hạn", "valueType": "STRING" },
+                    { "key": "end_time", "name": "Khung giờ kết thúc giới hạn", "valueType": "STRING" }
+                ]
             }
         ]
     }

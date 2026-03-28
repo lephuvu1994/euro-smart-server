@@ -60,10 +60,12 @@ export class MqttInboundService implements OnApplicationBootstrap {
         }
       }
 
-      // 1. Write status:online with TTL (auto-expire → 'offline' when chip disconnects)
-      //    device.service reads: GET `status:{token}` → 'online' | null(offline)
-      await this.redisService.set(`status:${deviceToken}`, 'online', 120);
-
+      // 1. LWT standard: rely on broker's keep_alive. Delete if LWT offline msg, else set online indefinitely.
+      if (rawData.online === false) {
+        await this.redisService.del(`status:${deviceToken}`);
+      } else {
+        await this.redisService.set(`status:${deviceToken}`, 'online');
+      }
       // 2. Write shadow − using the key device.service also reads: hgetall `device:shadow:{token}`
       await this.redisService.hmset(`device:shadow:${deviceToken}`, shadowData);
 

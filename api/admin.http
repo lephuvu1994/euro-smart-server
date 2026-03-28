@@ -161,9 +161,6 @@ Content-Type: application/json
     "code": "{{deviceModelCode}}",
     "name": "Cửa cuốn thông minh WiFi",
     "config": {
-        "modelCode": "SHUTTER_DOOR",
-        "modelName": "Cửa cuốn thông minh",
-        "protocol": "MQTT",
         "entities": [
             {
                 "code": "main",

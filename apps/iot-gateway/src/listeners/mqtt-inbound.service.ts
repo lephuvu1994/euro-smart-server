@@ -50,12 +50,22 @@ export class MqttInboundService implements OnApplicationBootstrap {
     try {
       const rawData = JSON.parse(payload.toString());
 
+      // Serialize nested objects for Redis hmset
+      const shadowData: Record<string, string | number | boolean> = {};
+      for (const [key, value] of Object.entries(rawData)) {
+        if (typeof value === 'object' && value !== null) {
+          shadowData[key] = JSON.stringify(value);
+        } else {
+          shadowData[key] = value as string | number | boolean;
+        }
+      }
+
       // 1. Write status:online with TTL (auto-expire → 'offline' when chip disconnects)
       //    device.service reads: GET `status:{token}` → 'online' | null(offline)
       await this.redisService.set(`status:${deviceToken}`, 'online', 120);
 
       // 2. Write shadow − using the key device.service also reads: hgetall `device:shadow:{token}`
-      await this.redisService.hmset(`device:shadow:${deviceToken}`, rawData);
+      await this.redisService.hmset(`device:shadow:${deviceToken}`, shadowData);
 
       // 3. Queue lastSeen DB update (debounced in worker)
       await this.statusQueue.add(DEVICE_JOBS.UPDATE_LAST_SEEN, {
@@ -87,8 +97,18 @@ export class MqttInboundService implements OnApplicationBootstrap {
       const rawData = JSON.parse(payload.toString());
       // rawData ví dụ: { "state": 1, "brightness": 80, "color_temp": 4000 }
 
+      // Serialize nested objects for Redis hmset
+      const shadowData: Record<string, string | number | boolean> = {};
+      for (const [key, value] of Object.entries(rawData)) {
+        if (typeof value === 'object' && value !== null) {
+          shadowData[key] = JSON.stringify(value);
+        } else {
+          shadowData[key] = value as string | number | boolean;
+        }
+      }
+
       // 1. Lưu Shadow State thô (debug)
-      await this.redisService.hmset(`device:shadow:${token}`, rawData);
+      await this.redisService.hmset(`device:shadow:${token}`, shadowData);
 
       // 2. Lấy Device + Entities + Attributes
       // TODO: Cache entity structure trong Redis để tránh query DB mỗi message

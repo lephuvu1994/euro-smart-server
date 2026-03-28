@@ -64,7 +64,7 @@ export class DeviceService {
             orderBy: { sortOrder: 'asc' },
           },
           room: { select: { id: true, name: true } },
-          deviceModel: { select: { code: true, name: true } },
+          deviceModel: { select: { code: true, name: true, config: true } },
         },
         skip,
         take: limit,
@@ -144,6 +144,8 @@ export class DeviceService {
         status,
         type: device.deviceModel?.code || 'unknown',
         modelName: device.deviceModel?.name || '',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        modelConfig: (device.deviceModel as any)?.config ?? null,
         protocol: device.protocol,
         ownership: 'OWNER' as const,
         sortOrder: device.sortOrder,
@@ -179,7 +181,7 @@ export class DeviceService {
           orderBy: { sortOrder: 'asc' },
         },
         room: { select: { name: true } },
-        deviceModel: { select: { name: true, code: true } },
+        deviceModel: { select: { name: true, code: true, config: true } },
       },
     });
 
@@ -235,6 +237,8 @@ export class DeviceService {
       ...device,
       status,
       entities,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      modelConfig: (device.deviceModel as any)?.config ?? null,
     };
   }
 

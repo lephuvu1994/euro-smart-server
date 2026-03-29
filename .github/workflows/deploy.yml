@@ -100,7 +100,7 @@ jobs:
               -e MQTT_HOST=mqtt://emqx \
               --network aurathink-prod-network \
               $IMAGE \
-              npx prisma migrate deploy
+              npx prisma db push --accept-data-loss
 
             echo "==> [VPS1] Restarting ALL services (GĐ1 — single node)..."
             IMAGE=$IMAGE docker compose \

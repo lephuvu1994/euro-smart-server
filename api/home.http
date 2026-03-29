@@ -132,3 +132,20 @@ Content-Type: application/json
 {
     "name": "Phòng khách rộng"
 }
+
+###
+# --- ACTIVITY TIMELINE (LỊCH SỬ HOẠT ĐỘNG TOÀN NHÀ) ---
+
+# Lấy timeline hoạt động toàn bộ nhà (5 items gần nhất → cho popover home-screen)
+GET {{baseUrl}}/homes/{{homeId}}/activity?page=1&limit=5
+Authorization: Bearer {{loginUser.response.body.data.accessToken}}
+
+###
+# Lấy timeline hoạt động toàn bộ nhà (phân trang → cho detail screen)
+GET {{baseUrl}}/homes/{{homeId}}/activity?page=1&limit=30
+Authorization: Bearer {{loginUser.response.body.data.accessToken}}
+
+###
+# Lấy timeline hoạt động toàn bộ nhà (filter theo ngày)
+GET {{baseUrl}}/homes/{{homeId}}/activity?page=1&limit=30&from=2026-03-01&to=2026-03-29
+Authorization: Bearer {{loginUser.response.body.data.accessToken}}

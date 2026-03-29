@@ -10,6 +10,7 @@ import { HelperModule } from '@app/common/helper/helper.module';
 import { IntegrationModule } from '@app/common';
 import { EmailProcessorWorker } from './processors/email.processor';
 import { DeviceControlProcessor } from './processors/device-control.processor';
+import { DeviceStatusProcessor } from './processors/device-status.processor';
 import { MidNightScheduleWorker } from './schedulers/midnight.scheduler';
 
 @Module({
@@ -48,6 +49,7 @@ import { MidNightScheduleWorker } from './schedulers/midnight.scheduler';
   providers: [
     EmailProcessorWorker,
     DeviceControlProcessor,
+    DeviceStatusProcessor,
     MidNightScheduleWorker,
   ],
 })

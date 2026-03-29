@@ -513,4 +513,120 @@ export class HomeService {
     );
     return this.getRoomsByHome(homeId, userId);
   }
+
+  // ============================================================
+  // ACTIVITY TIMELINE (HOME-WIDE)
+  // ============================================================
+
+  /**
+   * Lấy timeline hoạt động toàn bộ nhà:
+   * Merge EntityStateHistory + DeviceConnectionLog của TẤT CẢ thiết bị trong nhà
+   */
+  async getHomeActivity(
+    homeId: string,
+    userId: string,
+    query: { page?: number; limit?: number; from?: string; to?: string },
+  ) {
+    await this.ensureUserCanAccessHome(userId, homeId);
+
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 30;
+    const dateFilter: { gte?: Date; lte?: Date } = {};
+    if (query.from) dateFilter.gte = new Date(query.from);
+    if (query.to) dateFilter.lte = new Date(query.to);
+
+    const fetchLimit = limit * page + limit;
+
+    // 1. State changes của tất cả entities thuộc devices trong home
+    const stateWhere: Record<string, unknown> = {
+      entity: { device: { homeId } },
+    };
+    if (Object.keys(dateFilter).length > 0) stateWhere.createdAt = dateFilter;
+
+    const stateHistory = await this.databaseService.entityStateHistory.findMany({
+      where: stateWhere,
+      include: {
+        entity: {
+          select: {
+            code: true,
+            name: true,
+            domain: true,
+            device: { select: { id: true, name: true, room: { select: { name: true } } } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: fetchLimit,
+    });
+
+    // 2. Connection logs cho tất cả devices trong home
+    const connWhere: Record<string, unknown> = {
+      device: { homeId },
+    };
+    if (Object.keys(dateFilter).length > 0) connWhere.createdAt = dateFilter;
+
+    const connectionLogs = await this.databaseService.deviceConnectionLog.findMany({
+      where: connWhere,
+      include: {
+        device: { select: { id: true, name: true, room: { select: { name: true } } } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: fetchLimit,
+    });
+
+    // 3. Merge
+    type TimelineItem = {
+      type: 'state' | 'connection';
+      event: string;
+      deviceId: string;
+      deviceName: string;
+      roomName: string | null;
+      entityCode: string | null;
+      entityName: string | null;
+      source: string | null;
+      createdAt: Date;
+    };
+
+    const timeline: TimelineItem[] = [];
+
+    for (const s of stateHistory) {
+      timeline.push({
+        type: 'state',
+        event: s.valueText ?? (s.value !== null ? String(s.value) : 'unknown'),
+        deviceId: s.entity.device.id,
+        deviceName: s.entity.device.name,
+        roomName: s.entity.device.room?.name ?? null,
+        entityCode: s.entity.code,
+        entityName: s.entity.name,
+        source: s.source ?? 'mqtt',
+        createdAt: s.createdAt,
+      });
+    }
+
+    for (const c of connectionLogs) {
+      timeline.push({
+        type: 'connection',
+        event: c.event,
+        deviceId: c.device.id,
+        deviceName: c.device.name,
+        roomName: c.device.room?.name ?? null,
+        entityCode: null,
+        entityName: null,
+        source: null,
+        createdAt: c.createdAt,
+      });
+    }
+
+    timeline.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+    const skip = (page - 1) * limit;
+    const paginated = timeline.slice(skip, skip + limit);
+    const total = timeline.length;
+    const lastPage = Math.ceil(total / limit);
+
+    return {
+      data: paginated,
+      meta: { total, page, lastPage },
+    };
+  }
 }

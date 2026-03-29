@@ -3,6 +3,17 @@ import { DeviceStatusProcessor } from './device-status.processor';
 import { DatabaseService } from '@app/database';
 import { DEVICE_JOBS } from '@app/common';
 
+jest.mock('@faker-js/faker', () => ({
+  faker: {
+    string: { uuid: () => 'test-uuid', numeric: () => '123', alphanumeric: () => 'abc' },
+    number: { int: () => 123 },
+    date: { past: () => new Date() },
+    internet: { email: () => 'test@example.com', password: () => 'password123' },
+    person: { firstName: () => 'John', lastName: () => 'Doe' },
+    phone: { number: () => '0912345678' },
+  },
+}));
+
 const makeDb = () => ({
   entityStateHistory: { create: jest.fn() },
   deviceConnectionLog: { create: jest.fn() },

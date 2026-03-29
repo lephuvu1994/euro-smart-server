@@ -42,7 +42,7 @@ Content-Type: application/json
 ###
 # Lấy danh sách thiết bị (phân trang)
 # @name getDevices
-GET {{baseUrl}}/devices?page=1&limit=10
+GET {{baseUrl}}/devices?page=1&limit=100
 Authorization: Bearer {{loginUser.response.body.data.accessToken}}
 
 ###
@@ -114,12 +114,12 @@ Content-Type: application/json
 # --- TIMELINE (LỊCH SỬ HOẠT ĐỘNG) ---
 
 # Lấy timeline hoạt động thiết bị (5 item gần nhất → cho popover)
-GET {{baseUrl}}/devices/{{deviceId}}/timeline?page=1&limit=5
+GET {{baseUrl}}/devices/{{getDevices.response.body.data[42].id}}/timeline?page=1&limit=5
 Authorization: Bearer {{loginUser.response.body.data.accessToken}}
 
 ###
 # Lấy timeline hoạt động thiết bị (phân trang → cho detail screen)
-GET {{baseUrl}}/devices/{{deviceId}}/timeline?page=1&limit=30
+GET {{baseUrl}}/devices/{{getDevices.response.body.data.data[43].id}}/timeline?page=1&limit=30
 Authorization: Bearer {{loginUser.response.body.data.accessToken}}
 
 ###

@@ -1,0 +1,100 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { DeviceController } from './device.controller';
+import { DeviceService } from '../services/device.service';
+import { UserRole } from '@prisma/client';
+import { IAuthUser } from '@app/common/request/interfaces/request.interface';
+
+import { DeviceProvisioningService } from '../services/device-provisioning.service';
+import { DeviceControlService } from '../services/device-control.service';
+import { EmqxAuthService } from '../../emqx-auth/services/emqx-auth.service';
+
+describe('DeviceController', () => {
+  let controller: DeviceController;
+  let service: DeviceService;
+
+  const mockDeviceService = {
+    getUserDevices: jest.fn(),
+    getDeviceTimeline: jest.fn(),
+    getDeviceDetail: jest.fn(),
+  };
+
+  const mockProvisioningService = {};
+  const mockDeviceControlService = {};
+  const mockEmqxAuthService = {};
+
+  const mockUser: IAuthUser = {
+    userId: 'user-1',
+    role: UserRole.USER,
+  };
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      controllers: [DeviceController],
+      providers: [
+        {
+          provide: DeviceService,
+          useValue: mockDeviceService,
+        },
+        {
+          provide: DeviceProvisioningService,
+          useValue: mockProvisioningService,
+        },
+        {
+          provide: DeviceControlService,
+          useValue: mockDeviceControlService,
+        },
+        {
+          provide: EmqxAuthService,
+          useValue: mockEmqxAuthService,
+        },
+      ],
+    }).compile();
+
+    controller = module.get<DeviceController>(DeviceController);
+    service = module.get<DeviceService>(DeviceService);
+    jest.clearAllMocks();
+  });
+
+  describe('getDeviceTimeline', () => {
+    it('should call deviceService.getDeviceTimeline with correct parameters', async () => {
+      const deviceId = 'a15cb911-f4f8-40a2-ad9e-45e63ad093f5';
+      const query = { page: 1, limit: 5 };
+      mockDeviceService.getDeviceTimeline.mockResolvedValue({
+        data: [{ id: '1', event: 'online' }],
+        meta: { total: 1, page: 1, lastPage: 1 },
+      });
+
+      const result = await controller.getDeviceTimeline(deviceId, query, mockUser);
+
+      expect(service.getDeviceTimeline).toHaveBeenCalledWith(deviceId, mockUser.userId, query);
+      expect(result.data).toHaveLength(1);
+    });
+  });
+
+  describe('getDeviceDetail', () => {
+    it('should call deviceService.getDeviceDetail with correct parameters', async () => {
+      const deviceId = 'a15cb911-f4f8-40a2-ad9e-45e63ad093f5';
+      mockDeviceService.getDeviceDetail.mockResolvedValue({ id: deviceId, name: 'Mock Device' });
+
+      const result = await controller.getDeviceDetail(deviceId, mockUser);
+
+      expect(service.getDeviceDetail).toHaveBeenCalledWith(deviceId, mockUser.userId);
+      expect(result.id).toBe(deviceId);
+    });
+  });
+
+  describe('getMyDevices', () => {
+    it('should call deviceService.getUserDevices with correct parameters', async () => {
+      const query = { page: 1, limit: 10 };
+      mockDeviceService.getUserDevices.mockResolvedValue({
+        data: [{ id: '1' }],
+        meta: { total: 1, page: 1, lastPage: 1 },
+      });
+
+      const result = await controller.getMyDevices(mockUser, query);
+
+      expect(service.getUserDevices).toHaveBeenCalledWith(mockUser.userId, query);
+      expect(result.data).toHaveLength(1);
+    });
+  });
+});

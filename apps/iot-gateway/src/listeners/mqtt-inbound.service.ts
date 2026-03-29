@@ -93,6 +93,9 @@ export class MqttInboundService implements OnApplicationBootstrap {
       this.logger.log(
         `Device ${deviceToken} status updated: ${JSON.stringify(rawData)}`,
       );
+
+      // ★ Process for state history as well, since firmware might bundle telemetry inside the status message
+      await this.handleStateMessage(topic, payload);
     } catch (error) {
       this.logger.error(`Failed to handle status message: ${error.message}`);
     }
@@ -219,7 +222,7 @@ export class MqttInboundService implements OnApplicationBootstrap {
                   typeof entityUpdate.state === 'string'
                     ? String(entityUpdate.state)
                     : null,
-                source: 'mqtt',
+                source: rawData.source || 'mqtt',
               },
               { removeOnComplete: true, attempts: 2 },
             );

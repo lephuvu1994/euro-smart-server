@@ -2,7 +2,7 @@ import { Module, Global } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { MailerModule } from '@nestjs-modules/mailer';
 import { ConfigModule, ConfigService } from '@nestjs/config'; // Import Config để lấy env
-import { HandlebarsAdapter } from '@nestjs-modules/mailer/dist/adapters/handlebars.adapter'; // Import Adapter
+import { HandlebarsAdapter } from '@nestjs-modules/mailer/adapters/handlebars.adapter'; // Import Adapter
 
 import { HelperEmailService } from './services/helper.email.service';
 import { HelperEncryptionService } from './services/helper.encryption.service';

@@ -8,6 +8,7 @@ import {
   Get,
   Query,
   HttpStatus,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { DocResponse } from '@app/common';
 import { AuthUser } from '@app/common/request/decorators/request.user.decorator';
@@ -196,7 +197,7 @@ export class DeviceController {
   })
   @DocResponse({ messageKey: 'device.timeline.success', httpStatus: HttpStatus.OK })
   async getDeviceTimeline(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Query() query: GetDeviceTimelineDto,
     @AuthUser() user: IAuthUser,
   ) {
@@ -211,7 +212,7 @@ export class DeviceController {
   @ApiOperation({ summary: 'Lấy chi tiết một thiết bị' })
   @DocResponse({ messageKey: 'device.detail.success', httpStatus: HttpStatus.OK })
   async getDeviceDetail(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @AuthUser() user: IAuthUser,
   ) {
     const userId = user.userId;

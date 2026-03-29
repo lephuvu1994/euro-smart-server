@@ -2,6 +2,7 @@ import { Injectable, OnApplicationBootstrap, Logger } from '@nestjs/common';
 import { MqttService } from '@app/common/mqtt/mqtt.service';
 import { RedisService } from '@app/redis-cache';
 import { Queue } from 'bullmq';
+import { isEqual } from 'lodash';
 import { InjectQueue } from '@nestjs/bullmq';
 import { APP_BULLMQ_QUEUES } from '@app/common';
 import { DEVICE_JOBS } from '@app/common';
@@ -206,26 +207,28 @@ export class MqttInboundService implements OnApplicationBootstrap {
           await this.redisService.set(entityRedisKey, JSON.stringify(newState));
 
           // ★ Ghi lịch sử khi PRIMARY STATE thay đổi (OPEN→CLOSE, ON→OFF...)
-          if (
-            entityUpdate.state !== undefined &&
-            entityUpdate.state !== oldState.state
-          ) {
-            await this.statusQueue.add(
-              DEVICE_JOBS.RECORD_STATE_HISTORY,
-              {
-                entityId: entity.id,
-                value:
-                  typeof entityUpdate.state === 'number'
-                    ? entityUpdate.state
-                    : null,
-                valueText:
-                  typeof entityUpdate.state === 'string'
-                    ? String(entityUpdate.state)
-                    : null,
-                source: rawData.source || 'mqtt',
-              },
-              { removeOnComplete: true, attempts: 2 },
-            );
+          let hasStateChanged = false;
+          if (entityUpdate.state !== undefined) {
+             hasStateChanged = !isEqual(entityUpdate.state, oldState.state);
+          }
+
+          if (hasStateChanged) {
+            // Only record history for primitive states (strings or numbers)
+            const isNumber = typeof entityUpdate.state === 'number';
+            const isString = typeof entityUpdate.state === 'string';
+            
+            if (isNumber || isString) {
+              await this.statusQueue.add(
+                DEVICE_JOBS.RECORD_STATE_HISTORY,
+                {
+                  entityId: entity.id,
+                  value: isNumber ? entityUpdate.state : null,
+                  valueText: isString ? String(entityUpdate.state) : null,
+                  source: rawData.source || 'mqtt',
+                },
+                { removeOnComplete: true, attempts: 2 },
+              );
+            }
           }
 
           updates.push(entityUpdate);

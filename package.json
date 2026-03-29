@@ -90,6 +90,7 @@
     "serialport": "^13.0.0",
     "serialport-gsm": "^4.0.1",
     "socket.io": "^4.8.3",
+    "ssh2": "^1.17.0",
     "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {

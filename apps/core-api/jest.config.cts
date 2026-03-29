@@ -7,7 +7,7 @@ module.exports = {
   },
   // Allow ts-jest to transform ESM packages (e.g. @faker-js/faker v10)
   transformIgnorePatterns: [
-    'node_modules/(?!(@faker-js/faker)/)',
+    'node_modules/(?!(@faker-js/faker|@nestjs-modules/mailer)/)',
   ],
   moduleFileExtensions: ['ts', 'js', 'html'],
   coverageDirectory: '../../coverage/apps/core-api',

@@ -109,3 +109,34 @@ Content-Type: application/json
         "security_lock": 0
     }
 }
+
+###
+# --- TIMELINE (LỊCH SỬ HOẠT ĐỘNG) ---
+
+# Lấy timeline hoạt động thiết bị (5 item gần nhất → cho popover)
+GET {{baseUrl}}/devices/{{deviceId}}/timeline?page=1&limit=5
+Authorization: Bearer {{loginUser.response.body.data.accessToken}}
+
+###
+# Lấy timeline hoạt động thiết bị (phân trang → cho detail screen)
+GET {{baseUrl}}/devices/{{deviceId}}/timeline?page=1&limit=30
+Authorization: Bearer {{loginUser.response.body.data.accessToken}}
+
+###
+# Lấy timeline hoạt động thiết bị (filter theo entity + ngày)
+GET {{baseUrl}}/devices/{{deviceId}}/timeline?page=1&limit=30&entityCode=curtain_1&from=2026-03-01&to=2026-03-29
+Authorization: Bearer {{loginUser.response.body.data.accessToken}}
+
+###
+# --- MQTT CREDENTIALS ---
+
+# Lấy thông tin kết nối MQTT (WSS)
+GET {{baseUrl}}/devices/mqtt-credentials
+Authorization: Bearer {{loginUser.response.body.data.accessToken}}
+
+###
+# --- UI CONFIG ---
+
+# Lấy Device UI Config
+GET {{baseUrl}}/devices/config
+Authorization: Bearer {{loginUser.response.body.data.accessToken}}

@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { DocResponse } from '@app/common/doc/decorators/doc.response.decorator';
@@ -35,6 +36,7 @@ import {
   RoomResponseDto,
 } from './dtos/response/home.response';
 import { HomeService } from './home.service';
+import { GetDeviceTimelineDto } from '../device/dto/get-device-timeline.dto';
 
 @ApiTags('Home')
 @UseGuards(JwtAccessGuard, RolesGuard)
@@ -46,6 +48,30 @@ export class HomeController {
   // ============================================================
   // HOMES
   // ============================================================
+
+  /**
+   * API: Lịch sử hoạt động toàn bộ nhà (tất cả thiết bị)
+   * GET /v1/homes/:homeId/activity?page=1&limit=5
+   * Merge tất cả state changes + connection events của mọi thiết bị trong nhà
+   * MUST be before :homeId/detail to avoid route conflict
+   */
+  @Get(':homeId/activity')
+  @ApiOperation({
+    summary: 'Lấy timeline hoạt động toàn bộ nhà (tất cả thiết bị)',
+    description:
+      'Returns a merged timeline of all device state changes and connection events within a home.',
+  })
+  @DocResponse({
+    httpStatus: HttpStatus.OK,
+    messageKey: 'home.success.activity',
+  })
+  async getHomeActivity(
+    @AuthUser() user: IAuthUser,
+    @Param('homeId') homeId: string,
+    @Query() query: GetDeviceTimelineDto,
+  ) {
+    return this.homeService.getHomeActivity(homeId, user.userId, query);
+  }
 
   @Get(':homeId/detail')
   @ApiOperation({ summary: 'Chi tiết nhà (home + floors + rooms)' })

@@ -9,4 +9,8 @@ export enum DEVICE_JOBS {
   CHECK_DEVICE_STATE_TRIGGERS = 'check_device_state_triggers',
   UPDATE_LAST_SEEN = 'update_last_seen',
   SAVE_TELEMETRY = 'save_telemetry',
+  /** Ghi lịch sử thay đổi trạng thái entity (OPEN/CLOSE/ON/OFF...) */
+  RECORD_STATE_HISTORY = 'record_state_history',
+  /** Ghi lịch sử kết nối thiết bị (online/offline) */
+  RECORD_CONNECTION_LOG = 'record_connection_log',
 }

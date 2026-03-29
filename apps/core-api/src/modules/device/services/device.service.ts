@@ -384,4 +384,118 @@ export class DeviceService {
 
     return { message: 'Device UI config cache refreshed successfully' };
   }
+
+  /**
+   * Lấy timeline hoạt động thiết bị:
+   * Merge EntityStateHistory (state changes) + DeviceConnectionLog (online/offline)
+   * → sort by createdAt DESC → paginate
+   */
+  async getDeviceTimeline(
+    deviceId: string,
+    userId: string,
+    query: { page?: number; limit?: number; entityCode?: string; from?: string; to?: string },
+  ) {
+    // 1. Verify ownership
+    const device = await this.db.device.findFirst({
+      where: {
+        id: deviceId,
+        OR: [
+          { ownerId: userId },
+          { sharedUsers: { some: { userId } } },
+        ],
+      },
+      select: { id: true },
+    });
+
+    if (!device) {
+      throw new NotFoundException('device.error.notFound');
+    }
+
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 30;
+    const dateFilter: { gte?: Date; lte?: Date } = {};
+    if (query.from) dateFilter.gte = new Date(query.from);
+    if (query.to) dateFilter.lte = new Date(query.to);
+
+    // 2. Query state changes (EntityStateHistory)
+    const entityFilter: Record<string, unknown> = { device: { id: deviceId } };
+    if (query.entityCode) entityFilter.code = query.entityCode;
+
+    const stateHistoryWhere: Record<string, unknown> = {
+      entity: entityFilter,
+    };
+    if (Object.keys(dateFilter).length > 0) {
+      stateHistoryWhere.createdAt = dateFilter;
+    }
+
+    const stateHistory = await this.db.entityStateHistory.findMany({
+      where: stateHistoryWhere,
+      include: {
+        entity: { select: { code: true, name: true, domain: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      // Fetch more than needed so we can merge+paginate in memory
+      take: limit * page + limit,
+    });
+
+    // 3. Query connection logs (DeviceConnectionLog)
+    const connectionWhere: Record<string, unknown> = { deviceId };
+    if (Object.keys(dateFilter).length > 0) {
+      connectionWhere.createdAt = dateFilter;
+    }
+
+    const connectionLogs = await this.db.deviceConnectionLog.findMany({
+      where: connectionWhere,
+      orderBy: { createdAt: 'desc' },
+      take: limit * page + limit,
+    });
+
+    // 4. Merge into unified timeline
+    type TimelineItem = {
+      type: 'state' | 'connection';
+      event: string;
+      entityCode: string | null;
+      entityName: string | null;
+      source: string | null;
+      createdAt: Date;
+    };
+
+    const timeline: TimelineItem[] = [];
+
+    for (const s of stateHistory) {
+      timeline.push({
+        type: 'state',
+        event: s.valueText ?? (s.value !== null ? String(s.value) : 'unknown'),
+        entityCode: s.entity.code,
+        entityName: s.entity.name,
+        source: s.source ?? 'mqtt',
+        createdAt: s.createdAt,
+      });
+    }
+
+    for (const c of connectionLogs) {
+      timeline.push({
+        type: 'connection',
+        event: c.event,
+        entityCode: null,
+        entityName: null,
+        source: null,
+        createdAt: c.createdAt,
+      });
+    }
+
+    // 5. Sort merged timeline by createdAt DESC
+    timeline.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+    // 6. Paginate
+    const skip = (page - 1) * limit;
+    const paginated = timeline.slice(skip, skip + limit);
+    const total = timeline.length;
+    const lastPage = Math.ceil(total / limit);
+
+    return {
+      data: paginated,
+      meta: { total, page, lastPage },
+    };
+  }
 }

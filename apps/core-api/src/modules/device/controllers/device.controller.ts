@@ -23,6 +23,8 @@ import { DeviceService } from '../services/device.service';
 import { GetDevicesDto } from '../dto/get-devices.dto';
 import { EmqxAuthService } from '../../emqx-auth/services/emqx-auth.service';
 
+import { GetDeviceTimelineDto } from '../dto/get-device-timeline.dto';
+
 @ApiTags('Devices')
 @UseGuards(JwtAccessGuard, RolesGuard)
 @ApiBearerAuth('accessToken')
@@ -179,6 +181,28 @@ export class DeviceController {
     const userId = user.userId;
     return await this.deviceService.getUserDevices(userId, query);
   }
+
+  /**
+   * API: Lấy lịch sử hoạt động (timeline) của thiết bị
+   * GET /v1/devices/:id/timeline?page=1&limit=30
+   * Merge EntityStateHistory + DeviceConnectionLog → sorted by createdAt DESC
+   * MUST be before :id route
+   */
+  @Get(':id/timeline')
+  @ApiOperation({
+    summary: 'Lấy timeline hoạt động của thiết bị (state changes + connection events)',
+    description:
+      'Returns a merged, chronologically-sorted timeline of entity state changes and device connection events.',
+  })
+  @DocResponse({ messageKey: 'device.timeline.success', httpStatus: HttpStatus.OK })
+  async getDeviceTimeline(
+    @Param('id') id: string,
+    @Query() query: GetDeviceTimelineDto,
+    @AuthUser() user: IAuthUser,
+  ) {
+    return await this.deviceService.getDeviceTimeline(id, user.userId, query);
+  }
+
   /**
    * API: Lấy chi tiết một thiết bị
    * GET /v1/devices/:id

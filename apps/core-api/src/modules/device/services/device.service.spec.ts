@@ -33,6 +33,12 @@ const makeDb = () => ({
     findUnique: jest.fn(),
     upsert: jest.fn(),
   },
+  entityStateHistory: {
+    findMany: jest.fn(),
+  },
+  deviceConnectionLog: {
+    findMany: jest.fn(),
+  },
 });
 
 const makeRedis = () => ({
@@ -398,6 +404,217 @@ describe('DeviceService', () => {
       expect(db.systemConfig.upsert).toHaveBeenCalled();
       expect(redis.set).toHaveBeenCalled();
       expect(result.message).toBeTruthy();
+    });
+  });
+
+  // ═══════════════════════════════════════════════════
+  // getDeviceTimeline
+  // ═══════════════════════════════════════════════════
+  describe('getDeviceTimeline', () => {
+    const now = new Date('2026-03-29T10:00:00Z');
+    const oneHourAgo = new Date('2026-03-29T09:00:00Z');
+    const twoHoursAgo = new Date('2026-03-29T08:00:00Z');
+
+    it('should throw NotFoundException if device not found or not accessible', async () => {
+      db.device.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.getDeviceTimeline('invalid-id', 'user-1', {}),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should return empty timeline when no events exist', async () => {
+      db.device.findFirst.mockResolvedValue({ id: 'dev-1' });
+      (db.entityStateHistory as any).findMany.mockResolvedValue([]);
+      (db.deviceConnectionLog as any).findMany.mockResolvedValue([]);
+
+      const result = await service.getDeviceTimeline('dev-1', 'user-1', {});
+
+      expect(result.data).toHaveLength(0);
+      expect(result.meta.total).toBe(0);
+    });
+
+    it('should return state change events with correct mapping', async () => {
+      db.device.findFirst.mockResolvedValue({ id: 'dev-1' });
+      (db.entityStateHistory as any).findMany.mockResolvedValue([
+        {
+          id: 'sh-1',
+          value: null,
+          valueText: 'OPEN',
+          source: 'app',
+          createdAt: now,
+          entity: { code: 'curtain_1', name: 'Rèm chính', domain: 'curtain' },
+        },
+      ]);
+      (db.deviceConnectionLog as any).findMany.mockResolvedValue([]);
+
+      const result = await service.getDeviceTimeline('dev-1', 'user-1', {});
+
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0]).toEqual(expect.objectContaining({
+        type: 'state',
+        event: 'OPEN',
+        entityCode: 'curtain_1',
+        entityName: 'Rèm chính',
+        source: 'app',
+      }));
+    });
+
+    it('should return connection events with correct mapping', async () => {
+      db.device.findFirst.mockResolvedValue({ id: 'dev-1' });
+      (db.entityStateHistory as any).findMany.mockResolvedValue([]);
+      (db.deviceConnectionLog as any).findMany.mockResolvedValue([
+        { id: 'cl-1', event: 'online', createdAt: now },
+        { id: 'cl-2', event: 'offline', createdAt: oneHourAgo },
+      ]);
+
+      const result = await service.getDeviceTimeline('dev-1', 'user-1', {});
+
+      expect(result.data).toHaveLength(2);
+      expect(result.data[0]).toEqual(expect.objectContaining({
+        type: 'connection',
+        event: 'online',
+        entityCode: null,
+        source: null,
+      }));
+      expect(result.data[1].event).toBe('offline');
+    });
+
+    it('should merge and sort state + connection events by createdAt DESC', async () => {
+      db.device.findFirst.mockResolvedValue({ id: 'dev-1' });
+      (db.entityStateHistory as any).findMany.mockResolvedValue([
+        {
+          id: 'sh-1', value: null, valueText: 'OPEN', source: 'app',
+          createdAt: now,
+          entity: { code: 'curtain_1', name: 'Rèm', domain: 'curtain' },
+        },
+        {
+          id: 'sh-2', value: null, valueText: 'CLOSE', source: 'mqtt',
+          createdAt: twoHoursAgo,
+          entity: { code: 'curtain_1', name: 'Rèm', domain: 'curtain' },
+        },
+      ]);
+      (db.deviceConnectionLog as any).findMany.mockResolvedValue([
+        { id: 'cl-1', event: 'online', createdAt: oneHourAgo },
+      ]);
+
+      const result = await service.getDeviceTimeline('dev-1', 'user-1', {});
+
+      expect(result.data).toHaveLength(3);
+      expect(result.data[0].event).toBe('OPEN');      // 10:00
+      expect(result.data[1].event).toBe('online');     // 09:00
+      expect(result.data[2].event).toBe('CLOSE');      // 08:00
+    });
+
+    it('should paginate correctly', async () => {
+      db.device.findFirst.mockResolvedValue({ id: 'dev-1' });
+      const events = Array.from({ length: 10 }, (_, i) => ({
+        id: `sh-${i}`, value: null, valueText: `EVENT_${i}`, source: 'mqtt',
+        createdAt: new Date(now.getTime() - i * 60000),
+        entity: { code: 'main', name: 'Main', domain: 'switch' },
+      }));
+      (db.entityStateHistory as any).findMany.mockResolvedValue(events);
+      (db.deviceConnectionLog as any).findMany.mockResolvedValue([]);
+
+      const page1 = await service.getDeviceTimeline('dev-1', 'user-1', { page: 1, limit: 3 });
+      expect(page1.data).toHaveLength(3);
+      expect(page1.meta.page).toBe(1);
+      expect(page1.meta.lastPage).toBe(4); // ceil(10/3)
+
+      const page2 = await service.getDeviceTimeline('dev-1', 'user-1', { page: 2, limit: 3 });
+      expect(page2.data).toHaveLength(3);
+      expect(page2.data[0].event).toBe('EVENT_3');
+    });
+
+    it('should handle numeric state value (value instead of valueText)', async () => {
+      db.device.findFirst.mockResolvedValue({ id: 'dev-1' });
+      (db.entityStateHistory as any).findMany.mockResolvedValue([
+        {
+          id: 'sh-1', value: 1, valueText: null, source: 'mqtt',
+          createdAt: now,
+          entity: { code: 'switch_1', name: 'Switch', domain: 'switch' },
+        },
+      ]);
+      (db.deviceConnectionLog as any).findMany.mockResolvedValue([]);
+
+      const result = await service.getDeviceTimeline('dev-1', 'user-1', {});
+
+      expect(result.data[0].event).toBe('1');
+    });
+
+    it('should apply date filters (from/to)', async () => {
+      db.device.findFirst.mockResolvedValue({ id: 'dev-1' });
+      (db.entityStateHistory as any).findMany.mockResolvedValue([]);
+      (db.deviceConnectionLog as any).findMany.mockResolvedValue([]);
+
+      await service.getDeviceTimeline('dev-1', 'user-1', {
+        from: '2026-03-01',
+        to: '2026-03-29',
+      });
+
+      // Verify that the where clause includes createdAt filter
+      expect((db.entityStateHistory as any).findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            createdAt: expect.objectContaining({
+              gte: expect.any(Date),
+              lte: expect.any(Date),
+            }),
+          }),
+        }),
+      );
+    });
+
+    it('should filter by entityCode when provided', async () => {
+      db.device.findFirst.mockResolvedValue({ id: 'dev-1' });
+      (db.entityStateHistory as any).findMany.mockResolvedValue([]);
+      (db.deviceConnectionLog as any).findMany.mockResolvedValue([]);
+
+      await service.getDeviceTimeline('dev-1', 'user-1', {
+        entityCode: 'curtain_1',
+      });
+
+      expect((db.entityStateHistory as any).findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            entity: expect.objectContaining({
+              code: 'curtain_1',
+            }),
+          }),
+        }),
+      );
+    });
+
+    it('should handle unknown state (null value and null valueText)', async () => {
+      db.device.findFirst.mockResolvedValue({ id: 'dev-1' });
+      (db.entityStateHistory as any).findMany.mockResolvedValue([
+        {
+          id: 'sh-1', value: null, valueText: null, source: 'mqtt',
+          createdAt: now,
+          entity: { code: 'main', name: 'Main', domain: 'switch' },
+        },
+      ]);
+      (db.deviceConnectionLog as any).findMany.mockResolvedValue([]);
+
+      const result = await service.getDeviceTimeline('dev-1', 'user-1', {});
+
+      expect(result.data[0].event).toBe('unknown');
+    });
+
+    it('should default source to mqtt when source is null', async () => {
+      db.device.findFirst.mockResolvedValue({ id: 'dev-1' });
+      (db.entityStateHistory as any).findMany.mockResolvedValue([
+        {
+          id: 'sh-1', value: null, valueText: 'OPEN', source: null,
+          createdAt: now,
+          entity: { code: 'main', name: 'Main', domain: 'curtain' },
+        },
+      ]);
+      (db.deviceConnectionLog as any).findMany.mockResolvedValue([]);
+
+      const result = await service.getDeviceTimeline('dev-1', 'user-1', {});
+
+      expect(result.data[0].source).toBe('mqtt');
     });
   });
 });

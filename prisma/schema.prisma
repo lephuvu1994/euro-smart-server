@@ -266,7 +266,8 @@ model Device {
   sortOrder Int @default(0) @map("sort_order")
 
   // Dữ liệu runtime (HA-style 3-tier: Device → Entity → Attribute)
-  entities DeviceEntity[]
+  entities       DeviceEntity[]
+  connectionLogs DeviceConnectionLog[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -349,6 +350,9 @@ model EntityStateHistory {
   value     Float?
   valueText String? @map("value_text")
 
+  // Nguồn gốc thay đổi: ai gây ra sự kiện này?
+  source    String  @default("mqtt") // "app" | "mqtt" | "scene" | "siri"
+
   entityId String       @map("entity_id") @db.Uuid
   entity   DeviceEntity @relation(fields: [entityId], references: [id], onDelete: Cascade)
 
@@ -357,6 +361,23 @@ model EntityStateHistory {
   @@id([id, createdAt])
   @@index([entityId, createdAt(sort: Desc)])
   @@map("t_entity_state_history")
+}
+
+// Lịch sử kết nối thiết bị (online/offline)
+model DeviceConnectionLog {
+  id    String @default(uuid()) @db.Uuid
+
+  event String // "online" | "offline"
+
+  deviceId String @map("device_id") @db.Uuid
+  device   Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@id([id, createdAt])
+  @@index([deviceId, createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+  @@map("t_device_connection_log")
 }
 
 model DeviceShare {

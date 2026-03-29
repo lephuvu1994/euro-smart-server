@@ -61,11 +61,26 @@ export class MqttInboundService implements OnApplicationBootstrap {
       }
 
       // 1. LWT standard: rely on broker's keep_alive. Delete if LWT offline msg, else set online indefinitely.
+      const previousStatus = await this.redisService.get(`status:${deviceToken}`);
+      const newEvent = rawData.online === false ? 'offline' : 'online';
+
       if (rawData.online === false) {
         await this.redisService.del(`status:${deviceToken}`);
       } else {
         await this.redisService.set(`status:${deviceToken}`, 'online');
       }
+
+      // ★ Ghi lịch sử kết nối khi trạng thái thay đổi thực sự
+      const wasOnline = previousStatus === 'online';
+      const isNowOnline = newEvent === 'online';
+      if (wasOnline !== isNowOnline) {
+        await this.statusQueue.add(
+          DEVICE_JOBS.RECORD_CONNECTION_LOG,
+          { token: deviceToken, event: newEvent },
+          { removeOnComplete: true, attempts: 2 },
+        );
+      }
+
       // 2. Write shadow − using the key device.service also reads: hgetall `device:shadow:{token}`
       await this.redisService.hmset(`device:shadow:${deviceToken}`, shadowData);
 
@@ -186,6 +201,29 @@ export class MqttInboundService implements OnApplicationBootstrap {
             entityRedisKey,
           );
           await this.redisService.set(entityRedisKey, JSON.stringify(newState));
+
+          // ★ Ghi lịch sử khi PRIMARY STATE thay đổi (OPEN→CLOSE, ON→OFF...)
+          if (
+            entityUpdate.state !== undefined &&
+            entityUpdate.state !== oldState.state
+          ) {
+            await this.statusQueue.add(
+              DEVICE_JOBS.RECORD_STATE_HISTORY,
+              {
+                entityId: entity.id,
+                value:
+                  typeof entityUpdate.state === 'number'
+                    ? entityUpdate.state
+                    : null,
+                valueText:
+                  typeof entityUpdate.state === 'string'
+                    ? String(entityUpdate.state)
+                    : null,
+                source: 'mqtt',
+              },
+              { removeOnComplete: true, attempts: 2 },
+            );
+          }
 
           updates.push(entityUpdate);
         }

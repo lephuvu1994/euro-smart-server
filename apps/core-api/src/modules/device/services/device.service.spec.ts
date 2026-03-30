@@ -703,20 +703,23 @@ describe('DeviceService', () => {
 
     it('should not throw if Redis cleanup fails (fire-and-forget)', async () => {
       db.device.findFirst.mockResolvedValue({ id: 'dev-1', token: 'token-xyz' });
-      db.device.delete.mockResolvedValue({ id: 'dev-1' });
+      db.device.update.mockResolvedValue({ id: 'dev-1', unboundAt: new Date() });
       redis.del.mockRejectedValue(new Error('Redis connection lost'));
       redis.smembers.mockRejectedValue(new Error('Redis connection lost'));
 
       // Should NOT throw despite Redis failures
       await expect(service.deleteDevice('dev-1', 'user-1')).resolves.toBeUndefined();
 
-      // DB delete should still have been called
-      expect(db.device.delete).toHaveBeenCalledWith({ where: { id: 'dev-1' } });
+      // DB update should still have been called
+      expect(db.device.update).toHaveBeenCalledWith({
+        where: { id: 'dev-1' },
+        data: { unboundAt: expect.any(Date) },
+      });
     });
 
     it('should handle empty entity tracking keys gracefully', async () => {
       db.device.findFirst.mockResolvedValue({ id: 'dev-1', token: 'token-xyz' });
-      db.device.delete.mockResolvedValue({ id: 'dev-1' });
+      db.device.update.mockResolvedValue({ id: 'dev-1', unboundAt: new Date() });
       redis.smembers.mockResolvedValue([]); // No entity keys
 
       await service.deleteDevice('dev-1', 'user-1');

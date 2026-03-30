@@ -2,6 +2,7 @@
 import {
   Controller,
   Post,
+  Patch,
   Body,
   Param,
   UseGuards,
@@ -13,6 +14,7 @@ import { DocResponse } from '@app/common';
 import { AuthUser } from '@app/common/request/decorators/request.user.decorator';
 import { IAuthUser } from '@app/common/request/interfaces/request.interface';
 import { RegisterDeviceDto } from '../dto/register-device.dto';
+import { UpdateEntityDto } from '../dto/update-entity.dto';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAccessGuard } from '@app/common/request/guards/jwt.access.guard';
 import { RolesGuard } from '@app/common/request/guards/roles.guard';
@@ -216,5 +218,26 @@ export class DeviceController {
   ) {
     const userId = user.userId;
     return await this.deviceService.getDeviceDetail(id, userId);
+  }
+
+  /**
+   * API: Đổi tên một tính năng/entity của thiết bị
+   * PATCH /v1/devices/:id/entities/:entityCode
+   */
+  @Patch(':id/entities/:entityCode')
+  @ApiOperation({ summary: 'Đổi tên tính năng/phím bấm của thiết bị' })
+  @DocResponse({ messageKey: 'device.updateEntity.success', httpStatus: HttpStatus.OK })
+  async updateEntityName(
+    @Param('id') id: string,
+    @Param('entityCode') entityCode: string,
+    @Body() dto: UpdateEntityDto,
+    @AuthUser() user: IAuthUser,
+  ) {
+    return await this.deviceService.updateEntityName(
+      id,
+      user.userId,
+      entityCode,
+      dto.name,
+    );
   }
 }

@@ -1,7 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotificationService } from './notification.service';
 import { DatabaseService } from '@app/database';
-import Expo from 'expo-server-sdk';
 
 // Mock Expo SDK constructor and methods
 jest.mock('expo-server-sdk', () => {
@@ -49,8 +48,8 @@ describe('NotificationService', () => {
     db = module.get<DatabaseService>(DatabaseService);
     
     // We can extract the mocked expo instance from the service if needed
-    // @ts-ignore
-    mockExpoInstance = service.expo;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockExpoInstance = (service as any).expo;
     
     // Clear mocks between tests
     jest.clearAllMocks();

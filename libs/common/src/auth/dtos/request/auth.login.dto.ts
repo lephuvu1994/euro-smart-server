@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, Matches } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, Matches } from 'class-validator';
 
 export class UserLoginDto {
   @ApiProperty({
@@ -27,4 +27,13 @@ export class UserLoginDto {
     },
   )
   public password: string;
+ 
+  @ApiProperty({
+    description: 'Tên thiết bị (ví dụ: iPhone 15 Pro)',
+    example: 'iPhone 15 Pro',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  public deviceName?: string;
 }

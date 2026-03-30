@@ -71,8 +71,9 @@ export class SmsSimService implements OnModuleInit {
         incomingSMS: false,
       });
     } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
       this.logger.error(
-        `❌ Critical error initializing serial port ${port}: ${error.message}`,
+        `❌ Critical error initializing serial port ${port}: ${errMsg}`,
       );
       this.isModemReady = false;
     }

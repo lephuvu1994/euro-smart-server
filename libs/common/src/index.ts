@@ -33,6 +33,9 @@ export * from './mqtt/mqtt.module';
 
 // Request & Response
 export * from './request/request.module';
+export * from './request/guards/jwt.access.guard';
+export * from './request/guards/jwt.refresh.guard';
+export * from './request/interfaces/request.interface';
 export * from './response/response.module';
 
 // SMS & Vietguys

@@ -53,26 +53,45 @@ export class HelperEncryptionService implements IHelperEncryptionService {
 
   public async createJwtTokens(
     payload: IAuthUser,
+    sid?: string,
   ): Promise<IAuthTokenResponse> {
     const [accessToken, refreshToken] = await Promise.all([
-      this.createAccessToken(payload),
-      this.createRefreshToken(payload),
+      this.createAccessToken(payload, sid),
+      this.createRefreshToken(payload, sid),
     ]);
     return { accessToken, refreshToken };
   }
 
-  public createAccessToken(payload: IAuthUser): Promise<string> {
-    return this.jwtService.signAsync(payload, {
+  public createAccessToken(payload: IAuthUser, sid?: string): Promise<string> {
+    const accessTokenPayload = { ...payload, ...(sid && { sid }) };
+    return this.jwtService.signAsync(accessTokenPayload, {
       secret: this.accessTokenSecret,
       expiresIn: this.accessTokenExpire as any,
     });
   }
 
-  public createRefreshToken(payload: IAuthUser): Promise<string> {
-    return this.jwtService.signAsync(payload, {
+  public createRefreshToken(payload: IAuthUser, sid?: string): Promise<string> {
+    const refreshTokenPayload = { ...payload, ...(sid && { sid }) };
+    return this.jwtService.signAsync(refreshTokenPayload, {
       secret: this.refreshTokenSecret,
       expiresIn: this.refreshTokenExpire as any,
     });
+  }
+
+  /**
+   * Parse JWT duration string (e.g. '30d', '24h', '3600s') to days.
+   */
+  public getRefreshTokenExpireDays(): number {
+    const match = this.refreshTokenExpire.match(/^(\d+)([dhms]?)$/);
+    if (!match) return 7;
+    const value = parseInt(match[1], 10);
+    switch (match[2]) {
+      case 'h': return value / 24;
+      case 'm': return value / (24 * 60);
+      case 's': return value / (24 * 60 * 60);
+      case 'd':
+      default: return value;
+    }
   }
 
   public createHash(password: string): Promise<string> {

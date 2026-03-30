@@ -10,6 +10,7 @@ import * as mqtt from 'mqtt'; // npm install mqtt
 @Injectable()
 export class MqttService implements OnModuleInit, OnModuleDestroy {
   private client: mqtt.MqttClient;
+  private subscriptions: { pattern: string; callback: (topic: string, payload: Buffer) => void }[] = [];
   private readonly logger = new Logger(MqttService.name);
 
   constructor(private configService: ConfigService) {}
@@ -48,6 +49,15 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     this.client.on('offline', () => {
       this.logger.warn('MQTT Client is offline');
     });
+
+    // Handle all incoming messages and route them based on active subscriptions
+    this.client.on('message', (receivedTopic, payload) => {
+      for (const sub of this.subscriptions) {
+        if (this.matches(sub.pattern, receivedTopic)) {
+          sub.callback(receivedTopic, payload);
+        }
+      }
+    });
   }
 
   // Hàm public để các module khác gọi
@@ -84,28 +94,38 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
+    // Register callback logic to our routing table
+    this.subscriptions.push({ pattern: topic, callback });
+
     this.client.subscribe(topic, options || {}, (err) => {
       if (err) this.logger.error(`Subscribe error: ${err.message}`);
       else
         this.logger.log(`Subscribed to: ${topic} (QoS ${options?.qos ?? 0})`);
     });
-
-    this.client.on('message', (receivedTopic, payload) => {
-      // Logic match topic đơn giản (hoặc dùng thư viện mqtt-match)
-      // Lưu ý: Cần cẩn thận chỗ này kẻo duplicate message nếu subscribe nhiều lần
-      // Tốt nhất là dùng thư viện 'mqtt-pattern' để check match
-      if (this.matches(topic, receivedTopic)) {
-        callback(receivedTopic, payload);
-      }
-    });
   }
 
   private matches(pattern: string, topic: string): boolean {
-    // Logic đơn giản check topic, có thể dùng thư viện 'mqtt-match'
     const patternSegments = pattern.split('/');
     const topicSegments = topic.split('/');
-    // ... (Viết logic check wildcard ở đây hoặc dùng thư viện)
-    return true; // Tạm thời return true để test
+
+    let i = 0;
+    while (i < patternSegments.length && i < topicSegments.length) {
+      const p = patternSegments[i];
+      const t = topicSegments[i];
+
+      if (p === '#') {
+        return true; // '#' matches all remaining levels
+      }
+      
+      if (p !== '+' && p !== t) {
+        return false; // Mismatch on specific level
+      }
+
+      i++;
+    }
+
+    // Must match exact length unless ending in '#'
+    return i === patternSegments.length && i === topicSegments.length;
   }
 
   private disconnect() {

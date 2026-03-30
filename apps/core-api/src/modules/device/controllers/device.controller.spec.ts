@@ -16,6 +16,7 @@ describe('DeviceController', () => {
     getUserDevices: jest.fn(),
     getDeviceTimeline: jest.fn(),
     getDeviceDetail: jest.fn(),
+    updateDeviceName: jest.fn(),
   };
 
   const mockProvisioningService = {};
@@ -80,6 +81,19 @@ describe('DeviceController', () => {
 
       expect(service.getDeviceDetail).toHaveBeenCalledWith(deviceId, mockUser.userId);
       expect(result.id).toBe(deviceId);
+    });
+  });
+
+  describe('updateDeviceName', () => {
+    it('should call deviceService.updateDeviceName with correct parameters', async () => {
+      const deviceId = 'a15cb911-f4f8-40a2-ad9e-45e63ad093f5';
+      const dto = { name: 'New Device Name' };
+      mockDeviceService.updateDeviceName.mockResolvedValue({ id: deviceId, name: 'New Device Name' });
+
+      const result = await controller.updateDeviceName(deviceId, dto, mockUser);
+
+      expect(service.updateDeviceName).toHaveBeenCalledWith(deviceId, mockUser.userId, dto.name);
+      expect(result.name).toBe('New Device Name');
     });
   });
 

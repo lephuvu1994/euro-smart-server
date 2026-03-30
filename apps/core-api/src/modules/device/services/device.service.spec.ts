@@ -39,6 +39,10 @@ const makeDb = () => ({
   deviceConnectionLog: {
     findMany: jest.fn(),
   },
+  deviceEntity: {
+    findFirst: jest.fn(),
+    update: jest.fn(),
+  },
 });
 
 const makeRedis = () => ({
@@ -615,6 +619,41 @@ describe('DeviceService', () => {
       const result = await service.getDeviceTimeline('dev-1', 'user-1', {});
 
       expect(result.data[0].source).toBe('mqtt');
+    });
+  });
+  // ═══════════════════════════════════════════════════
+  // updateEntityName
+  // ═══════════════════════════════════════════════════
+  describe('updateEntityName', () => {
+    it('should throw NotFoundException if device not found or user does not have access', async () => {
+      db.device.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.updateEntityName('invalid-dev', 'user-1', 'main', 'New Name'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw NotFoundException if entityCode not found in device', async () => {
+      db.device.findFirst.mockResolvedValue({ id: 'dev-1' });
+      db.deviceEntity.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.updateEntityName('dev-1', 'user-1', 'invalid-code', 'New Name'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should update entity name and return the updated entity', async () => {
+      db.device.findFirst.mockResolvedValue({ id: 'dev-1' });
+      db.deviceEntity.findFirst.mockResolvedValue({ id: 'ent-1', code: 'main', name: 'Old' });
+      db.deviceEntity.update.mockResolvedValue({ id: 'ent-1', code: 'main', name: 'New Name' });
+
+      const result = await service.updateEntityName('dev-1', 'user-1', 'main', 'New Name');
+
+      expect(db.deviceEntity.update).toHaveBeenCalledWith({
+        where: { id: 'ent-1' },
+        data: { name: 'New Name' },
+      });
+      expect(result.name).toBe('New Name');
     });
   });
 });

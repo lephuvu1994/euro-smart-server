@@ -17,6 +17,7 @@ import { AuthUser } from '@app/common/request/decorators/request.user.decorator'
 import { IAuthUser } from '@app/common/request/interfaces/request.interface';
 import { RegisterDeviceDto } from '../dto/register-device.dto';
 import { UpdateEntityDto } from '../dto/update-entity.dto';
+import { UpdateDeviceDto } from '../dto/update-device.dto';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAccessGuard } from '@app/common/request/guards/jwt.access.guard';
 import { RolesGuard } from '@app/common/request/guards/roles.guard';
@@ -239,6 +240,25 @@ export class DeviceController {
       id,
       user.userId,
       entityCode,
+      dto.name,
+    );
+  }
+
+  /**
+   * API: Đổi tên phần cứng thiết bị (Device Name)
+   * PATCH /v1/devices/:id
+   */
+  @Patch(':id')
+  @ApiOperation({ summary: 'Đổi tên thiết bị trên phần cứng (tên định danh chung)' })
+  @DocResponse({ messageKey: 'device.update.success', httpStatus: HttpStatus.OK })
+  async updateDeviceName(
+    @Param('id') id: string,
+    @Body() dto: UpdateDeviceDto,
+    @AuthUser() user: IAuthUser,
+  ) {
+    return await this.deviceService.updateDeviceName(
+      id,
+      user.userId,
       dto.name,
     );
   }

@@ -663,6 +663,32 @@ describe('DeviceService', () => {
   });
 
   // ═══════════════════════════════════════════════════
+  // updateDeviceName
+  // ═══════════════════════════════════════════════════
+  describe('updateDeviceName', () => {
+    it('should throw NotFoundException if device not found or user does not have access', async () => {
+      db.device.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.updateDeviceName('invalid-dev', 'user-1', 'New Device Name'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should update device name and return the updated device', async () => {
+      db.device.findFirst.mockResolvedValue({ id: 'dev-1' });
+      db.device.update.mockResolvedValue({ id: 'dev-1', name: 'New Device Name' });
+
+      const result = await service.updateDeviceName('dev-1', 'user-1', 'New Device Name');
+
+      expect(db.device.update).toHaveBeenCalledWith({
+        where: { id: 'dev-1' },
+        data: { name: 'New Device Name' },
+      });
+      expect(result.name).toBe('New Device Name');
+    });
+  });
+
+  // ═══════════════════════════════════════════════════
   // deleteDevice
   // ═══════════════════════════════════════════════════
   describe('deleteDevice', () => {

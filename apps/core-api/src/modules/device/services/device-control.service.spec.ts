@@ -5,7 +5,7 @@ import { RedisService } from '@app/redis-cache';
 import { getQueueToken } from '@nestjs/bullmq';
 import { APP_BULLMQ_QUEUES, DEVICE_JOBS } from '@app/common';
 import {
-  UnauthorizedException,
+  ForbiddenException,
   NotFoundException,
   BadRequestException,
   HttpException,
@@ -81,11 +81,11 @@ describe('DeviceControlService', () => {
   });
 
   describe('sendControlCommand', () => {
-    it('should throw UnauthorizedException if device not found', async () => {
+    it('should throw ForbiddenException if device not found', async () => {
       db.device.findFirst.mockResolvedValue(null);
       await expect(
         service.sendControlCommand(mockDeviceToken, mockUserId, 'switch_1', 1),
-      ).rejects.toThrow(UnauthorizedException);
+      ).rejects.toThrow(ForbiddenException);
     });
 
     it('should throw NotFoundException if entity not found', async () => {

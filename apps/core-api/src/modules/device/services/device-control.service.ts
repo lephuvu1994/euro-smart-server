@@ -2,7 +2,7 @@ import {
   Injectable,
   HttpException,
   HttpStatus,
-  UnauthorizedException,
+  ForbiddenException,
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
@@ -53,7 +53,7 @@ export class DeviceControlService {
     });
 
     if (!device) {
-      throw new UnauthorizedException(
+      throw new ForbiddenException(
         'Thiết bị không tồn tại hoặc không có quyền',
       );
     }
@@ -124,7 +124,7 @@ export class DeviceControlService {
     });
 
     if (!device) {
-      throw new UnauthorizedException(
+      throw new ForbiddenException(
         'Thiết bị không tồn tại hoặc không có quyền',
       );
     }

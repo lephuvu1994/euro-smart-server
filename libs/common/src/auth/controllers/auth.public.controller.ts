@@ -124,6 +124,23 @@ export class AuthPublicController {
     return this.authService.refreshTokens(user);
   }
 
+  // --- LOGOUT ---
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAccessGuard)
+  @ApiBearerAuth('accessToken')
+  @ApiOperation({
+    summary: 'Logout current session',
+    description: 'Xóa session hiện tại khỏi hệ thống.',
+  })
+  @DocResponse({
+    httpStatus: HttpStatus.OK,
+    messageKey: 'auth.logout.success',
+  })
+  public logout(@AuthUser() user: IAuthUser): Promise<void> {
+    return this.authService.logout(user);
+  }
+
   // --- FORGOT PASSWORD (Bước 1: Request OTP) ---
   @Post('forgot-password')
   @PublicRoute()

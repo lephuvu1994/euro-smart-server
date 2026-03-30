@@ -166,7 +166,7 @@ export class VietguysService {
     this.cachedAccessTokenExpiredAtSec =
       typeof json.data.expired_at === 'number' ? json.data.expired_at : null;
 
-    return this.cachedAccessToken;
+    return this.cachedAccessToken!;
   }
 
   private async sendZaloZns(phone: string, otp: string): Promise<void> {

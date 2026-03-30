@@ -8,9 +8,11 @@ import { configs, APP_BULLMQ_QUEUES } from '@app/common';
 import { CustomLoggerModule } from '@app/common/logger/logger.module';
 import { HelperModule } from '@app/common/helper/helper.module';
 import { IntegrationModule } from '@app/common';
+import { NotificationModule } from '@app/common';
 import { EmailProcessorWorker } from './processors/email.processor';
 import { DeviceControlProcessor } from './processors/device-control.processor';
 import { DeviceStatusProcessor } from './processors/device-status.processor';
+import { NotificationProcessor } from './processors/notification.processor';
 import { MidNightScheduleWorker } from './schedulers/midnight.scheduler';
 
 @Module({
@@ -28,6 +30,7 @@ import { MidNightScheduleWorker } from './schedulers/midnight.scheduler';
     HelperModule,
     ScheduleModule.forRoot(),
     IntegrationModule,
+    NotificationModule,
     BullModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (cs: ConfigService) => ({
@@ -44,12 +47,14 @@ import { MidNightScheduleWorker } from './schedulers/midnight.scheduler';
       { name: APP_BULLMQ_QUEUES.EMAIL },
       { name: APP_BULLMQ_QUEUES.DEVICE_CONTROL },
       { name: APP_BULLMQ_QUEUES.DEVICE_STATUS },
+      { name: APP_BULLMQ_QUEUES.PUSH_NOTIFICATION },
     ),
   ],
   providers: [
     EmailProcessorWorker,
     DeviceControlProcessor,
     DeviceStatusProcessor,
+    NotificationProcessor,
     MidNightScheduleWorker,
   ],
 })

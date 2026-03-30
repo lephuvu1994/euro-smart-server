@@ -26,6 +26,7 @@ import { DeviceControlService } from '../services/device-control.service';
 import { SetEntityValueDto } from '../dto/set-entity-value.dto';
 import { DeviceService } from '../services/device.service';
 import { GetDevicesDto } from '../dto/get-devices.dto';
+import { UpdateNotifyConfigDto } from '../dto/update-notify-config.dto';
 import { EmqxAuthService } from '../../emqx-auth/services/emqx-auth.service';
 
 import { GetDeviceTimelineDto } from '../dto/get-device-timeline.dto';
@@ -260,6 +261,25 @@ export class DeviceController {
       id,
       user.userId,
       dto.name,
+    );
+  }
+
+  /**
+   * API: Cập nhật cấu hình thông báo cho thiết bị
+   * PATCH /v1/devices/:id/notify-config
+   */
+  @Patch(':id/notify-config')
+  @ApiOperation({ summary: 'Cập nhật cấu hình Push Notification (offline, đóng mở cửa...) cho thiết bị' })
+  @DocResponse({ messageKey: 'device.updateNotify.success', httpStatus: HttpStatus.OK })
+  async updateNotifyConfig(
+    @Param('id') id: string,
+    @Body() dto: UpdateNotifyConfigDto,
+    @AuthUser() user: IAuthUser,
+  ) {
+    return await this.deviceService.updateNotifyConfig(
+      id,
+      user.userId,
+      dto.notify,
     );
   }
 

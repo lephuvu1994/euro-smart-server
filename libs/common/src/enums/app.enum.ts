@@ -9,6 +9,7 @@ export enum APP_BULLMQ_QUEUES {
   EMAIL = 'email_queue',
   DEVICE_CONTROL = 'device_controll',
   DEVICE_STATUS = 'device_status',
+  PUSH_NOTIFICATION = 'push_notification',
 }
 
 export enum EHomeRole {

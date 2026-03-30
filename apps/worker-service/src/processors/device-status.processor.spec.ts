@@ -1,4 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
+
+jest.mock('expo-server-sdk', () => ({ __esModule: true, default: jest.fn(), Expo: jest.fn() }));
+
 import { DeviceStatusProcessor } from './device-status.processor';
 import { DatabaseService } from '@app/database';
 import { DEVICE_JOBS } from '@app/common';

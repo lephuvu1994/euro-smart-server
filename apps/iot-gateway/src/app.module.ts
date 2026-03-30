@@ -38,6 +38,7 @@ import { MqttInboundService } from './listeners/mqtt-inbound.service';
     BullModule.registerQueue(
       { name: APP_BULLMQ_QUEUES.DEVICE_STATUS },
       { name: APP_BULLMQ_QUEUES.DEVICE_CONTROL },
+      { name: APP_BULLMQ_QUEUES.PUSH_NOTIFICATION },
     ),
   ],
   providers: [MqttInboundService],

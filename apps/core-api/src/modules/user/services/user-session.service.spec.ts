@@ -8,6 +8,7 @@ const createMockDatabaseService = () => ({
     findMany: jest.fn(),
     findFirst: jest.fn(),
     delete: jest.fn(),
+    update: jest.fn(),
   },
 });
 
@@ -116,6 +117,35 @@ describe('UserSessionService', () => {
       await expect(
         service.revokeSession('user-1', 'session-of-user-2'),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // ============================================================
+  // updatePushToken
+  // ============================================================
+  describe('updatePushToken', () => {
+    it('should update pushToken of the current user session', async () => {
+      db.session.findFirst.mockResolvedValue({ id: 'session-1', userId: 'user-1' });
+      db.session.update.mockResolvedValue({ id: 'session-1', pushToken: 'expo-token' });
+
+      await service.updatePushToken('user-1', 'session-1', 'expo-token');
+
+      expect(db.session.findFirst).toHaveBeenCalledWith({
+        where: { id: 'session-1', userId: 'user-1' },
+      });
+      expect(db.session.update).toHaveBeenCalledWith({
+        where: { id: 'session-1' },
+        data: { pushToken: 'expo-token' },
+      });
+    });
+
+    it('should throw NotFoundException if session does not exist or does not belong to user', async () => {
+      db.session.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.updatePushToken('user-1', 'invalid-session', 'expo-token'),
+      ).rejects.toThrow(NotFoundException);
+      expect(db.session.update).not.toHaveBeenCalled();
     });
   });
 });

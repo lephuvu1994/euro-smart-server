@@ -1,4 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
+
+jest.mock('expo-server-sdk', () => ({ __esModule: true, default: jest.fn(), Expo: jest.fn() }));
+
 import { HttpException, NotFoundException } from '@nestjs/common';
 import { DeviceService } from './device.service';
 import { DatabaseService } from '@app/database';
@@ -685,6 +688,66 @@ describe('DeviceService', () => {
         data: { name: 'New Device Name' },
       });
       expect(result.name).toBe('New Device Name');
+    });
+  });
+
+  // ═══════════════════════════════════════════════════
+  // updateNotifyConfig
+  // ═══════════════════════════════════════════════════
+  describe('updateNotifyConfig', () => {
+    it('should throw NotFoundException if device not found', async () => {
+      db.device.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.updateNotifyConfig('invalid-dev', 'user-1', { offline: true }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should merge new notify config with existing customConfig', async () => {
+      db.device.findFirst.mockResolvedValue({
+        id: 'dev-1',
+        customConfig: { otherSetting: 'value1', notify: { offline: false } },
+      });
+      db.device.update.mockResolvedValue({
+        id: 'dev-1',
+        customConfig: { otherSetting: 'value1', notify: { offline: true } },
+      });
+
+      const result = await service.updateNotifyConfig('dev-1', 'user-1', { offline: true });
+
+      expect(db.device.update).toHaveBeenCalledWith({
+        where: { id: 'dev-1' },
+        data: {
+          customConfig: {
+            otherSetting: 'value1',
+            notify: { offline: true },
+          },
+        },
+      });
+      expect((result as any).customConfig.notify.offline).toBe(true);
+    });
+
+    it('should handle null or undefined customConfig by creating a new object', async () => {
+      db.device.findFirst.mockResolvedValue({
+        id: 'dev-2',
+        customConfig: null,
+      });
+      db.device.update.mockResolvedValue({
+        id: 'dev-2',
+        customConfig: { notify: { offline: true } },
+      });
+
+      const result = await service.updateNotifyConfig('dev-2', 'user-1', { offline: true });
+
+      expect(db.device.update).toHaveBeenCalledWith({
+        where: { id: 'dev-2' },
+        data: {
+          customConfig: {
+            notify: { offline: true },
+          },
+        },
+      });
+      expect((result as any).customConfig.notify.offline).toBe(true);
     });
   });
 

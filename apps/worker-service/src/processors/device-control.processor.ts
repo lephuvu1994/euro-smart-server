@@ -39,6 +39,9 @@ export class DeviceControlProcessor extends WorkerHost {
       case DEVICE_JOBS.CHECK_DEVICE_STATE_TRIGGERS:
         return await this.handleCheckDeviceStateTriggers(job);
 
+      case DEVICE_JOBS.HARD_DELETE_DEVICE:
+        return await this.handleHardDeleteDevice(job);
+
       default:
         this.logger.warn(`Unknown job name: ${job.name}`);
         return;
@@ -418,5 +421,49 @@ export class DeviceControlProcessor extends WorkerHost {
     if (typeof a === 'number' && typeof b === 'number') return a === b;
     if (typeof a === 'string' && typeof b === 'string') return a === b;
     return String(a) === String(b);
+  }
+
+  /**
+   * Hard-delete Device (cascade) + Redis cleanup.
+   * Called by iot-gateway after it sends unbind command to chip.
+   * Idempotent: safe to call even if device already deleted.
+   */
+  private async handleHardDeleteDevice(job: Job): Promise<any> {
+    const { deviceId, token } = job.data;
+    this.logger.log(`🗑️ Hard-deleting device: ${deviceId} (token: ${token})`);
+
+    try {
+      // 1. Hard delete Device (cascade: Entity, Attribute, History, Share)
+      const device = await this.databaseService.device.findFirst({
+        where: { id: deviceId, unboundAt: { not: null } },
+      });
+
+      if (!device) {
+        this.logger.warn(`Device ${deviceId} already deleted or not unbound, skipping.`);
+        return { success: true, skipped: true };
+      }
+
+      await this.databaseService.device.delete({ where: { id: deviceId } });
+      this.logger.log(`✅ Device ${deviceId} hard-deleted from DB`);
+
+      // 2. Redis cleanup
+      await this.redisService.del(`status:${token}`).catch(() => undefined);
+      await this.redisService.del(`device:shadow:${token}`).catch(() => undefined);
+
+      const trackingKey = `device:${deviceId}:_ekeys`;
+      const entityKeys = await this.redisService.smembers(trackingKey).catch(() => [] as string[]);
+      if (entityKeys.length > 0) {
+        await this.redisService.del([...entityKeys, trackingKey]).catch(() => undefined);
+      } else {
+        await this.redisService.del(trackingKey).catch(() => undefined);
+      }
+
+      this.logger.log(`✅ Redis cleanup complete for ${token}`);
+      return { success: true };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error(`❌ Failed to hard-delete device ${deviceId}: ${message}`);
+      return { success: false, error: message };
+    }
   }
 }

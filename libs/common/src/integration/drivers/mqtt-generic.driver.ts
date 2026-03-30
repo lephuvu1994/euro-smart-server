@@ -66,4 +66,21 @@ export class MqttGenericDriver implements IDeviceDriver {
       return false;
     }
   }
+
+  /**
+   * Gửi raw payload đến device command topic (không cần entity).
+   * Topic: {company}/{model}/{token}/set
+   * Dùng cho: unbind, OTA URL, system commands...
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async publishRaw(device: any, payload: Record<string, any>): Promise<boolean> {
+    try {
+      const topic = `${device.partner.code}/${device.deviceModel.code}/${device.token}/set`;
+      await this.mqttService.publish(topic, JSON.stringify(payload), { qos: 1 });
+      return true;
+    } catch (error: any) {
+      this.logger.error(`Failed publishRaw to ${device.token}: ${error?.message}`);
+      return false;
+    }
+  }
 }

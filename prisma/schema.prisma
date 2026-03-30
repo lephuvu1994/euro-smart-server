@@ -272,10 +272,15 @@ model Device {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  // Soft-delete cho unbind flow (Tuya-style)
+  // null = active, non-null = pending unbind (chờ chip reset)
+  unboundAt DateTime? @map("unbound_at")
+
   // Ràng buộc duy nhất: Một ID chỉ tồn tại duy nhất trong 1 protocol
   @@unique([identifier, protocol])
   @@index([identifier])
   @@index([partnerId])
+  @@index([unboundAt])
   @@map("t_device")
 }
 

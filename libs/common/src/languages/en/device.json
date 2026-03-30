@@ -1,0 +1,4 @@
+{
+  "device.delete.success": "Device deleted successfully",
+  "device.error.notFound": "Device not found or access denied"
+}

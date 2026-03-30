@@ -535,4 +535,52 @@ export class DeviceService {
 
     return updatedEntity;
   }
+
+  /**
+   * Xoá thiết bị (Unbind) — Soft-delete: đánh dấu unboundAt.
+   * MQTT unbind sẽ do iot-gateway xử lý khi chip gửi status tiếp theo.
+   * HardwareRegistry giữ nguyên → chip vẫn auth EMQX được → nhận unbind.
+   * Redis cleanup ngay → user không thấy device trên App nữa.
+   */
+  async deleteDevice(deviceId: string, userId: string): Promise<void> {
+    // 1. Verify ownership
+    const device = await this.db.device.findFirst({
+      where: { id: deviceId, ownerId: userId },
+      select: { id: true, token: true },
+    });
+
+    if (!device) {
+      throw new NotFoundException('device.error.notFound');
+    }
+
+    const { token, id } = device;
+
+    // 2. Soft-delete — set unboundAt timestamp
+    //    iot-gateway sẽ detect khi chip gửi status → publish unbind → hard delete
+    await this.db.device.update({
+      where: { id: deviceId },
+      data: { unboundAt: new Date() },
+    });
+
+    // 3. Redis cleanup ngay (user không thấy device trên App nữa)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cleanupTasks: Promise<any>[] = [
+      this.redis.del(`status:${token}`).catch(() => undefined),
+      this.redis.del(`device:shadow:${token}`).catch(() => undefined),
+    ];
+
+    const trackingKey = `device:${id}:_ekeys`;
+    cleanupTasks.push(
+      this.redis
+        .smembers(trackingKey)
+        .then((keys) =>
+          keys.length > 0
+            ? this.redis.del([...keys, trackingKey])
+            : this.redis.del(trackingKey),
+        )
+        .catch(() => undefined),
+    );
+
+    await Promise.all(cleanupTasks);
+  }
 }

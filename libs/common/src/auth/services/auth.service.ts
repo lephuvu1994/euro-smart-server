@@ -1,5 +1,5 @@
 import { InjectQueue } from '@nestjs/bullmq';
-import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { Queue } from 'bullmq';
 import { plainToInstance } from 'class-transformer';
@@ -73,9 +73,32 @@ export class AuthService implements IAuthService {
       );
     }
 
-    const tokens = await this.helperEncryptionService.createJwtTokens({
-      role: user.role,
-      userId: user.id,
+    const sid = randomUUID();
+    const tokens = await this.helperEncryptionService.createJwtTokens(
+      {
+        role: user.role,
+        userId: user.id,
+      },
+      sid,
+    );
+ 
+    // 3. Tạo session record
+    const expireDays = this.helperEncryptionService.getRefreshTokenExpireDays();
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + expireDays);
+ 
+    const hashedRefreshToken = await this.helperEncryptionService.createHash(
+      tokens.refreshToken,
+    );
+ 
+    await this.databaseService.session.create({
+      data: {
+        id: sid,
+        userId: user.id,
+        hashedRefreshToken,
+        deviceName: data.deviceName || 'Unknown Device',
+        expiresAt,
+      },
     });
 
     const userDto = plainToInstance(
@@ -245,15 +268,67 @@ export class AuthService implements IAuthService {
   }
 
   /**
+   * 2. Logout
+   */
+  public async logout(payload: IAuthUser): Promise<void> {
+    const { sid } = payload;
+    if (sid) {
+      await this.databaseService.session.deleteMany({
+        where: { id: sid },
+      });
+    }
+  }
+ 
+  /**
    * 3. Refresh Token
    */
   public async refreshTokens(
     payload: IAuthUser,
   ): Promise<AuthRefreshResponseDto> {
-    return this.helperEncryptionService.createJwtTokens({
-      userId: payload.userId,
-      role: payload.role,
+    const { userId, role, sid, refreshToken } = payload;
+ 
+    if (!sid || !refreshToken) {
+      throw new UnauthorizedException('auth.error.refreshTokenUnauthorized');
+    }
+ 
+    // 1. Tìm session trong DB
+    const session = await this.databaseService.session.findUnique({
+      where: { id: sid },
     });
+ 
+    if (!session || session.userId !== userId) {
+      throw new UnauthorizedException('auth.error.refreshTokenUnauthorized');
+    }
+ 
+    // 2. So khớp refresh token (rotation)
+    const isMatched = await this.helperEncryptionService.match(
+      session.hashedRefreshToken,
+      refreshToken,
+    );
+ 
+    if (!isMatched) {
+      // Bảo mật: Nếu token cũ được tái sử dụng -> Xóa toàn bộ session của user (cảnh báo bị chiếm quyền)
+      await this.databaseService.session.deleteMany({ where: { userId } });
+      throw new UnauthorizedException('auth.error.refreshTokenUnauthorized');
+    }
+ 
+    // 3. Tạo cặp token mới
+    const tokens = await this.helperEncryptionService.createJwtTokens(
+      { userId, role },
+      sid,
+    );
+ 
+    // 4. Update session với hashed token mới
+    const hashedRefreshToken = await this.helperEncryptionService.createHash(
+      tokens.refreshToken,
+    );
+ 
+    await this.databaseService.session.update({
+      where: { id: sid },
+      data: { hashedRefreshToken },
+    });
+ 
+    return tokens;
   }
 
   /**
@@ -285,7 +360,7 @@ export class AuthService implements IAuthService {
           user.phone!,
           `Ma OTP cua ban la: ${otp}`,
         );
-      } catch (error) {
+      } catch (error: any) {
         this.logger.warn(
           `[AuthService] SMS SIM failed: ${error.message}. Falling back to Vietguys.`,
         );
@@ -411,6 +486,11 @@ export class AuthService implements IAuthService {
         otpProvider: null,
       },
     });
+ 
+    // Secure: Logout all sessions after reset password
+    await this.databaseService.session.deleteMany({
+      where: { userId: user.id },
+    });
   }
 
   /**
@@ -447,6 +527,11 @@ export class AuthService implements IAuthService {
     await this.databaseService.user.update({
       where: { id: userId },
       data: { password: hashedPassword },
+    });
+ 
+    // Secure: Logout all sessions after change password
+    await this.databaseService.session.deleteMany({
+      where: { userId },
     });
   }
 

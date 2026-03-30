@@ -536,6 +536,34 @@ export class DeviceService {
     return updatedEntity;
   }
 
+  async updateDeviceName(deviceId: string, userId: string, name: string) {
+    // 1. Verify device exists and belongs to user's home
+    const device = await this.db.device.findFirst({
+      where: {
+        id: deviceId,
+        OR: [
+          { ownerId: userId },
+          { sharedUsers: { some: { userId } } },
+          { home: { ownerId: userId } },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          { home: { members: { some: { userId, role: 'OWNER' as any } } } },
+        ],
+      },
+    });
+
+    if (!device) {
+      throw new NotFoundException(`Device with ID ${deviceId} not found or access denied`);
+    }
+
+    // 2. Update the device's name
+    const updatedDevice = await this.db.device.update({
+      where: { id: deviceId },
+      data: { name },
+    });
+
+    return updatedDevice;
+  }
+
   /**
    * Xoá thiết bị (Unbind) — Soft-delete: đánh dấu unboundAt.
    * MQTT unbind sẽ do iot-gateway xử lý khi chip gửi status tiếp theo.

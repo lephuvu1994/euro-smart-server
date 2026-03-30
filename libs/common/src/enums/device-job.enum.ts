@@ -13,4 +13,8 @@ export enum DEVICE_JOBS {
   RECORD_STATE_HISTORY = 'record_state_history',
   /** Ghi lịch sử kết nối thiết bị (online/offline) */
   RECORD_CONNECTION_LOG = 'record_connection_log',
+  /** Gửi lệnh unbind (factory reset) xuống chip trước khi xóa DB */
+  UNBIND_DEVICE = 'unbind_device',
+  /** Hard-delete Device sau khi iot-gateway đã gửi unbind cho chip */
+  HARD_DELETE_DEVICE = 'hard_delete_device',
 }

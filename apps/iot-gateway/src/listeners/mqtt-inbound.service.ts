@@ -49,6 +49,36 @@ export class MqttInboundService implements OnApplicationBootstrap {
     if (!deviceToken) return;
 
     try {
+      // ★ UNBIND CHECK — detect soft-deleted devices before processing status
+      const unboundDevice = await this.databaseService.device.findFirst({
+        where: { token: deviceToken, unboundAt: { not: null } },
+        select: {
+          id: true,
+          token: true,
+          partner: { select: { code: true } },
+          deviceModel: { select: { code: true } },
+        },
+      });
+
+      if (unboundDevice) {
+        this.logger.warn(
+          `[UNBIND] Device ${deviceToken} is unbound. Sending unbind command...`,
+        );
+
+        // Build topic: {partnerCode}/{modelCode}/{token}/set
+        const cmdTopic = `${unboundDevice.partner.code}/${unboundDevice.deviceModel.code}/${deviceToken}/set`;
+        await this.mqttService.publish(cmdTopic, JSON.stringify({ action: 'unbind' }), { qos: 1 });
+
+        // Dispatch hard-delete job (cascade DB + Redis cleanup)
+        await this.deviceControlQueue.add(
+          DEVICE_JOBS.HARD_DELETE_DEVICE,
+          { deviceId: unboundDevice.id, token: deviceToken },
+          { priority: 1, attempts: 2, removeOnComplete: true },
+        );
+
+        return; // Stop processing — device is being unbound
+      }
+
       const rawData = JSON.parse(payload.toString());
 
       // Serialize nested objects for Redis hmset

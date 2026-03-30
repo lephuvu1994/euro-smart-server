@@ -24,7 +24,10 @@ const makeDb = () => ({
   device: {
     findMany: jest.fn(),
     findFirst: jest.fn(),
+    findUnique: jest.fn(),
     count: jest.fn(),
+    delete: jest.fn(),
+    update: jest.fn(),
   },
   scene: {
     findMany: jest.fn(),
@@ -48,6 +51,8 @@ const makeDb = () => ({
 const makeRedis = () => ({
   get: jest.fn(),
   set: jest.fn(),
+  del: jest.fn().mockResolvedValue(1),
+  smembers: jest.fn().mockResolvedValue([]),
   getClient: jest.fn().mockReturnValue({
     pipeline: jest.fn().mockReturnValue(mockPipeline),
   }),
@@ -654,6 +659,70 @@ describe('DeviceService', () => {
         data: { name: 'New Name' },
       });
       expect(result.name).toBe('New Name');
+    });
+  });
+
+  // ═══════════════════════════════════════════════════
+  // deleteDevice
+  // ═══════════════════════════════════════════════════
+  describe('deleteDevice', () => {
+    it('should throw NotFoundException if device not found or not owned by user', async () => {
+      db.device.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.deleteDevice('invalid-id', 'user-1'),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(db.device.delete).not.toHaveBeenCalled();
+    });
+
+    it('should soft-delete device and cleanup Redis keys', async () => {
+      db.device.findFirst.mockResolvedValue({ id: 'dev-1', token: 'token-xyz' });
+      db.device.update.mockResolvedValue({ id: 'dev-1', unboundAt: new Date() });
+      redis.smembers.mockResolvedValue(['device:dev-1:entity:sw1', 'device:dev-1:entity:sw2']);
+
+      await service.deleteDevice('dev-1', 'user-1');
+
+      // Verify soft-delete (NOT hard delete)
+      expect(db.device.update).toHaveBeenCalledWith({
+        where: { id: 'dev-1' },
+        data: { unboundAt: expect.any(Date) },
+      });
+      expect(db.device.delete).not.toHaveBeenCalled();
+
+      // Verify Redis cleanup
+      expect(redis.del).toHaveBeenCalledWith('status:token-xyz');
+      expect(redis.del).toHaveBeenCalledWith('device:shadow:token-xyz');
+      expect(redis.smembers).toHaveBeenCalledWith('device:dev-1:_ekeys');
+      expect(redis.del).toHaveBeenCalledWith([
+        'device:dev-1:entity:sw1',
+        'device:dev-1:entity:sw2',
+        'device:dev-1:_ekeys',
+      ]);
+    });
+
+    it('should not throw if Redis cleanup fails (fire-and-forget)', async () => {
+      db.device.findFirst.mockResolvedValue({ id: 'dev-1', token: 'token-xyz' });
+      db.device.delete.mockResolvedValue({ id: 'dev-1' });
+      redis.del.mockRejectedValue(new Error('Redis connection lost'));
+      redis.smembers.mockRejectedValue(new Error('Redis connection lost'));
+
+      // Should NOT throw despite Redis failures
+      await expect(service.deleteDevice('dev-1', 'user-1')).resolves.toBeUndefined();
+
+      // DB delete should still have been called
+      expect(db.device.delete).toHaveBeenCalledWith({ where: { id: 'dev-1' } });
+    });
+
+    it('should handle empty entity tracking keys gracefully', async () => {
+      db.device.findFirst.mockResolvedValue({ id: 'dev-1', token: 'token-xyz' });
+      db.device.delete.mockResolvedValue({ id: 'dev-1' });
+      redis.smembers.mockResolvedValue([]); // No entity keys
+
+      await service.deleteDevice('dev-1', 'user-1');
+
+      // Should still try to delete the tracking key itself
+      expect(redis.del).toHaveBeenCalledWith('device:dev-1:_ekeys');
     });
   });
 });

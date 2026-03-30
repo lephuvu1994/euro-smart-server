@@ -140,3 +140,11 @@ Authorization: Bearer {{loginUser.response.body.data.accessToken}}
 # Lấy Device UI Config
 GET {{baseUrl}}/devices/config
 Authorization: Bearer {{loginUser.response.body.data.accessToken}}
+
+###
+# --- XÓA THIẾT BỊ (UNBIND) ---
+
+# Xóa thiết bị (unbind) — giải phóng phần cứng, xoá dữ liệu
+# HardwareRegistry giữ nguyên → chip sẵn sàng cho provision mới
+DELETE {{baseUrl}}/devices/{{deviceId}}
+Authorization: Bearer {{loginUser.response.body.data.accessToken}}

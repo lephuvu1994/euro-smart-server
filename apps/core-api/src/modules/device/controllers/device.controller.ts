@@ -1,6 +1,7 @@
 
 import {
   Controller,
+  Delete,
   Post,
   Patch,
   Body,
@@ -8,6 +9,7 @@ import {
   UseGuards,
   Get,
   Query,
+  HttpCode,
   HttpStatus,
 } from '@nestjs/common';
 import { DocResponse } from '@app/common';
@@ -239,5 +241,25 @@ export class DeviceController {
       entityCode,
       dto.name,
     );
+  }
+
+  /**
+   * API: Xóa thiết bị (Unbind) — giải phóng phần cứng, xoá dữ liệu
+   * DELETE /v1/devices/:id
+   * HardwareRegistry giữ nguyên → chip sẵn sàng cho provision mới.
+   */
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: 'Xóa thiết bị (unbind) — giải phóng phần cứng, xóa dữ liệu',
+    description:
+      'Hard delete Device + cascade children (entities, attributes, state history, connection logs, shares). HardwareRegistry giữ nguyên.',
+  })
+  @DocResponse({ messageKey: 'device.delete.success', httpStatus: HttpStatus.NO_CONTENT })
+  async deleteDevice(
+    @Param('id') id: string,
+    @AuthUser() user: IAuthUser,
+  ): Promise<void> {
+    return await this.deviceService.deleteDevice(id, user.userId);
   }
 }

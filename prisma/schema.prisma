@@ -359,6 +359,9 @@ model EntityStateHistory {
   // Nguồn gốc thay đổi: ai gây ra sự kiện này?
   source    String  @default("mqtt") // "app" | "mqtt" | "scene" | "siri"
 
+  // Ai thực hiện lệnh? (null = physical/mqtt/unknown, không dùng FK vì hypertable)
+  actionByUserId String? @map("action_by_user_id") @db.Uuid
+
   entityId String       @map("entity_id") @db.Uuid
   entity   DeviceEntity @relation(fields: [entityId], references: [id], onDelete: Cascade)
 

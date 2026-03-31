@@ -89,6 +89,8 @@ export class DeviceControlService {
         token: device.token,
         entityCode,
         value,
+        userId,
+        source: 'app',
       },
       {
         priority: 1,
@@ -164,6 +166,8 @@ export class DeviceControlService {
       {
         token: device.token,
         entityPayloads,
+        userId,
+        source: 'app',
       },
       {
         priority: 1,

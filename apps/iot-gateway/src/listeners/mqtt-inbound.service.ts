@@ -4,8 +4,7 @@ import { RedisService } from '@app/redis-cache';
 import { Queue } from 'bullmq';
 import { isEqual } from 'lodash';
 import { InjectQueue } from '@nestjs/bullmq';
-import { APP_BULLMQ_QUEUES } from '@app/common';
-import { DEVICE_JOBS } from '@app/common';
+import { APP_BULLMQ_QUEUES, DEVICE_JOBS, EDeviceAlertEvent, EDeviceConnectionStatus } from '@app/common';
 import { DatabaseService } from '@app/database';
 
 @Injectable()
@@ -113,23 +112,41 @@ export class MqttInboundService implements OnApplicationBootstrap {
           { removeOnComplete: true, attempts: 2 },
         );
 
-        // DISPATCH OFFLINE PUSH NOTIFICATION JOB
-        if (newEvent === 'offline') {
-          const device = await this.databaseService.device.findUnique({
-            where: { token: deviceToken },
-            select: { id: true, name: true },
-          });
-          
-          if (device) {
+        // DISPATCH CONNECTION STATUS PUSH NOTIFICATION JOBS
+        const device = await this.databaseService.device.findUnique({
+          where: { token: deviceToken },
+          select: { id: true, name: true },
+        });
+
+        if (device) {
+          if (newEvent === EDeviceConnectionStatus.OFFLINE) {
             await this.notificationQueue.add(
               'push_offline_alert',
               {
                 type: 'deviceAlert',
                 payload: {
                   deviceId: device.id,
-                  eventType: 'offline',
-                  title: 'Cảnh báo ngoại tuyến',
-                  body: `Thiết bị "${device.name}" vừa bị ngắt kết nối khỏi hệ thống.`,
+                  eventType: EDeviceAlertEvent.OFFLINE,
+                  titleKey: 'device.alert.offline.title',
+                  bodyKey: 'device.alert.offline.body',
+                  data: { deviceName: device.name },
+                },
+              },
+              { removeOnComplete: true, attempts: 1 },
+            );
+          }
+
+          if (newEvent === EDeviceConnectionStatus.ONLINE) {
+            await this.notificationQueue.add(
+              'push_online_alert',
+              {
+                type: 'deviceAlert',
+                payload: {
+                  deviceId: device.id,
+                  eventType: EDeviceAlertEvent.ONLINE,
+                  titleKey: 'device.alert.online.title',
+                  bodyKey: 'device.alert.online.body',
+                  data: { deviceName: device.name },
                 },
               },
               { removeOnComplete: true, attempts: 1 },
@@ -283,6 +300,25 @@ export class MqttInboundService implements OnApplicationBootstrap {
                   source: rawData.source || 'mqtt',
                 },
                 { removeOnComplete: true, attempts: 2 },
+              );
+            }
+
+            // ★ DISPATCH STATE CHANGE PUSH NOTIFICATION
+            // Only for physical/remote changes (not from app to avoid echo)
+            if (rawData.source !== 'app') {
+              await this.notificationQueue.add(
+                'push_state_change',
+                {
+                  type: 'deviceAlert',
+                  payload: {
+                    deviceId: device.id,
+                    eventType: EDeviceAlertEvent.STATE_CHANGE,
+                    titleKey: 'device.alert.stateChange.title',
+                    bodyKey: 'device.alert.stateChange.body',
+                    data: { deviceName: device.name },
+                  },
+                },
+                { removeOnComplete: true, attempts: 1 },
               );
             }
           }

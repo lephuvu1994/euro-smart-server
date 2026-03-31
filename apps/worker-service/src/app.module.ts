@@ -9,6 +9,7 @@ import { CustomLoggerModule } from '@app/common/logger/logger.module';
 import { HelperModule } from '@app/common/helper/helper.module';
 import { IntegrationModule } from '@app/common';
 import { NotificationModule } from '@app/common';
+import { MessageModule } from '@app/common/message/message.module';
 import { EmailProcessorWorker } from './processors/email.processor';
 import { DeviceControlProcessor } from './processors/device-control.processor';
 import { DeviceStatusProcessor } from './processors/device-status.processor';
@@ -31,6 +32,7 @@ import { MidNightScheduleWorker } from './schedulers/midnight.scheduler';
     ScheduleModule.forRoot(),
     IntegrationModule,
     NotificationModule,
+    MessageModule,
     BullModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (cs: ConfigService) => ({

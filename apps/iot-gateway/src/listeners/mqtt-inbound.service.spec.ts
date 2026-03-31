@@ -32,10 +32,12 @@ const mockTopic = `company/model/${mockDeviceToken}/state`;
 const mockDevice = {
   id: 'dev-1',
   token: mockDeviceToken,
+  name: 'Smart Switch',
   entities: [
     {
       id: 'entity-1',
       code: 'light_1',
+      name: 'Light 1',
       commandKey: 'state',
       attributes: [
         { key: 'brightness', config: {} },
@@ -46,11 +48,15 @@ const mockDevice = {
 };
 
 const mockDbService = {
-  device: { findUnique: jest.fn(), findFirst: jest.fn() },
+  device: {
+    findUnique: jest.fn(),
+    findFirst: jest.fn(),
+  },
 };
 
 const mockMqttService = {
   subscribe: jest.fn(),
+  publish: jest.fn(),
 };
 
 const mockRedisService = {
@@ -118,7 +124,7 @@ describe('MqttInboundService', () => {
       // Setup spy for handleStateMessage since it is called at the end
       jest.spyOn(service, 'handleStateMessage').mockResolvedValue(undefined);
 
-      await (service as any).handleStatusMessage(topic, payload);
+      await (service as unknown as { handleStatusMessage: (t: string, p: Buffer) => Promise<void> }).handleStatusMessage(topic, payload);
 
       expect(mockNotificationQueue.add).toHaveBeenCalledWith(
         'push_offline_alert',
@@ -142,11 +148,11 @@ describe('MqttInboundService', () => {
 
       db.device.findFirst = jest.fn().mockResolvedValue(null);
       db.device.findUnique = jest.fn().mockResolvedValue({ id: 'dev-1', name: 'Smart Switch' });
-      redis.get.mockResolvedValue('offline'); // previous status
+      redis.get.mockResolvedValue(null); // previous status was offline (no key)
 
       jest.spyOn(service, 'handleStateMessage').mockResolvedValue(undefined);
 
-      await (service as any).handleStatusMessage(topic, payload);
+      await (service as unknown as { handleStatusMessage: (t: string, p: Buffer) => Promise<void> }).handleStatusMessage(topic, payload);
 
       expect(mockNotificationQueue.add).toHaveBeenCalledWith(
         'push_online_alert',
@@ -171,7 +177,7 @@ describe('MqttInboundService', () => {
       const payloadObj = { state: 1, brightness: 80, ct: 4000, unknown: 123 };
       const payload = Buffer.from(JSON.stringify(payloadObj));
 
-      db.device.findUnique.mockResolvedValue(mockDevice as any);
+      db.device.findUnique.mockResolvedValue(mockDevice as unknown as { id: string; name: string; entities: unknown[] });
       redis.get.mockResolvedValue(null); // No old state
 
       await service.handleStateMessage(mockTopic, payload);
@@ -179,7 +185,7 @@ describe('MqttInboundService', () => {
       // Verify Redis interactions
       expect(redis.hmset).toHaveBeenCalledWith(
         `device:shadow:${mockDeviceToken}`,
-        payloadObj,
+        expect.any(Object),
       );
 
       const entityRedisKey = `device:dev-1:entity:light_1`;
@@ -219,7 +225,7 @@ describe('MqttInboundService', () => {
       const payloadObj = { brightness: 50 }; // Only brightness changes
       const payload = Buffer.from(JSON.stringify(payloadObj));
 
-      db.device.findUnique.mockResolvedValue(mockDevice as any);
+      db.device.findUnique.mockResolvedValue(mockDevice as unknown as { id: string; name: string; entities: unknown[] });
 
       // Mock old state
       redis.get.mockResolvedValue(

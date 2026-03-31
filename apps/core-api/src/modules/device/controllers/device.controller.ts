@@ -265,6 +265,20 @@ export class DeviceController {
   }
 
   /**
+   * API: Lấy cấu hình thông báo cho thiết bị
+   * GET /v1/devices/:id/notify-config
+   */
+  @Get(':id/notify-config')
+  @ApiOperation({ summary: 'Lấy cấu hình Push Notification cho thiết bị' })
+  @DocResponse({ messageKey: 'device.getNotify.success', httpStatus: HttpStatus.OK })
+  async getNotifyConfig(
+    @Param('id') id: string,
+    @AuthUser() user: IAuthUser,
+  ) {
+    return await this.deviceService.getNotifyConfig(id, user.userId);
+  }
+
+  /**
    * API: Cập nhật cấu hình thông báo cho thiết bị
    * PATCH /v1/devices/:id/notify-config
    */

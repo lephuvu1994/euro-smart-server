@@ -38,21 +38,28 @@ export class DeviceStatusProcessor extends WorkerHost {
    * Ghi lịch sử thay đổi trạng thái entity (OPEN/CLOSE/ON/OFF...)
    */
   private async handleRecordStateHistory(job: Job): Promise<void> {
-    const { entityId, value, valueText, source } = job.data as {
+    const { entityId, value, valueText, source, actionUserId } = job.data as {
       entityId: string;
       value: number | null;
       valueText: string | null;
       source: string;
+      actionUserId?: string | null;
     };
 
     if (!entityId) return;
 
     try {
       await this.db.entityStateHistory.create({
-        data: { entityId, value, valueText, source },
+        data: {
+          entityId,
+          value,
+          valueText,
+          source,
+          actionByUserId: actionUserId ?? null,
+        },
       });
       this.logger.log(
-        `[STATE_HISTORY] entity=${entityId} value=${value ?? valueText} source=${source}`,
+        `[STATE_HISTORY] entity=${entityId} value=${value ?? valueText} source=${source} by=${actionUserId ?? 'unknown'}`,
       );
     } catch (error) {
       this.logger.error(

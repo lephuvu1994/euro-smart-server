@@ -6,5 +6,5 @@
   "device.alert.offline.title": "Cảnh báo ngoại tuyến",
   "device.alert.offline.body": "Thiết bị \"{deviceName}\" vừa bị ngắt kết nối khỏi hệ thống.",
   "device.alert.stateChange.title": "{deviceName} — {entityName}",
-  "device.alert.stateChange.body": "Trạng thái thay đổi: {state} ({source})"
+  "device.alert.stateChange.body": "Trạng thái: {state} — {actionUserName}"
 }

@@ -51,8 +51,8 @@ export class DeviceControlProcessor extends WorkerHost {
   /**
    * Điều khiển 1 entity của device
    */
-  private async handleControlCommand(job: Job): Promise<any> {
-    const { token, entityCode, value } = job.data;
+  private async handleControlCommand(job: Job): Promise<unknown> {
+    const { token, entityCode, value, userId } = job.data;
 
     this.logger.log(
       `🚀 Executing control command: ${token} -> ${entityCode}:${value}`,
@@ -81,6 +81,13 @@ export class DeviceControlProcessor extends WorkerHost {
     }
 
     try {
+      // ★ Cache userId for gateway to lookup when device responds
+      if (userId) {
+        const cacheKey = `cmd_user:${token}:${entityCode}`;
+        await this.redisService.sadd(cacheKey, userId);
+        await this.redisService.expire(cacheKey, 10);
+      }
+
       const driver = this.integrationManager.getDriver(device.protocol);
       await driver.setValue(device, entity, value);
 
@@ -98,8 +105,8 @@ export class DeviceControlProcessor extends WorkerHost {
   /**
    * Điều khiển bulk nhiều entities cùng 1 device
    */
-  private async handleControlDeviceValueCommand(job: Job): Promise<any> {
-    const { token, entityPayloads } = job.data;
+  private async handleControlDeviceValueCommand(job: Job): Promise<unknown> {
+    const { token, entityPayloads, userId } = job.data;
 
     this.logger.log(
       `🚀 Executing control device value command: ${JSON.stringify(job.data)}`,
@@ -120,6 +127,17 @@ export class DeviceControlProcessor extends WorkerHost {
     }
 
     try {
+      // ★ Cache userId for all entities being controlled
+      if (userId) {
+        const cachePromises = entityPayloads.map((ep: { entityCode: string }) => {
+          const cacheKey = `cmd_user:${token}:${ep.entityCode}`;
+          return this.redisService.sadd(cacheKey, userId).then(() =>
+            this.redisService.expire(cacheKey, 10),
+          );
+        });
+        await Promise.all(cachePromises);
+      }
+
       const driver = this.integrationManager.getDriver(device.protocol);
 
       const entities = device.entities.filter((e) =>

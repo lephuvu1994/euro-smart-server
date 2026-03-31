@@ -1,4 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
+
+jest.mock('expo-server-sdk', () => ({
+  __esModule: true,
+  default: jest.fn(),
+  Expo: jest.fn(),
+}));
+
 import { MqttInboundService } from './mqtt-inbound.service';
 import { DatabaseService } from '@app/database';
 import { MqttService } from '@app/common/mqtt/mqtt.service';
@@ -39,7 +46,7 @@ const mockDevice = {
 };
 
 const mockDbService = {
-  device: { findUnique: jest.fn() },
+  device: { findUnique: jest.fn(), findFirst: jest.fn() },
 };
 
 const mockMqttService = {
@@ -52,12 +59,14 @@ const mockRedisService = {
   hset: jest.fn(),
   get: jest.fn(),
   set: jest.fn(),
+  del: jest.fn(),
   sadd: jest.fn(),
   publish: jest.fn(),
 };
 
 const mockStatusQueue = { add: jest.fn() };
 const mockControlQueue = { add: jest.fn() };
+const mockNotificationQueue = { add: jest.fn() };
 
 describe('MqttInboundService', () => {
   let service: MqttInboundService;
@@ -80,6 +89,10 @@ describe('MqttInboundService', () => {
           provide: getQueueToken(APP_BULLMQ_QUEUES.DEVICE_CONTROL),
           useValue: mockControlQueue,
         },
+        {
+          provide: getQueueToken(APP_BULLMQ_QUEUES.PUSH_NOTIFICATION),
+          useValue: mockNotificationQueue,
+        },
       ],
     }).compile();
 
@@ -89,6 +102,53 @@ describe('MqttInboundService', () => {
     controlQueue = module.get(getQueueToken(APP_BULLMQ_QUEUES.DEVICE_CONTROL));
 
     jest.clearAllMocks();
+  });
+
+  describe('handleStatusMessage', () => {
+    it('should dispatch push notification job when device goes offline', async () => {
+      const payload = Buffer.from(JSON.stringify({ online: false }));
+      const topic = `company/model/${mockDeviceToken}/status`;
+
+      // Mock unbound check
+      db.device.findFirst = jest.fn().mockResolvedValue(null);
+      // Mock device lookup for notification
+      db.device.findUnique = jest.fn().mockResolvedValue({ id: 'dev-1', name: 'Smart Switch' });
+      redis.get.mockResolvedValue('online'); // previous status
+
+      // Setup spy for handleStateMessage since it is called at the end
+      jest.spyOn(service, 'handleStateMessage').mockResolvedValue(undefined);
+
+      await (service as any).handleStatusMessage(topic, payload);
+
+      expect(mockNotificationQueue.add).toHaveBeenCalledWith(
+        'push_offline_alert',
+        {
+          type: 'deviceAlert',
+          payload: {
+            deviceId: 'dev-1',
+            eventType: 'offline',
+            title: 'Cảnh báo ngoại tuyến',
+            body: 'Thiết bị "Smart Switch" vừa bị ngắt kết nối khỏi hệ thống.',
+          },
+        },
+        expect.any(Object),
+      );
+    });
+
+    it('should NOT dispatch push notification job when device comes online', async () => {
+      const payload = Buffer.from(JSON.stringify({ online: true }));
+      const topic = `company/model/${mockDeviceToken}/status`;
+
+      db.device.findFirst = jest.fn().mockResolvedValue(null);
+      db.device.findUnique = jest.fn().mockResolvedValue({ id: 'dev-1', name: 'Smart Switch' });
+      redis.get.mockResolvedValue('offline'); // previous status
+
+      jest.spyOn(service, 'handleStateMessage').mockResolvedValue(undefined);
+
+      await (service as any).handleStatusMessage(topic, payload);
+
+      expect(mockNotificationQueue.add).not.toHaveBeenCalled();
+    });
   });
 
   describe('handleStateMessage', () => {

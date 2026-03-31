@@ -21,6 +21,21 @@ export class UserSessionService {
     });
   }
 
+  async updatePushToken(userId: string, sessionId: string, pushToken: string | null) {
+    const session = await this.databaseService.session.findFirst({
+      where: { id: sessionId, userId },
+    });
+
+    if (!session) {
+      throw new NotFoundException('Session not found or forbidden');
+    }
+
+    return this.databaseService.session.update({
+      where: { id: sessionId },
+      data: { pushToken },
+    });
+  }
+
   async revokeSession(userId: string, sessionId: string): Promise<void> {
     const session = await this.databaseService.session.findFirst({
       where: { id: sessionId, userId },

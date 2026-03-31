@@ -19,6 +19,8 @@ export class MqttInboundService implements OnApplicationBootstrap {
     private statusQueue: Queue,
     @InjectQueue(APP_BULLMQ_QUEUES.DEVICE_CONTROL)
     private deviceControlQueue: Queue,
+    @InjectQueue(APP_BULLMQ_QUEUES.PUSH_NOTIFICATION)
+    private notificationQueue: Queue,
   ) {}
 
   onApplicationBootstrap() {
@@ -110,6 +112,30 @@ export class MqttInboundService implements OnApplicationBootstrap {
           { token: deviceToken, event: newEvent },
           { removeOnComplete: true, attempts: 2 },
         );
+
+        // DISPATCH OFFLINE PUSH NOTIFICATION JOB
+        if (newEvent === 'offline') {
+          const device = await this.databaseService.device.findUnique({
+            where: { token: deviceToken },
+            select: { id: true, name: true },
+          });
+          
+          if (device) {
+            await this.notificationQueue.add(
+              'push_offline_alert',
+              {
+                type: 'deviceAlert',
+                payload: {
+                  deviceId: device.id,
+                  eventType: 'offline',
+                  title: 'Cảnh báo ngoại tuyến',
+                  body: `Thiết bị "${device.name}" vừa bị ngắt kết nối khỏi hệ thống.`,
+                },
+              },
+              { removeOnComplete: true, attempts: 1 },
+            );
+          }
+        }
       }
 
       // 2. Write shadow − using the key device.service also reads: hgetall `device:shadow:{token}`

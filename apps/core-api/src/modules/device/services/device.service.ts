@@ -564,6 +564,40 @@ export class DeviceService {
     return updatedDevice;
   }
 
+  async updateNotifyConfig(deviceId: string, userId: string, notifyConfig: Record<string, boolean>) {
+    // 1. Verify device exists and belongs to user or shared
+    const device = await this.db.device.findFirst({
+      where: {
+        id: deviceId,
+        OR: [
+          { ownerId: userId },
+          { sharedUsers: { some: { userId } } },
+          { home: { ownerId: userId } },
+        ],
+      },
+    });
+
+    if (!device) {
+      throw new NotFoundException(`Device with ID ${deviceId} not found or access denied`);
+    }
+
+    // 2. Merge existing config with new notifyConfig
+    const currentConfig = (device.customConfig as Record<string, unknown>) || {};
+    const updatedConfig = {
+      ...currentConfig,
+      notify: {
+        ...((currentConfig.notify as Record<string, boolean>) || {}),
+        ...notifyConfig,
+      },
+    };
+
+    // 3. Update device
+    return this.db.device.update({
+      where: { id: deviceId },
+      data: { customConfig: updatedConfig },
+    });
+  }
+
   /**
    * Xoá thiết bị (Unbind) — Soft-delete: đánh dấu unboundAt.
    * MQTT unbind sẽ do iot-gateway xử lý khi chip gửi status tiếp theo.

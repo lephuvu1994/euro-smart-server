@@ -21,6 +21,7 @@ describe('DeviceController', () => {
     getDeviceDetail: jest.fn(),
     updateDeviceName: jest.fn(),
     updateNotifyConfig: jest.fn(),
+    getNotifyConfig: jest.fn(),
   };
 
   const mockProvisioningService = {};
@@ -126,6 +127,18 @@ describe('DeviceController', () => {
 
       expect(service.updateNotifyConfig).toHaveBeenCalledWith(deviceId, mockUser.userId, dto.notify);
       expect((result as any).customConfig.notify.offline).toBe(true);
+    });
+  });
+
+  describe('getNotifyConfig', () => {
+    it('should call deviceService.getNotifyConfig with correct parameters', async () => {
+      const deviceId = 'a15cb911-f4f8-40a2-ad9e-45e63ad093f5';
+      mockDeviceService.getNotifyConfig.mockResolvedValue({ offline: true });
+
+      const result = await controller.getNotifyConfig(deviceId, mockUser);
+
+      expect(service.getNotifyConfig).toHaveBeenCalledWith(deviceId, mockUser.userId);
+      expect((result as any).offline).toBe(true);
     });
   });
 });

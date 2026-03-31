@@ -438,6 +438,25 @@ export class DeviceService {
       take: limit * page + limit,
     });
 
+    // ★ Batch-lookup user info for action authors
+    const actionUserIds = [
+      ...new Set(
+        stateHistory
+          .map((s) => s.actionByUserId)
+          .filter((uid): uid is string => uid !== null),
+      ),
+    ];
+    const actionUsersMap = new Map<string, { firstName: string | null; lastName: string | null; avatar: string | null }>();
+    if (actionUserIds.length > 0) {
+      const users = await this.db.user.findMany({
+        where: { id: { in: actionUserIds } },
+        select: { id: true, firstName: true, lastName: true, avatar: true },
+      });
+      for (const u of users) {
+        actionUsersMap.set(u.id, { firstName: u.firstName, lastName: u.lastName, avatar: u.avatar });
+      }
+    }
+
     // 3. Query connection logs (DeviceConnectionLog)
     const connectionWhere: Record<string, unknown> = { deviceId };
     if (Object.keys(dateFilter).length > 0) {
@@ -457,18 +476,27 @@ export class DeviceService {
       entityCode: string | null;
       entityName: string | null;
       source: string | null;
+      actionBy: { userName: string | null; userAvatar: string | null } | null;
       createdAt: Date;
     };
 
     const timeline: TimelineItem[] = [];
 
     for (const s of stateHistory) {
+      const actionUser = s.actionByUserId ? actionUsersMap.get(s.actionByUserId) : null;
+      const userName = actionUser
+        ? [actionUser.lastName, actionUser.firstName].filter(Boolean).join(' ') || null
+        : null;
+
       timeline.push({
         type: 'state',
         event: s.valueText ?? (s.value !== null ? String(s.value) : 'unknown'),
         entityCode: s.entity.code,
         entityName: s.entity.name,
         source: s.source ?? 'mqtt',
+        actionBy: s.actionByUserId
+          ? { userName, userAvatar: actionUser?.avatar ?? null }
+          : null,
         createdAt: s.createdAt,
       });
     }
@@ -480,6 +508,7 @@ export class DeviceService {
         entityCode: null,
         entityName: null,
         source: null,
+        actionBy: null,
         createdAt: c.createdAt,
       });
     }

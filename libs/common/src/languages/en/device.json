@@ -6,5 +6,5 @@
   "device.alert.offline.title": "Device Offline",
   "device.alert.offline.body": "Device \"{deviceName}\" was disconnected from the system.",
   "device.alert.stateChange.title": "{deviceName} — {entityName}",
-  "device.alert.stateChange.body": "State changed: {state} ({source})"
+  "device.alert.stateChange.body": "State: {state} — {actionUserName}"
 }

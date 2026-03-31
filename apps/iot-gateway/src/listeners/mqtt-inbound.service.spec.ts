@@ -52,6 +52,9 @@ const mockDbService = {
     findUnique: jest.fn(),
     findFirst: jest.fn(),
   },
+  user: {
+    findUnique: jest.fn(),
+  },
 };
 
 const mockMqttService = {
@@ -67,6 +70,8 @@ const mockRedisService = {
   set: jest.fn(),
   del: jest.fn(),
   sadd: jest.fn(),
+  smembers: jest.fn().mockResolvedValue([]),
+  expire: jest.fn(),
   publish: jest.fn(),
 };
 
@@ -240,6 +245,91 @@ describe('MqttInboundService', () => {
       expect(redis.set).toHaveBeenCalledWith(
         entityRedisKey,
         JSON.stringify(expectedNewState),
+      );
+    });
+
+    it('should pass excludeUserIds when cmd_user cache exists', async () => {
+      const payloadObj = { state: 0 }; // Turn off
+      const payload = Buffer.from(JSON.stringify(payloadObj));
+
+      db.device.findUnique.mockResolvedValue(mockDevice as unknown as { id: string; name: string; entities: unknown[] });
+      redis.get.mockResolvedValue(
+        JSON.stringify({ state: 1 }), // Old state = on
+      );
+      // Simulate cmd_user cache hit
+      redis.smembers.mockResolvedValue(['user-abc']);
+      redis.del.mockResolvedValue(1);
+      // Mock user lookup for notification body
+      db.user.findUnique.mockResolvedValue({ firstName: 'Hải', lastName: 'Lê' });
+
+      await service.handleStateMessage(mockTopic, payload);
+
+      // Verify history job includes actionUserId
+      expect(mockStatusQueue.add).toHaveBeenCalledWith(
+        'record_state_history',
+        expect.objectContaining({
+          entityId: 'entity-1',
+          source: 'app',
+          actionUserId: 'user-abc',
+        }),
+        expect.any(Object),
+      );
+
+      // Verify notification includes excludeUserIds
+      expect(mockNotificationQueue.add).toHaveBeenCalledWith(
+        'push_state_change',
+        expect.objectContaining({
+          type: 'deviceAlert',
+          payload: expect.objectContaining({
+            data: expect.objectContaining({
+              excludeUserIds: ['user-abc'],
+              source: 'app',
+              actionUserName: 'Lê Hải',
+            }),
+          }),
+        }),
+        expect.any(Object),
+      );
+    });
+
+    it('should NOT pass excludeUserIds when cmd_user cache is empty (physical button)', async () => {
+      const payloadObj = { state: 1 };
+      const payload = Buffer.from(JSON.stringify(payloadObj));
+
+      db.device.findUnique.mockResolvedValue(mockDevice as unknown as { id: string; name: string; entities: unknown[] });
+      redis.get.mockResolvedValue(
+        JSON.stringify({ state: 0 }),
+      );
+      // No cmd_user cache → physical button press
+      redis.smembers.mockResolvedValue([]);
+
+      await service.handleStateMessage(mockTopic, payload);
+
+      // Verify history has no actionUserId
+      expect(mockStatusQueue.add).toHaveBeenCalledWith(
+        'record_state_history',
+        expect.objectContaining({
+          entityId: 'entity-1',
+          source: 'mqtt',
+          actionUserId: null,
+        }),
+        expect.any(Object),
+      );
+
+      // Verify notification has no excludeUserIds
+      expect(mockNotificationQueue.add).toHaveBeenCalledWith(
+        'push_state_change',
+        expect.objectContaining({
+          type: 'deviceAlert',
+          payload: expect.objectContaining({
+            data: expect.objectContaining({
+              source: 'mqtt',
+              excludeUserIds: undefined,
+              actionUserName: 'Nút bấm',
+            }),
+          }),
+        }),
+        expect.any(Object),
       );
     });
   });

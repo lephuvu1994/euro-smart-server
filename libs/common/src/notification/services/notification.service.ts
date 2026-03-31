@@ -108,6 +108,7 @@ export class NotificationService {
 
   /**
    * Advanced Contextual Sending (Tuya-style constraint checking)
+   * Sends to all related users (owner + home members + shared) except excludeUserIds
    */
   async sendDeviceAlert(
     deviceId: string,
@@ -118,7 +119,12 @@ export class NotificationService {
   ) {
     const device = await this.db.device.findUnique({
       where: { id: deviceId },
-      select: { customConfig: true, ownerId: true },
+      select: {
+        customConfig: true,
+        ownerId: true,
+        homeId: true,
+        sharedUsers: { select: { userId: true } },
+      },
     });
 
     if (!device) return;
@@ -132,12 +138,55 @@ export class NotificationService {
       return;
     }
 
-    // Since it's enabled, we send it to the device owner
-    // In a more complex system, we'd also send to sharedUsers who have notification access
-    await this.sendToUser(device.ownerId, title, body, {
-      ...data,
-      deviceId, // Pass device ID in payload
-      link: `/devices/${deviceId}`, // Deep link template
+    // ★ Collect all target user IDs (owner + shared + home members)
+    const targetUserIds = new Set<string>();
+    targetUserIds.add(device.ownerId);
+
+    for (const share of device.sharedUsers) {
+      targetUserIds.add(share.userId);
+    }
+
+    if (device.homeId) {
+      const members = await this.db.homeMember.findMany({
+        where: { homeId: device.homeId },
+        select: { userId: true },
+      });
+      for (const m of members) {
+        targetUserIds.add(m.userId);
+      }
+    }
+
+    // ★ Exclude the user(s) who initiated the action
+    const excludeUserIds = data?.excludeUserIds as string[] | undefined;
+    if (excludeUserIds) {
+      for (const uid of excludeUserIds) {
+        targetUserIds.delete(uid);
+      }
+    }
+
+    if (targetUserIds.size === 0) return;
+
+    // Fetch all push tokens for remaining users
+    const sessions = await this.db.session.findMany({
+      where: {
+        userId: { in: [...targetUserIds] },
+        pushToken: { not: null },
+      },
+      select: { pushToken: true },
     });
+
+    if (sessions.length === 0) return;
+
+    // Strip internal fields from data before sending to client
+    const { excludeUserIds: _, ...cleanData } = data ?? {};
+
+    const messages = sessions.map((s) => ({
+      to: s.pushToken as string,
+      title,
+      body,
+      data: { ...cleanData, deviceId, link: `/devices/${deviceId}` },
+    }));
+
+    await this.sendPushMessages(messages);
   }
 }

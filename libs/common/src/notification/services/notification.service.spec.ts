@@ -145,46 +145,60 @@ describe('NotificationService', () => {
   describe('sendDeviceAlert', () => {
     it('should block sending if device does not exist', async () => {
       jest.spyOn(db.device, 'findUnique').mockResolvedValue(null);
-      const sendToUserSpy = jest.spyOn(service, 'sendToUser');
+      const sendMessagesSpy = jest.spyOn(service, 'sendPushMessages');
 
       await service.sendDeviceAlert('dev1', 'offline', 'title', 'body');
       
-      expect(sendToUserSpy).not.toHaveBeenCalled();
+      expect(sendMessagesSpy).not.toHaveBeenCalled();
     });
 
     it('should block sending if customConfig.notify for event is false or undefined', async () => {
       jest.spyOn(db.device, 'findUnique').mockResolvedValue({
         id: 'dev1',
         ownerId: 'owner1',
+        sharedUsers: [],
+        home: { members: [] },
         customConfig: { notify: { offline: false } }
       } as any);
       
-      const sendToUserSpy = jest.spyOn(service, 'sendToUser');
+      const sendMessagesSpy = jest.spyOn(service, 'sendPushMessages');
 
       await service.sendDeviceAlert('dev1', 'offline', 'title', 'body');
-      expect(sendToUserSpy).not.toHaveBeenCalled();
+      expect(sendMessagesSpy).not.toHaveBeenCalled();
     });
 
-    it('should send alert to owner if customConfig.notify for event is true', async () => {
+    it('should send alert to owner and relevant members if customConfig.notify for event is true', async () => {
       jest.spyOn(db.device, 'findUnique').mockResolvedValue({
         id: 'dev1',
         ownerId: 'owner1',
+        sharedUsers: [],
+        home: { members: [] },
         customConfig: { notify: { offline: true } }
       } as any);
       
-      const sendToUserSpy = jest.spyOn(service, 'sendToUser').mockResolvedValue();
+      jest.spyOn(db.session, 'findMany').mockResolvedValue([
+        { pushToken: 'ExpoPushToken[owner]' } as any
+      ]);
+      const sendMessagesSpy = jest.spyOn(service, 'sendPushMessages').mockResolvedValue();
 
       await service.sendDeviceAlert('dev1', 'offline', 'title', 'body', { customFlag: true });
       
-      expect(sendToUserSpy).toHaveBeenCalledWith(
-        'owner1', 
-        'title', 
-        'body', 
-        expect.objectContaining({
-          customFlag: true,
-          deviceId: 'dev1',
-          link: '/devices/dev1'
+      expect(db.session.findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({
+          userId: { in: ['owner1'] },
+          pushToken: { not: null }
         })
+      }));
+
+      expect(sendMessagesSpy).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            to: 'ExpoPushToken[owner]',
+            title: 'title',
+            body: 'body',
+            data: expect.objectContaining({ customFlag: true, deviceId: 'dev1' })
+          })
+        ])
       );
     });
   });

@@ -752,6 +752,49 @@ describe('DeviceService', () => {
   });
 
   // ═══════════════════════════════════════════════════
+  // getNotifyConfig
+  // ═══════════════════════════════════════════════════
+  describe('getNotifyConfig', () => {
+    it('should throw NotFoundException if device not found', async () => {
+      db.device.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.getNotifyConfig('invalid-dev', 'user-1'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should return notify config if it exists', async () => {
+      db.device.findFirst.mockResolvedValue({
+        customConfig: { notify: { online: true } },
+      });
+
+      const result = await service.getNotifyConfig('dev-1', 'user-1');
+
+      expect(result).toEqual({ online: true });
+    });
+
+    it('should return empty object if notify config does not exist in customConfig', async () => {
+      db.device.findFirst.mockResolvedValue({
+        customConfig: { otherConfig: true },
+      });
+
+      const result = await service.getNotifyConfig('dev-1', 'user-1');
+
+      expect(result).toEqual({});
+    });
+
+    it('should return empty object if customConfig is null', async () => {
+      db.device.findFirst.mockResolvedValue({
+        customConfig: null,
+      });
+
+      const result = await service.getNotifyConfig('dev-1', 'user-1');
+
+      expect(result).toEqual({});
+    });
+  });
+
+  // ═══════════════════════════════════════════════════
   // deleteDevice
   // ═══════════════════════════════════════════════════
   describe('deleteDevice', () => {

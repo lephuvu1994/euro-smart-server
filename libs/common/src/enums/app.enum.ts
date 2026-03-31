@@ -16,3 +16,15 @@ export enum EHomeRole {
   OWNER = 'OWNER',
   MEMBER = 'MEMBER',
 }
+
+export enum EDeviceConnectionStatus {
+  ONLINE = 'online',
+  OFFLINE = 'offline',
+}
+
+export enum EDeviceAlertEvent {
+  ONLINE = 'online',
+  OFFLINE = 'offline',
+  STATE_CHANGE = 'stateChange',
+  THRESHOLD_ALERT = 'thresholdAlert',
+}

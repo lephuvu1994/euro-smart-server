@@ -1,4 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
+
+jest.mock('expo-server-sdk', () => ({ __esModule: true, default: jest.fn(), Expo: jest.fn() }));
+
 import { DeviceController } from './device.controller';
 import { DeviceService } from '../services/device.service';
 import { UserRole } from '@prisma/client';
@@ -17,6 +20,7 @@ describe('DeviceController', () => {
     getDeviceTimeline: jest.fn(),
     getDeviceDetail: jest.fn(),
     updateDeviceName: jest.fn(),
+    updateNotifyConfig: jest.fn(),
   };
 
   const mockProvisioningService = {};
@@ -109,6 +113,19 @@ describe('DeviceController', () => {
 
       expect(service.getUserDevices).toHaveBeenCalledWith(mockUser.userId, query);
       expect(result.data).toHaveLength(1);
+    });
+  });
+
+  describe('updateNotifyConfig', () => {
+    it('should call deviceService.updateNotifyConfig with correct parameters', async () => {
+      const deviceId = 'a15cb911-f4f8-40a2-ad9e-45e63ad093f5';
+      const dto = { notify: { offline: true } };
+      mockDeviceService.updateNotifyConfig.mockResolvedValue({ id: deviceId, customConfig: { notify: { offline: true } } });
+
+      const result = await controller.updateNotifyConfig(deviceId, dto, mockUser);
+
+      expect(service.updateNotifyConfig).toHaveBeenCalledWith(deviceId, mockUser.userId, dto.notify);
+      expect((result as any).customConfig.notify.offline).toBe(true);
     });
   });
 });

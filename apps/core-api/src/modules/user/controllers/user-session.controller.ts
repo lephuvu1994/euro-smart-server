@@ -1,8 +1,8 @@
-import { Controller, Get, Delete, Param, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Delete, Param, UseGuards, Req, Patch, Body, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { JwtAccessGuard } from '@app/common';
+import { JwtAccessGuard, IRequest, DocResponse } from '@app/common';
 import { UserSessionService } from '../services/user-session.service';
-import { IRequest } from '@app/common';
+import { UpdatePushTokenDto } from '../dto/update-push-token.dto';
 
 @ApiTags('User Sessions')
 @ApiBearerAuth()
@@ -21,5 +21,16 @@ export class UserSessionController {
   @ApiOperation({ summary: 'Đăng xuất một phiên làm việc cụ thể' })
   async revokeSession(@Req() req: IRequest, @Param('id') id: string) {
     return this.userSessionService.revokeSession(req.user.userId, id);
+  }
+
+  @Patch('push-token')
+  @ApiOperation({ summary: 'Cập nhật Expo Push Token cho phiên làm việc hiện tại' })
+  @DocResponse({ messageKey: 'base.update_success', httpStatus: HttpStatus.OK })
+  async updatePushToken(@Req() req: IRequest, @Body() body: UpdatePushTokenDto) {
+    if (!req.user.sid) {
+      throw new Error('Session ID is missing from token payload');
+    }
+    await this.userSessionService.updatePushToken(req.user.userId, req.user.sid, body.pushToken);
+    return null;
   }
 }

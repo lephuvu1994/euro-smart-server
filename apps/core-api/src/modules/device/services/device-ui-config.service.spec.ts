@@ -2,6 +2,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { DeviceService } from './device.service';
 import { DatabaseService } from '@app/database';
 import { RedisService } from '@app/redis-cache';
+
+jest.mock('expo-server-sdk', () => ({ __esModule: true, default: jest.fn(), Expo: jest.fn() }));
+
 import {
   DEFAULT_DEVICE_UI_CONFIGS,
   DEVICE_UI_CONFIG_KEY,

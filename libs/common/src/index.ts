@@ -1,10 +1,13 @@
 // Auth
 export * from './auth/auth.module';
+export * from './auth/services/auth.service';
 
 // Config
 export { default as configs } from './config';
 
 // Constants & Enums
+export * from './notification/notification.module';
+export * from './notification/services/notification.service';
 export * from './enums/app.enum';
 export * from './enums/device-job.enum';
 export * from './enums/scene.enum';

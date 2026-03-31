@@ -11,7 +11,7 @@ import { DatabaseService } from '@app/database';
 import { MqttService } from '@app/common/mqtt/mqtt.service';
 import { RedisService } from '@app/redis-cache';
 import { getQueueToken } from '@nestjs/bullmq';
-import { APP_BULLMQ_QUEUES } from '@app/common/enums/app.enum';
+import { APP_BULLMQ_QUEUES, EDeviceAlertEvent } from '@app/common/enums/app.enum';
 import { DEVICE_JOBS } from '@app/common/enums/device-job.enum';
 
 jest.mock('@faker-js/faker', () => ({
@@ -126,16 +126,17 @@ describe('MqttInboundService', () => {
           type: 'deviceAlert',
           payload: {
             deviceId: 'dev-1',
-            eventType: 'offline',
-            title: 'Cảnh báo ngoại tuyến',
-            body: 'Thiết bị "Smart Switch" vừa bị ngắt kết nối khỏi hệ thống.',
+            eventType: EDeviceAlertEvent.OFFLINE,
+            titleKey: 'device.alert.offline.title',
+            bodyKey: 'device.alert.offline.body',
+            data: { deviceName: 'Smart Switch' },
           },
         },
         expect.any(Object),
       );
     });
 
-    it('should NOT dispatch push notification job when device comes online', async () => {
+    it('should dispatch push notification job when device comes online', async () => {
       const payload = Buffer.from(JSON.stringify({ online: true }));
       const topic = `company/model/${mockDeviceToken}/status`;
 
@@ -147,7 +148,20 @@ describe('MqttInboundService', () => {
 
       await (service as any).handleStatusMessage(topic, payload);
 
-      expect(mockNotificationQueue.add).not.toHaveBeenCalled();
+      expect(mockNotificationQueue.add).toHaveBeenCalledWith(
+        'push_online_alert',
+        {
+          type: 'deviceAlert',
+          payload: {
+            deviceId: 'dev-1',
+            eventType: EDeviceAlertEvent.ONLINE,
+            titleKey: 'device.alert.online.title',
+            bodyKey: 'device.alert.online.body',
+            data: { deviceName: 'Smart Switch' },
+          },
+        },
+        expect.any(Object),
+      );
     });
   });
 

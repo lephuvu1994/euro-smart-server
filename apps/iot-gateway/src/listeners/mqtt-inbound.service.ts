@@ -296,7 +296,29 @@ export class MqttInboundService implements OnApplicationBootstrap {
           if (isNumber || isString) {
             const stateLabel = String(entityUpdate.state);
 
-            // Both queue jobs are independent — push in parallel
+            // ★ Lookup who initiated this command (Redis ephemeral cache)
+            const cmdUserKey = `cmd_user:${token}:${entity.code}`;
+            const actionUserIds = await this.redisService.smembers(cmdUserKey);
+            if (actionUserIds.length > 0) {
+              await this.redisService.del(cmdUserKey);
+            }
+            const source = actionUserIds.length > 0 ? 'app' : (rawData.source || 'mqtt');
+
+            // ★ Lookup user name for notification body (only when app-initiated)
+            let actionUserName: string | null = null;
+            if (actionUserIds.length > 0) {
+              const actionUser = await this.databaseService.user.findUnique({
+                where: { id: actionUserIds[0] },
+                select: { firstName: true, lastName: true },
+              });
+              if (actionUser) {
+                actionUserName = [actionUser.lastName, actionUser.firstName]
+                  .filter(Boolean)
+                  .join(' ') || null;
+              }
+            }
+
+            // Record state history with action author
             writePromises.push(
               this.statusQueue.add(
                 DEVICE_JOBS.RECORD_STATE_HISTORY,
@@ -304,36 +326,37 @@ export class MqttInboundService implements OnApplicationBootstrap {
                   entityId: entity.id,
                   value: isNumber ? entityUpdate.state : null,
                   valueText: isString ? stateLabel : null,
-                  source: rawData.source || 'mqtt',
+                  source,
+                  actionUserId: actionUserIds[0] || null,
                 },
                 { removeOnComplete: true, attempts: 2 },
               ),
             );
 
-            // Physical/remote push notification - only for non-app sources to avoid echo
-            if (rawData.source !== 'app') {
-              writePromises.push(
-                this.notificationQueue.add(
-                  'push_state_change',
-                  {
-                    type: 'deviceAlert',
-                    payload: {
-                      deviceId: device.id,
-                      eventType: EDeviceAlertEvent.STATE_CHANGE,
-                      titleKey: 'device.alert.stateChange.title',
-                      bodyKey: 'device.alert.stateChange.body',
-                      data: {
-                        deviceName: device.name ?? 'Thiết bị',
-                        entityName: entity.name,
-                        state: stateLabel,
-                        source: rawData.source || 'mqtt',
-                      },
+            // ★ Always send notification — exclude initiating user(s)
+            writePromises.push(
+              this.notificationQueue.add(
+                'push_state_change',
+                {
+                  type: 'deviceAlert',
+                  payload: {
+                    deviceId: device.id,
+                    eventType: EDeviceAlertEvent.STATE_CHANGE,
+                    titleKey: 'device.alert.stateChange.title',
+                    bodyKey: 'device.alert.stateChange.body',
+                    data: {
+                      deviceName: device.name ?? 'Thiết bị',
+                      entityName: entity.name,
+                      state: stateLabel,
+                      source,
+                      actionUserName: actionUserName ?? 'Nút bấm',
+                      excludeUserIds: actionUserIds.length > 0 ? actionUserIds : undefined,
                     },
                   },
-                  { removeOnComplete: true, attempts: 1 },
-                ),
-              );
-            }
+                },
+                { removeOnComplete: true, attempts: 1 },
+              ),
+            );
           }
         }
 

@@ -64,6 +64,7 @@ describe('DeviceStatusProcessor', () => {
           value: null,
           valueText: 'OPEN',
           source: 'app',
+          actionByUserId: null,
         },
       });
     });

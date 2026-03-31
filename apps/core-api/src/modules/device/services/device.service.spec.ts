@@ -49,6 +49,9 @@ const makeDb = () => ({
     findFirst: jest.fn(),
     update: jest.fn(),
   },
+  user: {
+    findMany: jest.fn().mockResolvedValue([]),
+  },
 });
 
 const makeRedis = () => ({

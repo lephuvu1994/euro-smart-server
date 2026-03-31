@@ -120,6 +120,7 @@ const createMockDatabaseService = () => ({
   },
   user: {
     findUnique: jest.fn(),
+    findMany: jest.fn(),
   },
   $transaction: jest.fn(),
 });

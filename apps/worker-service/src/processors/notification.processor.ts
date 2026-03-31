@@ -3,6 +3,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { APP_BULLMQ_QUEUES } from '@app/common/enums/app.enum';
 import { NotificationService } from '@app/common/notification/services/notification.service';
+import { MessageService } from '@app/common/message/services/message.service';
 
 export interface PushNotificationJobData {
   type: 'user' | 'home' | 'deviceAlert';
@@ -11,8 +12,10 @@ export interface PushNotificationJobData {
     homeId?: string;
     deviceId?: string;
     eventType?: string;
-    title: string;
-    body: string;
+    title?: string;
+    body?: string;
+    titleKey?: string;
+    bodyKey?: string;
     data?: Record<string, unknown>;
   };
 }
@@ -22,7 +25,10 @@ export interface PushNotificationJobData {
 export class NotificationProcessor extends WorkerHost {
   private readonly logger = new Logger(NotificationProcessor.name);
 
-  constructor(private readonly notificationService: NotificationService) {
+  constructor(
+    private readonly notificationService: NotificationService,
+    private readonly messageService: MessageService,
+  ) {
     super();
   }
 
@@ -32,6 +38,18 @@ export class NotificationProcessor extends WorkerHost {
     try {
       this.logger.debug(`Processing notification job ${job.id} of type ${type}`);
 
+      const resolvedTitle = payload.titleKey
+        ? this.messageService.translate(payload.titleKey, { args: payload.data })
+        : payload.title || '';
+      const resolvedBody = payload.bodyKey
+        ? this.messageService.translate(payload.bodyKey, { args: payload.data })
+        : payload.body || '';
+
+      if (!resolvedTitle || !resolvedBody) {
+        this.logger.warn(`Push notification job ${job.id} is missing title or body (or keys). Skipping.`);
+        return;
+      }
+
       switch (type) {
         case 'user':
           if (!payload.userId) {
@@ -39,8 +57,8 @@ export class NotificationProcessor extends WorkerHost {
           }
           await this.notificationService.sendToUser(
             payload.userId,
-            payload.title,
-            payload.body,
+            resolvedTitle,
+            resolvedBody,
             payload.data,
           );
           break;
@@ -51,8 +69,8 @@ export class NotificationProcessor extends WorkerHost {
           }
           await this.notificationService.sendToHome(
             payload.homeId,
-            payload.title,
-            payload.body,
+            resolvedTitle,
+            resolvedBody,
             payload.data,
           );
           break;
@@ -64,8 +82,8 @@ export class NotificationProcessor extends WorkerHost {
           await this.notificationService.sendDeviceAlert(
             payload.deviceId,
             payload.eventType,
-            payload.title,
-            payload.body,
+            resolvedTitle,
+            resolvedBody,
             payload.data,
           );
           break;

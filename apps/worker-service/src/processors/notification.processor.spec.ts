@@ -9,10 +9,12 @@ jest.mock('expo-server-sdk', () => ({
 
 import { NotificationProcessor, PushNotificationJobData } from './notification.processor';
 import { NotificationService } from '@app/common/notification/services/notification.service';
+import { MessageService } from '@app/common/message/services/message.service';
 
 describe('NotificationProcessor', () => {
   let processor: NotificationProcessor;
   let mockNotificationService: Partial<NotificationService>;
+  let mockMessageService: Partial<MessageService>;
 
   beforeEach(async () => {
     mockNotificationService = {
@@ -21,10 +23,15 @@ describe('NotificationProcessor', () => {
       sendDeviceAlert: jest.fn().mockResolvedValue(undefined),
     };
 
+    mockMessageService = {
+      translate: jest.fn().mockImplementation((key: string) => key),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         NotificationProcessor,
         { provide: NotificationService, useValue: mockNotificationService },
+        { provide: MessageService, useValue: mockMessageService },
       ],
     }).compile();
 
@@ -102,7 +109,7 @@ describe('NotificationProcessor', () => {
 
     it('should throw error if deviceId or eventType missing for deviceAlert type', async () => {
       const job = {
-        data: { type: 'deviceAlert', payload: { eventType: 'offline' } },
+        data: { type: 'deviceAlert', payload: { eventType: 'offline', title: 't', body: 'b' } },
       } as unknown as Job<PushNotificationJobData>;
 
       await expect(processor.process(job)).rejects.toThrow('DeviceId or eventType is missing');

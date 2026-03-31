@@ -38,15 +38,22 @@ export class NotificationProcessor extends WorkerHost {
     try {
       this.logger.debug(`Processing notification job ${job.id} of type ${type}`);
 
-      const resolvedTitle = payload.titleKey
-        ? this.messageService.translate(payload.titleKey, { args: payload.data })
-        : payload.title || '';
-      const resolvedBody = payload.bodyKey
-        ? this.messageService.translate(payload.bodyKey, { args: payload.data })
-        : payload.body || '';
+      // Resolve title and body (translate if keys are provided, otherwise use raw strings as keys)
+      // Defaulting to 'vi' if language is not set anywhere
+      const lang = 'vi';
+      const args = payload.data || {};
+      
+      const translatedTitle = this.messageService.translate(payload.titleKey || payload.title || '', {
+        lang,
+        args,
+      });
+      const translatedBody = this.messageService.translate(payload.bodyKey || payload.body || '', {
+        lang,
+        args,
+      });
 
-      if (!resolvedTitle || !resolvedBody) {
-        this.logger.warn(`Push notification job ${job.id} is missing title or body (or keys). Skipping.`);
+      if (!translatedTitle || !translatedBody) {
+        this.logger.warn(`Push notification job ${job.id} resolved to empty title or body. Skipping.`);
         return;
       }
 
@@ -57,9 +64,9 @@ export class NotificationProcessor extends WorkerHost {
           }
           await this.notificationService.sendToUser(
             payload.userId,
-            resolvedTitle,
-            resolvedBody,
-            payload.data,
+            translatedTitle,
+            translatedBody,
+            args,
           );
           break;
 
@@ -69,9 +76,9 @@ export class NotificationProcessor extends WorkerHost {
           }
           await this.notificationService.sendToHome(
             payload.homeId,
-            resolvedTitle,
-            resolvedBody,
-            payload.data,
+            translatedTitle,
+            translatedBody,
+            args,
           );
           break;
 
@@ -82,9 +89,9 @@ export class NotificationProcessor extends WorkerHost {
           await this.notificationService.sendDeviceAlert(
             payload.deviceId,
             payload.eventType,
-            resolvedTitle,
-            resolvedBody,
-            payload.data,
+            translatedTitle,
+            translatedBody,
+            args,
           );
           break;
 

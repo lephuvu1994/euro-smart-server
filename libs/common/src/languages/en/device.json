@@ -1,10 +1,10 @@
 {
   "device.delete.success": "Device deleted successfully",
   "device.error.notFound": "Device not found or access denied",
-  "device.alert.offline.title": "Offline Alert",
-  "device.alert.offline.body": "Device \"{deviceName}\" just disconnected from the system.",
-  "device.alert.online.title": "Device Reconnected",
-  "device.alert.online.body": "Device \"{deviceName}\" reconnected to the system.",
-  "device.alert.stateChange.title": "State Changed",
-  "device.alert.stateChange.body": "Device \"{deviceName}\" changed its state."
+  "device.alert.online.title": "Device Online",
+  "device.alert.online.body": "Device \"{deviceName}\" has reconnected to the system.",
+  "device.alert.offline.title": "Device Offline",
+  "device.alert.offline.body": "Device \"{deviceName}\" was disconnected from the system.",
+  "device.alert.stateChange.title": "{deviceName} — {entityName}",
+  "device.alert.stateChange.body": "State changed: {state} ({source})"
 }

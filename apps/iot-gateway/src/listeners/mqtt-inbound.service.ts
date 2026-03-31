@@ -66,16 +66,17 @@ export class MqttInboundService implements OnApplicationBootstrap {
           `[UNBIND] Device ${deviceToken} is unbound. Sending unbind command...`,
         );
 
-        // Build topic: {partnerCode}/{modelCode}/{token}/set
         const cmdTopic = `${unboundDevice.partner.code}/${unboundDevice.deviceModel.code}/${deviceToken}/set`;
-        await this.mqttService.publish(cmdTopic, JSON.stringify({ action: 'unbind' }), { qos: 1 });
 
-        // Dispatch hard-delete job (cascade DB + Redis cleanup)
-        await this.deviceControlQueue.add(
-          DEVICE_JOBS.HARD_DELETE_DEVICE,
-          { deviceId: unboundDevice.id, token: deviceToken },
-          { priority: 1, attempts: 2, removeOnComplete: true },
-        );
+        // ★ PARALLEL: publish + hard-delete are independent
+        await Promise.all([
+          this.mqttService.publish(cmdTopic, JSON.stringify({ action: 'unbind' }), { qos: 1 }),
+          this.deviceControlQueue.add(
+            DEVICE_JOBS.HARD_DELETE_DEVICE,
+            { deviceId: unboundDevice.id, token: deviceToken },
+            { priority: 1, attempts: 2, removeOnComplete: true },
+          ),
+        ]);
 
         return; // Stop processing — device is being unbound
       }
@@ -92,84 +93,76 @@ export class MqttInboundService implements OnApplicationBootstrap {
         }
       }
 
-      // 1. LWT standard: rely on broker's keep_alive. Delete if LWT offline msg, else set online indefinitely.
+      // ★ SEQUENTIAL: must read previousStatus BEFORE writing new status
       const previousStatus = await this.redisService.get(`status:${deviceToken}`);
-      const newEvent = rawData.online === false ? 'offline' : 'online';
+      const newEvent = rawData.online === false ? EDeviceConnectionStatus.OFFLINE : EDeviceConnectionStatus.ONLINE;
 
+      // ★ PARALLEL: all remaining operations are independent of each other
+      const parallel: Promise<unknown>[] = [];
+
+      // 1. Write new status to Redis
       if (rawData.online === false) {
-        await this.redisService.del(`status:${deviceToken}`);
+        parallel.push(this.redisService.del(`status:${deviceToken}`));
       } else {
-        await this.redisService.set(`status:${deviceToken}`, 'online');
+        parallel.push(this.redisService.set(`status:${deviceToken}`, 'online'));
       }
 
-      // ★ Ghi lịch sử kết nối khi trạng thái thay đổi thực sự
-      const wasOnline = previousStatus === 'online';
-      const isNowOnline = newEvent === 'online';
-      if (wasOnline !== isNowOnline) {
-        await this.statusQueue.add(
-          DEVICE_JOBS.RECORD_CONNECTION_LOG,
-          { token: deviceToken, event: newEvent },
-          { removeOnComplete: true, attempts: 2 },
-        );
-
-        // DISPATCH CONNECTION STATUS PUSH NOTIFICATION JOBS
-        const device = await this.databaseService.device.findUnique({
-          where: { token: deviceToken },
-          select: { id: true, name: true },
-        });
-
-        if (device) {
-          if (newEvent === EDeviceConnectionStatus.OFFLINE) {
-            await this.notificationQueue.add(
-              'push_offline_alert',
-              {
-                type: 'deviceAlert',
-                payload: {
-                  deviceId: device.id,
-                  eventType: EDeviceAlertEvent.OFFLINE,
-                  titleKey: 'device.alert.offline.title',
-                  bodyKey: 'device.alert.offline.body',
-                  data: { deviceName: device.name },
-                },
-              },
-              { removeOnComplete: true, attempts: 1 },
-            );
-          }
-
-          if (newEvent === EDeviceConnectionStatus.ONLINE) {
-            await this.notificationQueue.add(
-              'push_online_alert',
-              {
-                type: 'deviceAlert',
-                payload: {
-                  deviceId: device.id,
-                  eventType: EDeviceAlertEvent.ONLINE,
-                  titleKey: 'device.alert.online.title',
-                  bodyKey: 'device.alert.online.body',
-                  data: { deviceName: device.name },
-                },
-              },
-              { removeOnComplete: true, attempts: 1 },
-            );
-          }
-        }
-      }
-
-      // 2. Write shadow − using the key device.service also reads: hgetall `device:shadow:{token}`
-      await this.redisService.hmset(`device:shadow:${deviceToken}`, shadowData);
+      // 2. Write shadow
+      parallel.push(this.redisService.hmset(`device:shadow:${deviceToken}`, shadowData));
 
       // 3. Queue lastSeen DB update (debounced in worker)
-      await this.statusQueue.add(DEVICE_JOBS.UPDATE_LAST_SEEN, {
-        token: deviceToken,
-        rawData,
-      });
-
-      this.logger.log(
-        `Device ${deviceToken} status updated: ${JSON.stringify(rawData)}`,
+      parallel.push(
+        this.statusQueue.add(DEVICE_JOBS.UPDATE_LAST_SEEN, { token: deviceToken, rawData }),
       );
 
-      // ★ Process for state history as well, since firmware might bundle telemetry inside the status message
-      await this.handleStateMessage(topic, payload);
+      // 4. Connection log + Push notification (only when status actually changed)
+      const wasOnline = previousStatus === 'online';
+      const isNowOnline = newEvent === EDeviceConnectionStatus.ONLINE;
+      if (wasOnline !== isNowOnline) {
+        // Connection log — independent
+        parallel.push(
+          this.statusQueue.add(
+            DEVICE_JOBS.RECORD_CONNECTION_LOG,
+            { token: deviceToken, event: newEvent },
+            { removeOnComplete: true, attempts: 2 },
+          ),
+        );
+
+        // Device lookup → notification dispatch (chained, but parallel to everything else)
+        parallel.push(
+          this.databaseService.device.findUnique({
+            where: { token: deviceToken },
+            select: { id: true, name: true },
+          }).then((device) => {
+            if (!device) return;
+            const jobName = newEvent === EDeviceConnectionStatus.OFFLINE ? 'push_offline_alert' : 'push_online_alert';
+            const alertEvent = newEvent === EDeviceConnectionStatus.OFFLINE ? EDeviceAlertEvent.OFFLINE : EDeviceAlertEvent.ONLINE;
+            const titleKey = `device.alert.${newEvent}.title`;
+            const bodyKey = `device.alert.${newEvent}.body`;
+            return this.notificationQueue.add(
+              jobName,
+              {
+                type: 'deviceAlert',
+                payload: {
+                  deviceId: device.id,
+                  eventType: alertEvent,
+                  titleKey,
+                  bodyKey,
+                  data: { deviceName: device.name },
+                },
+              },
+              { removeOnComplete: true, attempts: 1 },
+            );
+          }),
+        );
+      }
+
+      // 5. Process state history (firmware may bundle telemetry in status message)
+      parallel.push(this.handleStateMessage(topic, payload));
+
+      this.logger.log(`Device ${deviceToken} status updated: ${JSON.stringify(rawData)}`);
+
+      await Promise.all(parallel);
     } catch (error) {
       this.logger.error(`Failed to handle status message: ${error.message}`);
     }
@@ -189,7 +182,6 @@ export class MqttInboundService implements OnApplicationBootstrap {
 
     try {
       const rawData = JSON.parse(payload.toString());
-      // rawData ví dụ: { "state": 1, "brightness": 80, "color_temp": 4000 }
 
       // Serialize nested objects for Redis hmset
       const shadowData: Record<string, string | number | boolean> = {};
@@ -201,19 +193,16 @@ export class MqttInboundService implements OnApplicationBootstrap {
         }
       }
 
-      // 1. Lưu Shadow State thô (debug)
-      await this.redisService.hmset(`device:shadow:${token}`, shadowData);
-
-      // 2. Lấy Device + Entities + Attributes
-      // TODO: Cache entity structure trong Redis để tránh query DB mỗi message
-      const device = await this.databaseService.device.findUnique({
-        where: { token },
-        include: {
-          entities: {
-            include: { attributes: true },
+      // ★ PARALLEL: shadow write + DB query are independent
+      const [, device] = await Promise.all([
+        this.redisService.hmset(`device:shadow:${token}`, shadowData),
+        this.databaseService.device.findUnique({
+          where: { token },
+          include: {
+            entities: { include: { attributes: true } },
           },
-        },
-      });
+        }),
+      ]);
 
       if (!device || !device.entities) return;
 
@@ -224,7 +213,10 @@ export class MqttInboundService implements OnApplicationBootstrap {
         attributes?: Array<{ key: string; value: number | string | boolean }>;
       }> = [];
 
-      // 3. ENTITY MAPPING LOOP
+      // Collect all entity Redis keys to batch-read old states
+      const entityKeyMap = new Map<string, { entity: typeof device.entities[0]; update: (typeof updates)[0] }>();
+
+      // 3. ENTITY MAPPING — pure synchronous computation
       for (const entity of device.entities) {
         let entityUpdated = false;
         const entityUpdate: (typeof updates)[0] = {
@@ -232,18 +224,17 @@ export class MqttInboundService implements OnApplicationBootstrap {
           entityCode: entity.code,
         };
 
-        // --- Case A: Primary state (entity.commandKey → MQTT key) ---
+        // Case A: Primary state
         if (entity.commandKey && rawData[entity.commandKey] !== undefined) {
           entityUpdate.state = rawData[entity.commandKey];
           entityUpdated = true;
         }
 
-        // --- Case B: Attributes (attr commandKey or attr.key → MQTT key) ---
+        // Case B: Attributes
         const attrUpdates: Array<{ key: string; value: number | string | boolean }> = [];
         for (const attr of entity.attributes) {
           const attrConfig = attr.config as { commandKey?: string } | null;
           const mqttKey = attrConfig?.commandKey ?? attr.key;
-
           if (rawData[mqttKey] !== undefined) {
             attrUpdates.push({ key: attr.key, value: rawData[mqttKey] });
           }
@@ -254,95 +245,120 @@ export class MqttInboundService implements OnApplicationBootstrap {
           entityUpdated = true;
         }
 
-        // 4. Persist entity state to Redis
         if (entityUpdated) {
           const entityRedisKey = `device:${device.id}:entity:${entity.code}`;
+          entityKeyMap.set(entityRedisKey, { entity, update: entityUpdate });
+        }
+      }
 
-          // Build entity state object: { state, brightness, color_temp, ... }
-          const oldJson = await this.redisService.get(entityRedisKey);
-          const oldState = oldJson ? JSON.parse(oldJson) : {};
-          const newState = { ...oldState };
+      if (entityKeyMap.size === 0) return;
 
-          if (entityUpdate.state !== undefined) {
-            newState.state = entityUpdate.state;
+      // ★ PARALLEL: batch-read all old entity states at once
+      const entityKeys = [...entityKeyMap.keys()];
+      const oldJsons = await Promise.all(
+        entityKeys.map((k) => this.redisService.get(k)),
+      );
+
+      // ★ PARALLEL: persist all entity states + history + notifications concurrently
+      const writePromises: Promise<unknown>[] = [];
+
+      for (let i = 0; i < entityKeys.length; i++) {
+        const entityRedisKey = entityKeys[i];
+        const mapEntry = entityKeyMap.get(entityRedisKey);
+        if (!mapEntry) continue;
+        
+        const { entity, update: entityUpdate } = mapEntry;
+        const oldState = oldJsons[i] ? JSON.parse(oldJsons[i] as string) : {};
+        const newState = { ...oldState };
+
+        if (entityUpdate.state !== undefined) {
+          newState.state = entityUpdate.state;
+        }
+        if (entityUpdate.attributes) {
+          for (const a of entityUpdate.attributes) {
+            newState[a.key] = a.value;
           }
-          if (entityUpdate.attributes) {
-            for (const a of entityUpdate.attributes) {
-              newState[a.key] = a.value;
-            }
-          }
+        }
 
-          // Track entity keys for device cleanup
-          await this.redisService.sadd(
-            `device:${device.id}:_ekeys`,
-            entityRedisKey,
-          );
-          await this.redisService.set(entityRedisKey, JSON.stringify(newState));
+        // Redis writes — independent, parallelizable
+        writePromises.push(
+          this.redisService.sadd(`device:${device.id}:_ekeys`, entityRedisKey),
+        );
+        writePromises.push(
+          this.redisService.set(entityRedisKey, JSON.stringify(newState)),
+        );
 
-          // ★ Ghi lịch sử khi PRIMARY STATE thay đổi (OPEN→CLOSE, ON→OFF...)
-          let hasStateChanged = false;
-          if (entityUpdate.state !== undefined) {
-             hasStateChanged = !isEqual(entityUpdate.state, oldState.state);
-          }
+        // State history + notification — only when primary state changed
+        if (entityUpdate.state !== undefined && !isEqual(entityUpdate.state, oldState.state)) {
+          const isNumber = typeof entityUpdate.state === 'number';
+          const isString = typeof entityUpdate.state === 'string';
 
-          if (hasStateChanged) {
-            // Only record history for primitive states (strings or numbers)
-            const isNumber = typeof entityUpdate.state === 'number';
-            const isString = typeof entityUpdate.state === 'string';
-            
-            if (isNumber || isString) {
-              await this.statusQueue.add(
+          if (isNumber || isString) {
+            const stateLabel = String(entityUpdate.state);
+
+            // Both queue jobs are independent — push in parallel
+            writePromises.push(
+              this.statusQueue.add(
                 DEVICE_JOBS.RECORD_STATE_HISTORY,
                 {
                   entityId: entity.id,
                   value: isNumber ? entityUpdate.state : null,
-                  valueText: isString ? String(entityUpdate.state) : null,
+                  valueText: isString ? stateLabel : null,
                   source: rawData.source || 'mqtt',
                 },
                 { removeOnComplete: true, attempts: 2 },
-              );
-            }
+              ),
+            );
 
-            // ★ DISPATCH STATE CHANGE PUSH NOTIFICATION
-            // Only for physical/remote changes (not from app to avoid echo)
+            // Physical/remote push notification - only for non-app sources to avoid echo
             if (rawData.source !== 'app') {
-              await this.notificationQueue.add(
-                'push_state_change',
-                {
-                  type: 'deviceAlert',
-                  payload: {
-                    deviceId: device.id,
-                    eventType: EDeviceAlertEvent.STATE_CHANGE,
-                    titleKey: 'device.alert.stateChange.title',
-                    bodyKey: 'device.alert.stateChange.body',
-                    data: { deviceName: device.name },
+              writePromises.push(
+                this.notificationQueue.add(
+                  'push_state_change',
+                  {
+                    type: 'deviceAlert',
+                    payload: {
+                      deviceId: device.id,
+                      eventType: EDeviceAlertEvent.STATE_CHANGE,
+                      titleKey: 'device.alert.stateChange.title',
+                      bodyKey: 'device.alert.stateChange.body',
+                      data: {
+                        deviceName: device.name ?? 'Thiết bị',
+                        entityName: entity.name,
+                        state: stateLabel,
+                        source: rawData.source || 'mqtt',
+                      },
+                    },
                   },
-                },
-                { removeOnComplete: true, attempts: 1 },
+                  { removeOnComplete: true, attempts: 1 },
+                ),
               );
             }
           }
-
-          updates.push(entityUpdate);
         }
+
+        updates.push(entityUpdate);
       }
 
-      // 5. Trigger scene + BullMQ updates
+      // 5. Trigger scene evaluation — add to the parallel batch
       if (updates.length > 0) {
-        // Trigger scene DEVICE_STATE evaluation
-        await this.deviceControlQueue.add(
-          DEVICE_JOBS.CHECK_DEVICE_STATE_TRIGGERS,
-          {
-            deviceToken: token,
-            updates: updates.map((u) => ({
-              entityCode: u.entityCode,
-              state: u.state,
-              attributes: u.attributes,
-            })),
-          },
-          { priority: 3, attempts: 1, removeOnComplete: true },
+        writePromises.push(
+          this.deviceControlQueue.add(
+            DEVICE_JOBS.CHECK_DEVICE_STATE_TRIGGERS,
+            {
+              deviceToken: token,
+              updates: updates.map((u) => ({
+                entityCode: u.entityCode,
+                state: u.state,
+                attributes: u.attributes,
+              })),
+            },
+            { priority: 3, attempts: 1, removeOnComplete: true },
+          ),
         );
       }
+
+      await Promise.all(writePromises);
     } catch (e) {
       this.logger.error(
         `Invalid JSON or Error in state message from ${token}: ${e.message}`,

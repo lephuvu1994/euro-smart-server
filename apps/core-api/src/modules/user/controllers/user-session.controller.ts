@@ -7,7 +7,7 @@ import { UpdatePushTokenDto } from '../dto/update-push-token.dto';
 @ApiTags('User Sessions')
 @ApiBearerAuth()
 @UseGuards(JwtAccessGuard)
-@Controller('v1/user/sessions')
+@Controller({ path: '/user/sessions', version: '1' })
 export class UserSessionController {
   constructor(private readonly userSessionService: UserSessionService) {}
 

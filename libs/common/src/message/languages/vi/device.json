@@ -1,0 +1,10 @@
+{
+  "delete.success": "Xoá thiết bị thành công",
+  "error.notFound": "Không tìm thấy thiết bị hoặc bị từ chối truy cập",
+  "alert.online.title": "Thiết bị trực tuyến",
+  "alert.online.body": "Thiết bị \"{deviceName}\" đã kết nối lại hệ thống.",
+  "alert.offline.title": "Cảnh báo ngoại tuyến",
+  "alert.offline.body": "Thiết bị \"{deviceName}\" vừa bị ngắt kết nối khỏi hệ thống.",
+  "alert.stateChange.title": "{deviceName} — {entityName}",
+  "alert.stateChange.body": "Trạng thái: {state} — {actionUserName}"
+}

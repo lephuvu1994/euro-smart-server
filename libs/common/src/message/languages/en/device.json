@@ -1,0 +1,10 @@
+{
+  "delete.success": "Device deleted successfully",
+  "error.notFound": "Device not found or access denied",
+  "alert.online.title": "Device Online",
+  "alert.online.body": "Device \"{deviceName}\" has reconnected to the system.",
+  "alert.offline.title": "Device Offline",
+  "alert.offline.body": "Device \"{deviceName}\" was disconnected from the system.",
+  "alert.stateChange.title": "{deviceName} — {entityName}",
+  "alert.stateChange.body": "State: {state} — {actionUserName}"
+}

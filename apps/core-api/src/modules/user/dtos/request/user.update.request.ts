@@ -25,7 +25,7 @@ export class UserUpdateDto {
   })
   @IsString()
   @IsOptional()
-  @MinLength(2)
+  @MinLength(1)
   @MaxLength(50)
   @Transform(({ value }) => value?.trim())
   firstName?: string;
@@ -36,9 +36,8 @@ export class UserUpdateDto {
   })
   @IsString()
   @IsOptional()
-  @MinLength(2)
   @MaxLength(50)
-  @Transform(({ value }) => value?.trim())
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   lastName?: string;
 
   @ApiProperty({

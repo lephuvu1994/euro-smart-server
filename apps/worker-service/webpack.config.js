@@ -25,8 +25,16 @@ module.exports = {
       tsConfig: './tsconfig.app.json',
       assets: [
         './src/assets',
-        { glob: '**/*', input: '../../libs/common/src/templates', output: './templates' },
-        { glob: '**/*', input: '../../libs/common/src/languages', output: './languages' }
+        {
+          glob: '**/*',
+          input: '../../libs/common/src/templates',
+          output: './templates',
+        },
+        {
+          glob: '**/*',
+          input: '../../libs/common/src/message/languages',
+          output: './languages',
+        },
       ],
       optimization: false,
       outputHashing: 'none',

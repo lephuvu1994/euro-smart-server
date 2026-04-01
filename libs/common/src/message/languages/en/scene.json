@@ -1,0 +1,15 @@
+{
+  "success": {
+    "list": "Scenes retrieved successfully",
+    "detail": "Scene detail retrieved successfully",
+    "created": "Scene created successfully",
+    "updated": "Scene updated successfully",
+    "runQueued": "Scene run queued successfully"
+  },
+  "error": {
+    "homeNotFoundOrNoAccess": "Home not found or access denied",
+    "sceneNotFoundOrNoAccess": "Scene not found or access denied",
+    "sceneNotFound": "Scene not found",
+    "sceneInactive": "Scene is inactive and cannot be run"
+  }
+}

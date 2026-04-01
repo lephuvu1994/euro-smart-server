@@ -1,0 +1,26 @@
+{
+  "success": {
+    "list": "Homes retrieved successfully",
+    "created": "Home created successfully",
+    "updated": "Home updated successfully",
+    "members": "Members retrieved successfully",
+    "memberAdded": "Member added to home successfully",
+    "floors": "Floors retrieved successfully",
+    "floorCreated": "Floor created successfully",
+    "floorUpdated": "Floor updated successfully",
+    "rooms": "Rooms retrieved successfully",
+    "roomCreated": "Room created successfully",
+    "roomUpdated": "Room updated successfully"
+  },
+  "error": {
+    "notFoundOrNoAccess": "Home not found or access denied",
+    "onlyOwnerCanManage": "Only the home owner can update home or add members",
+    "provideUserIdOrEmail": "Provide either userId or email to add member",
+    "provideOnlyUserIdOrEmail": "Provide only one of userId or email",
+    "userNotFound": "User not found",
+    "memberAlreadyInHome": "User is already a member of this home",
+    "floorNotFoundOrNoAccess": "Floor not found or access denied",
+    "roomNotFoundOrNoAccess": "Room not found or access denied",
+    "floorNotInHome": "Floor does not belong to this home"
+  }
+}

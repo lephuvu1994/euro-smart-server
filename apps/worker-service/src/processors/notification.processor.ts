@@ -34,27 +34,47 @@ export class NotificationProcessor extends WorkerHost {
 
   async process(job: Job<PushNotificationJobData>): Promise<void> {
     const { type, payload } = job.data;
-    
+
     try {
-      this.logger.debug(`Processing notification job ${job.id} of type ${type}`);
+      this.logger.debug(
+        `Processing notification job ${job.id} of type ${type}`,
+      );
 
       // Resolve title and body (translate if keys are provided, otherwise use raw strings as keys)
       // Defaulting to 'vi' if language is not set anywhere
       const lang = 'vi';
       const args = payload.data || {};
-      
-      const translatedTitle = this.messageService.translate(payload.titleKey || payload.title || '', {
-        lang,
-        args,
-      });
-      const translatedBody = this.messageService.translate(payload.bodyKey || payload.body || '', {
-        lang,
-        args,
-      });
+
+      const translatedTitle = this.messageService.translate(
+        payload.titleKey || payload.title || '',
+        {
+          lang,
+          args,
+        },
+      );
+      const translatedBody = this.messageService.translate(
+        payload.bodyKey || payload.body || '',
+        {
+          lang,
+          args,
+        },
+      );
+
+      this.logger.debug(`Resolved Title: ${translatedTitle}`);
+      this.logger.debug(`Resolved Body: ${translatedBody}`);
 
       if (!translatedTitle || !translatedBody) {
-        this.logger.warn(`Push notification job ${job.id} resolved to empty title or body. Skipping.`);
+        this.logger.warn(
+          `Push notification job ${job.id} resolved to empty title or body. Skipping.`,
+        );
         return;
+      }
+
+      // Nếu kết quả dịch vẫn y hệt titleKey thì có thể là dịch thất bại (nestjs-i18n trả về key nếu không tìm thấy)
+      if (translatedTitle === payload.titleKey) {
+        this.logger.warn(
+          `Translation failed for titleKey: ${payload.titleKey}. Using raw key as fallback.`,
+        );
       }
 
       switch (type) {
@@ -84,7 +104,9 @@ export class NotificationProcessor extends WorkerHost {
 
         case 'deviceAlert':
           if (!payload.deviceId || !payload.eventType) {
-            throw new Error('DeviceId or eventType is missing for deviceAlert notification');
+            throw new Error(
+              'DeviceId or eventType is missing for deviceAlert notification',
+            );
           }
           await this.notificationService.sendDeviceAlert(
             payload.deviceId,
@@ -101,7 +123,10 @@ export class NotificationProcessor extends WorkerHost {
 
       this.logger.log(`Successfully processed notification job ${job.id}`);
     } catch (error) {
-      this.logger.error(`Failed to process notification job ${job.id}`, error instanceof Error ? error.stack : error);
+      this.logger.error(
+        `Failed to process notification job ${job.id}`,
+        error instanceof Error ? error.stack : error,
+      );
       throw error; // Let BullMQ retry
     }
   }

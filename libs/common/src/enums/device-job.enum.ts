@@ -17,4 +17,8 @@ export enum DEVICE_JOBS {
   UNBIND_DEVICE = 'unbind_device',
   /** Hard-delete Device sau khi iot-gateway đã gửi unbind cho chip */
   HARD_DELETE_DEVICE = 'hard_delete_device',
+  
+  // Automation execution
+  TIMER_EXECUTE = 'timer_execute',
+  SCHEDULE_EXECUTE = 'schedule_execute',
 }

@@ -23,6 +23,7 @@ import { DeviceModule } from './modules/device/device.module';
 import { HomeModule } from './modules/home/home.module';
 import { SceneModule } from './modules/scene/scene.module';
 import { EmqxAuthModule } from './modules/emqx-auth/emqx-auth.module';
+import { AutomationModule } from './modules/automation/automation.module';
 
 @Module({
   imports: [
@@ -74,6 +75,7 @@ import { EmqxAuthModule } from './modules/emqx-auth/emqx-auth.module';
     HomeModule,
     SceneModule,
     EmqxAuthModule,
+    AutomationModule,
   ],
   controllers: [HealthController],
 })

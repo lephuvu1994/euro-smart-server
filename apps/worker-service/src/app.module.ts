@@ -13,6 +13,7 @@ import { DeviceControlProcessor } from './processors/device-control.processor';
 import { DeviceStatusProcessor } from './processors/device-status.processor';
 import { NotificationProcessor } from './processors/notification.processor';
 import { MidNightScheduleWorker } from './schedulers/midnight.scheduler';
+import { AutomationModule } from './modules/automation/automation.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { MidNightScheduleWorker } from './schedulers/midnight.scheduler';
       { name: APP_BULLMQ_QUEUES.DEVICE_STATUS },
       { name: APP_BULLMQ_QUEUES.PUSH_NOTIFICATION },
     ),
+    AutomationModule,
   ],
   providers: [
     EmailProcessorWorker,

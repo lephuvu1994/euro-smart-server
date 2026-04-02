@@ -582,3 +582,91 @@ model ProvisionToken {
   @@index([userId])
   @@map("t_provision_token")
 }
+
+// ==========================================
+// 8. AUTOMATION (Timer & Schedule)
+// ==========================================
+
+enum AutomationTargetType {
+  DEVICE_ENTITY // Tác động lên 1 Công tắc, 1 Đèn, 1 Cảm biến
+  SCENE         // Tác động lên 1 Kịch bản
+}
+
+enum TimerStatus {
+  PENDING
+  EXECUTING
+  COMPLETED
+  CANCELLED
+}
+
+// TIMER: Chạy một lần rồi bỏ (Ephemeral)
+// BullMQ chạy xong sẽ xóa luôn record này, không lưu rác.
+model DeviceTimer {
+  id           String               @id @default(uuid()) @db.Uuid
+  userId       String               @map("user_id") @db.Uuid
+  name         String?
+  
+  targetType   AutomationTargetType @map("target_type")
+  targetId     String               @map("target_id") @db.Uuid
+  
+  service      String
+  actions      Json                 @default("[]") // Hỗ trợ mảng Chained Actions
+  
+  executeAt    DateTime             @map("execute_at")
+  jobId        String?              @unique @map("job_id") // ID để hủy BullMQ Job
+
+  createdAt    DateTime             @default(now()) @map("created_at")
+
+  @@index([executeAt]) 
+  @@map("t_device_timer")
+}
+
+// SCHEDULE: Chạy lặp lại
+model DeviceSchedule {
+  id           String               @id @default(uuid()) @db.Uuid
+  userId       String               @map("user_id") @db.Uuid
+  name         String
+  
+  targetType   AutomationTargetType @map("target_type")
+  targetId     String               @map("target_id") @db.Uuid
+  
+  service      String
+  actions      Json                 @default("[]") // Hỗ trợ mảng Chained Actions
+  
+  cronExpression String?            @map("cron_expression")
+  daysOfWeek     Int[]              @default([]) @map("days_of_week")
+  timeOfDay      String?            @map("time_of_day")
+  timezone       String             @default("Asia/Ho_Chi_Minh")
+  
+  jitterSeconds  Int                @default(0) @map("jitter_seconds")
+  
+  isActive       Boolean            @default(true) @map("is_active")
+  nextExecuteAt  DateTime?          @map("next_execute_at") 
+  lastExecutedAt DateTime?          @map("last_executed_at") // Track missed jobs
+
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+
+  @@index([isActive, nextExecuteAt])
+  @@map("t_device_schedule")
+}
+
+// THE AUDIT LOG: Lưu mọi kết quả chạy của Timer & Schedule (TimescaleDB Hypertable)
+model ScheduleExecutionLog {
+  id           String               @default(uuid()) @db.Uuid
+  
+  sourceType   String               // 'TIMER' hoặc 'SCHEDULE'
+  sourceId     String               @map("source_id") @db.Uuid
+  userId       String               @map("user_id") @db.Uuid
+
+  status       String               // 'SUCCESS' hoặc 'FAILED'
+  errorReason  String?              @map("error_reason")
+  
+  executedAt   DateTime             @default(now()) @map("executed_at")
+
+  // TimescaleDB yêu cầu primary key hoặc unique index phải bao gồm partition key (executedAt)
+  @@id([id, executedAt])
+  @@index([sourceId])
+  @@index([executedAt(sort: Desc)])
+  @@map("t_schedule_execution_log")
+}

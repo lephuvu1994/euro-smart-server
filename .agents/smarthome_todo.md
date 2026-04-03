@@ -109,8 +109,9 @@ Cho phép người dùng thay đổi thông tin định danh cá nhân như Tên
 
 **A. Phía Server (Backend: core-api)**
 - [x] Phát triển API Endpoint `PUT /v1/user`: Cập nhật thông tin `firstName`, `lastName`, `avatar`.
-- [ ] Tích hợp xử lý Upload ảnh Avatar: Sử dụng S3 hoặc Local Storage để lưu trữ ảnh thực tế thay vì chỉ lưu chuỗi string.
+- [x] Tích hợp xử lý Upload ảnh Avatar: Chuyển sang upload qua Cloudinary trên App, BE chỉ nhận link.
 - [ ] Validation nâng cao: Kiểm tra độ dài, ký tự đặc biệt cho tên người dùng.
+- [ ] Thực hiện Manual Verify (Kiểm tra thực tế luồng upload avatar, update state, UI phản hồi) trên thiết bị thật / simulator.
 
 **B. Phía Mobile App (App: new-app)**
 - [ ] Thiết kế UI màn hình "Hồ sơ cá nhân" (Profile): Hiển thị thông tin hiện tại và các trường cho phép chỉnh sửa.

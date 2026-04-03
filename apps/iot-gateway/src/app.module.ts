@@ -7,8 +7,10 @@ import { configs, APP_BULLMQ_QUEUES } from '@app/common';
 import { MqttModule } from '@app/common/mqtt/mqtt.module';
 import { CustomLoggerModule } from '@app/common/logger/logger.module';
 import { IntegrationModule } from '@app/common';
-import { MqttInboundService } from './listeners/mqtt-inbound.service';
-
+import { DeviceStatusService } from './services/device-status.service';
+import { DeviceStateService } from './services/device-state.service';
+import { MqttListener } from './listeners/mqtt.listener';
+import { Zigbee2MqttListener } from './listeners/zigbee2mqtt.listener';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -41,7 +43,12 @@ import { MqttInboundService } from './listeners/mqtt-inbound.service';
       { name: APP_BULLMQ_QUEUES.PUSH_NOTIFICATION },
     ),
   ],
-  providers: [MqttInboundService],
+  providers: [
+    DeviceStateService,
+    DeviceStatusService,
+    MqttListener,
+    Zigbee2MqttListener,
+  ],
   exports: [],
 })
 export class AppModule {}

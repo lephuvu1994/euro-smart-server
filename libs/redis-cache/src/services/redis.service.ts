@@ -31,6 +31,18 @@ export class RedisService implements OnModuleDestroy {
     return await this.redisClient.set(key, finalValue);
   }
 
+  /**
+   * Acquire a distributed lock with TTL
+   */
+  async setnxWithTtl(
+    key: string,
+    value: string,
+    ttlMs: number,
+  ): Promise<boolean> {
+    const result = await this.redisClient.set(key, value, 'PX', ttlMs, 'NX');
+    return result === 'OK';
+  }
+
   // --- HASH (Dùng cho Device Shadow / Telemetry) ---
 
   /**

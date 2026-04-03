@@ -6,6 +6,37 @@ import { DatabaseService } from '@app/database';
 import { AutomationTargetType } from '@prisma/client';
 import { InjectQueue } from '@nestjs/bullmq';
 
+// ---------------------------------------------------------------------------
+// Typed job payload interfaces — no `any`
+// ---------------------------------------------------------------------------
+
+interface AutomationAction {
+  state?: number | string | boolean;
+  value?: number | string | boolean;
+  delay?: number;
+  [key: string]: unknown;
+}
+
+interface TimerExecutePayload {
+  timerId: string;
+  /** Serialized by AutomationService — skips DB re-query */
+  actions?: AutomationAction[];
+  targetType?: AutomationTargetType;
+  targetId?: string;
+  service?: string;
+  userId?: string;
+}
+
+interface ScheduleExecutePayload {
+  scheduleId: string;
+  /** Serialized by ScheduleCronService — skips DB re-query */
+  actions?: AutomationAction[];
+  targetType?: AutomationTargetType;
+  targetId?: string;
+  service?: string;
+  userId?: string;
+}
+
 @Processor(APP_BULLMQ_QUEUES.AUTOMATION, {
   concurrency: 50,
   limiter: {
@@ -28,134 +59,181 @@ export class AutomationProcessor extends WorkerHost {
   async process(job: Job): Promise<unknown> {
     switch (job.name) {
       case DEVICE_JOBS.TIMER_EXECUTE:
-        return this.handleTimerExecute(job.data);
+        return this.handleTimerExecute(job.data as TimerExecutePayload);
       case DEVICE_JOBS.SCHEDULE_EXECUTE:
-        return this.handleScheduleExecute(job.data);
+        return this.handleScheduleExecute(job.data as ScheduleExecutePayload);
       default:
         this.logger.warn(`Unknown job name: ${job.name}`);
     }
   }
 
-  private async handleTimerExecute(data: { timerId: string }) {
-    const timer = await this.prisma.deviceTimer.findUnique({
-      where: { id: data.timerId },
-    });
+  /**
+   * Execute a one-shot timer.
+   * Optimistic path: uses serialized payload from AutomationService (0 DB reads).
+   * Fallback path: loads from DB if payload is incomplete (backwards-compat).
+   */
+  private async handleTimerExecute(data: TimerExecutePayload): Promise<void> {
+    let targetType = data.targetType;
+    let targetId = data.targetId;
+    let service = data.service;
+    let userId = data.userId;
+    let actions = data.actions;
 
-    if (!timer) {
-      return;
+    // Fallback: load from DB if payload is missing (old-enqueued jobs)
+    if (!targetType || !targetId || !actions) {
+      const timer = await this.prisma.deviceTimer.findUnique({
+        where: { id: data.timerId },
+      });
+      if (!timer) return;
+
+      targetType = timer.targetType;
+      targetId = timer.targetId;
+      service = timer.service;
+      userId = timer.userId;
+      actions = (timer.actions as AutomationAction[]) ?? [];
     }
 
     let status = 'SUCCESS';
-    let errorReason = null;
+    let errorReason: string | null = null;
 
     try {
-      // actions is an array, we execute the first one for now or handle chain
-      const actions = (timer.actions as any[]) || [];
-      if (actions.length > 0) {
-        // For simplicity in this iteration, we execute actions sequentially or the first one
-        // Production would use a recursion pattern with BullMQ delay for 'DELAY' actions
-        for (const action of actions) {
-           await this.executeAction(timer.targetType, timer.targetId, timer.service, action);
-        }
+      for (const action of (actions ?? [])) {
+        await this.executeAction(
+          targetType as AutomationTargetType,
+          targetId as string,
+          service ?? '',
+          action,
+        );
       }
     } catch (error) {
       status = 'FAILED';
-      errorReason = error.message;
+      errorReason = error instanceof Error ? error.message : String(error);
       this.logger.error(`Timer execution failed: ${errorReason}`);
     }
 
-    // Ghi log vào Hypertable (TimescaleDB)
+    // Write audit log to TimescaleDB hypertable
     await this.prisma.scheduleExecutionLog.create({
       data: {
         sourceType: 'TIMER',
-        sourceId: timer.id,
-        userId: timer.userId,
+        sourceId: data.timerId,
+        userId: userId ?? null,
         status,
         errorReason,
-      }
+      },
     });
 
-    // Ephemeral: Xóa record sau khi chạy xong
-    await this.prisma.deviceTimer.delete({
-      where: { id: timer.id }
+    // Ephemeral: delete timer after execution
+    await this.prisma.deviceTimer.delete({ where: { id: data.timerId } }).catch(() => {
+      // Already deleted — safe to ignore
     });
   }
 
-  private async handleScheduleExecute(data: { scheduleId: string }) {
-    const schedule = await this.prisma.deviceSchedule.findUnique({
-      where: { id: data.scheduleId },
-    });
+  /**
+   * Execute a recurring schedule tick.
+   * Optimistic path: uses serialized payload from ScheduleCronService (0 DB reads).
+   * Fallback path: loads from DB if payload is incomplete (backwards-compat).
+   */
+  private async handleScheduleExecute(data: ScheduleExecutePayload): Promise<void> {
+    let targetType = data.targetType;
+    let targetId = data.targetId;
+    let service = data.service;
+    let userId = data.userId;
+    let actions = data.actions;
 
-    if (!schedule || !schedule.isActive) {
-      return;
+    // Fallback: load from DB if payload is missing
+    if (!targetType || !targetId || !actions) {
+      const schedule = await this.prisma.deviceSchedule.findUnique({
+        where: { id: data.scheduleId },
+      });
+      if (!schedule || !schedule.isActive) return;
+
+      targetType = schedule.targetType;
+      targetId = schedule.targetId;
+      service = schedule.service;
+      userId = schedule.userId;
+      actions = (schedule.actions as AutomationAction[]) ?? [];
     }
 
     let status = 'SUCCESS';
-    let errorReason = null;
+    let errorReason: string | null = null;
 
     try {
-      const actions = (schedule.actions as any[]) || [];
-       for (const action of actions) {
-          await this.executeAction(schedule.targetType, schedule.targetId, schedule.service, action);
-       }
+      for (const action of (actions ?? [])) {
+        await this.executeAction(
+          targetType as AutomationTargetType,
+          targetId as string,
+          service ?? '',
+          action,
+        );
+      }
     } catch (error) {
       status = 'FAILED';
-      errorReason = error.message;
+      errorReason = error instanceof Error ? error.message : String(error);
       this.logger.error(`Schedule execution failed: ${errorReason}`);
     }
 
-    // Ghi log vào Hypertable
-    await this.prisma.scheduleExecutionLog.create({
-      data: {
-        sourceType: 'SCHEDULE',
-        sourceId: schedule.id,
-        userId: schedule.userId,
-        status,
-        errorReason,
-      }
-    });
-
-    // Update lastExecutedAt
-    await this.prisma.deviceSchedule.update({
-      where: { id: schedule.id },
-      data: { lastExecutedAt: new Date() }
-    });
+    // Batch log write + lastExecutedAt update in parallel
+    await Promise.all([
+      this.prisma.scheduleExecutionLog.create({
+        data: {
+          sourceType: 'SCHEDULE',
+          sourceId: data.scheduleId,
+          userId: userId ?? null,
+          status,
+          errorReason,
+        },
+      }),
+      this.prisma.deviceSchedule
+        .update({
+          where: { id: data.scheduleId },
+          data: { lastExecutedAt: new Date() },
+        })
+        .catch(() => {
+          // Schedule may have been deleted concurrently — safe to ignore
+        }),
+    ]);
   }
 
   private async executeAction(
     targetType: AutomationTargetType,
     targetId: string,
-    service: string,
-    actionData: any,
-  ) {
+    _service: string,
+    action: AutomationAction,
+  ): Promise<void> {
     if (targetType === AutomationTargetType.SCENE) {
       await this.deviceControlQueue.add(
         DEVICE_JOBS.RUN_SCENE,
         { sceneId: targetId, source: 'automation' },
-        { priority: 1, removeOnComplete: true }
+        { priority: 1, removeOnComplete: true },
       );
-    } else if (targetType === AutomationTargetType.DEVICE_ENTITY) {
+      return;
+    }
+
+    if (targetType === AutomationTargetType.DEVICE_ENTITY) {
       const entity = await this.prisma.deviceEntity.findUnique({
         where: { id: targetId },
         include: { device: true },
       });
 
-      if (!entity || !entity.device) {
+      if (!entity?.device) {
         throw new Error(`DeviceEntity not found: ${targetId}`);
       }
 
-      const value = actionData?.state ?? actionData?.value ?? 1;
+      const value =
+        (action.state as string | number | boolean | undefined) ??
+        (action.value as string | number | boolean | undefined) ??
+        1;
 
       await this.deviceControlQueue.add(
         DEVICE_JOBS.CONTROL_CMD,
         {
           token: entity.device.token,
           entityCode: entity.code,
-          value: value,
+          value,
           userId: entity.device.ownerId,
           source: 'automation',
         },
-        { priority: 1, removeOnComplete: true }
+        { priority: 1, removeOnComplete: true },
       );
     }
   }

@@ -1,4 +1,5 @@
 // src/modules/device/processors/device-control.processor.ts
+// Single source of truth — worker-service is the ONLY consumer of DEVICE_CONTROL queue.
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Job, Queue } from 'bullmq';
@@ -7,6 +8,66 @@ import { APP_BULLMQ_QUEUES } from '@app/common';
 import { RedisService } from '@app/redis-cache';
 import { IntegrationManager, SceneTriggerType, DEVICE_JOBS } from '@app/common';
 import { DatabaseService } from '@app/database';
+import { DeviceEntity } from '@prisma/client';
+
+// ---------------------------------------------------------------------------
+// Typed interfaces for job payloads (avoid `any`)
+// ---------------------------------------------------------------------------
+
+interface ControlCmdPayload {
+  token: string;
+  entityCode: string;
+  value: string | number | boolean;
+  userId?: string;
+  source?: string;
+}
+
+interface EntityPayload {
+  entityCode: string;
+  value: string | number | boolean;
+}
+
+interface ControlDeviceValueCmdPayload {
+  token: string;
+  entityPayloads: EntityPayload[];
+  userId?: string;
+}
+
+interface SceneAction {
+  deviceToken: string;
+  entityCode: string;
+  value: string | number | boolean;
+}
+
+interface SceneDeviceAction {
+  entityCode: string;
+  value: string | number | boolean;
+}
+
+interface SceneDeviceActionsPayload {
+  deviceToken: string;
+  actions: SceneDeviceAction[];
+}
+
+interface CheckDeviceStateTriggersPayload {
+  deviceToken: string;
+  updates?: { entityCode: string; state: string | number | boolean; attributes?: Record<string, unknown>[] }[];
+}
+
+type CompareOperator = 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte';
+
+interface ConditionConfig {
+  deviceToken: string;
+  entityCode: string;
+  attributeKey?: string;
+  value?: string | number | boolean;
+  operator?: CompareOperator;
+}
+
+interface EntityState {
+  state?: string | number | boolean;
+  [key: string]: unknown;
+}
 
 @Processor(APP_BULLMQ_QUEUES.DEVICE_CONTROL)
 export class DeviceControlProcessor extends WorkerHost {
@@ -22,7 +83,7 @@ export class DeviceControlProcessor extends WorkerHost {
     super();
   }
 
-  async process(job: Job): Promise<any> {
+  async process(job: Job): Promise<unknown> {
     switch (job.name) {
       case DEVICE_JOBS.CONTROL_CMD:
         return await this.handleControlCommand(job);
@@ -52,10 +113,11 @@ export class DeviceControlProcessor extends WorkerHost {
    * Điều khiển 1 entity của device
    */
   private async handleControlCommand(job: Job): Promise<unknown> {
-    const { token, entityCode, value, userId } = job.data;
+    const { token, entityCode, value, userId } =
+      job.data as ControlCmdPayload;
 
     this.logger.log(
-      `🚀 Executing control command: ${token} -> ${entityCode}:${value}`,
+      `🚀 Executing control command: ${token} -> ${entityCode}:${String(value)}`,
     );
 
     const device = await this.databaseService.device.findUnique({
@@ -94,9 +156,36 @@ export class DeviceControlProcessor extends WorkerHost {
       this.logger.log(
         `✅ [${driver.name}] Command dispatched for ${device.token}`,
       );
+
+      // Notify realtime UI
+      this.redisService.publish(
+        'socket:emit',
+        JSON.stringify({
+          room: `device_${device.token}`,
+          event: 'COMMAND_SENT',
+          data: {
+            deviceId: device.id,
+            entityCode,
+            value,
+            timestamp: new Date(),
+            status: 'sent',
+          },
+        }),
+      );
+
       return { success: true };
     } catch (error) {
-      this.logger.error(`❌ Failed to control device: ${error.message}`);
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`❌ Failed to control device: ${message}`);
+
+      this.redisService.publish(
+        'socket:emit',
+        JSON.stringify({
+          room: `device_${device.token}`,
+          event: 'COMMAND_ERROR',
+          data: { deviceId: device.id, error: message },
+        }),
+      );
 
       throw error;
     }
@@ -106,7 +195,8 @@ export class DeviceControlProcessor extends WorkerHost {
    * Điều khiển bulk nhiều entities cùng 1 device
    */
   private async handleControlDeviceValueCommand(job: Job): Promise<unknown> {
-    const { token, entityPayloads, userId } = job.data;
+    const { token, entityPayloads, userId } =
+      job.data as ControlDeviceValueCmdPayload;
 
     this.logger.log(
       `🚀 Executing control device value command: ${JSON.stringify(job.data)}`,
@@ -129,7 +219,7 @@ export class DeviceControlProcessor extends WorkerHost {
     try {
       // ★ Cache userId for all entities being controlled
       if (userId) {
-        const cachePromises = entityPayloads.map((ep: { entityCode: string }) => {
+        const cachePromises = entityPayloads.map((ep) => {
           const cacheKey = `cmd_user:${token}:${ep.entityCode}`;
           return this.redisService.sadd(cacheKey, userId).then(() =>
             this.redisService.expire(cacheKey, 10),
@@ -140,29 +230,58 @@ export class DeviceControlProcessor extends WorkerHost {
 
       const driver = this.integrationManager.getDriver(device.protocol);
 
-      const entities = device.entities.filter((e) =>
-        entityPayloads.some((ep: any) => ep.entityCode === e.code),
-      );
-      const newEntities = entities
+      const entityCodes = new Set(entityPayloads.map((ep) => ep.entityCode));
+      const entities = device.entities.filter((e) => entityCodes.has(e.code));
+
+      const newEntities: DeviceEntity[] = entities
         .map((e) => {
-          const ep = entityPayloads.find((ep: any) => ep.entityCode === e.code);
+          const ep = entityPayloads.find((p) => p.entityCode === e.code);
           if (!ep) return null;
-          const value = ep.value;
-          if (value !== undefined && !isNaN(Number(value))) {
-            return { ...e, state: Number(value) };
+          const numVal = Number(ep.value);
+          if (!Number.isNaN(numVal)) {
+            return { ...e, state: numVal, stateText: e.stateText };
           }
-          return { ...e, stateText: String(value) };
+          return { ...e, stateText: String(ep.value) };
         })
-        .filter(Boolean);
+        .filter((e): e is DeviceEntity => e !== null);
 
       await driver.setValueBulk(device, newEntities);
 
       this.logger.log(
         `✅ [${driver.name}] Command dispatched for ${device.token}`,
       );
+
+      // Notify realtime UI
+      this.redisService.publish(
+        'socket:emit',
+        JSON.stringify({
+          room: `device_${device.token}`,
+          event: 'COMMAND_SENT',
+          data: {
+            deviceId: device.id,
+            values: entityPayloads.map((ep) => ({
+              entityCode: ep.entityCode,
+              value: ep.value,
+            })),
+            timestamp: new Date(),
+            status: 'sent',
+          },
+        }),
+      );
+
       return { success: true };
     } catch (error) {
-      this.logger.error(`❌ Failed to control device: ${error.message}`);
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`❌ Failed to control device: ${message}`);
+
+      this.redisService.publish(
+        'socket:emit',
+        JSON.stringify({
+          room: `device_${device.token}`,
+          event: 'COMMAND_ERROR',
+          data: { deviceId: device.id, error: message },
+        }),
+      );
 
       throw error;
     }
@@ -171,7 +290,9 @@ export class DeviceControlProcessor extends WorkerHost {
   /**
    * RUN_SCENE: Load scene, gộp actions theo deviceToken, đẩy job/device.
    */
-  private async handleRunScene(job: Job): Promise<any> {
+  private async handleRunScene(
+    job: Job,
+  ): Promise<{ success: boolean; sceneId?: string; deviceCount?: number; actionCount?: number; error?: string }> {
     const { sceneId } = job.data as { sceneId: string };
     this.logger.log(`🎬 Scene ${sceneId}: grouping actions by device...`);
 
@@ -189,14 +310,8 @@ export class DeviceControlProcessor extends WorkerHost {
       return { success: false, error: 'Scene is inactive' };
     }
 
-    // Scene actions now use entityCode instead of featureCode
-    const actions =
-      (scene.actions as {
-        deviceToken: string;
-        entityCode: string;
-        value: any;
-      }[]) || [];
-    const byDevice = new Map<string, { entityCode: string; value: any }[]>();
+    const actions = (scene.actions as unknown as SceneAction[]) ?? [];
+    const byDevice = new Map<string, SceneDeviceAction[]>();
     for (const a of actions) {
       const list = byDevice.get(a.deviceToken) ?? [];
       list.push({ entityCode: a.entityCode, value: a.value });
@@ -207,7 +322,7 @@ export class DeviceControlProcessor extends WorkerHost {
     for (const [deviceToken, deviceActions] of byDevice) {
       await this.deviceQueue.add(
         DEVICE_JOBS.SCENE_DEVICE_ACTIONS,
-        { deviceToken, actions: deviceActions },
+        { deviceToken, actions: deviceActions } satisfies SceneDeviceActionsPayload,
         { priority: 2, attempts: 2, removeOnComplete: true },
       );
     }
@@ -226,11 +341,10 @@ export class DeviceControlProcessor extends WorkerHost {
   /**
    * SCENE_DEVICE_ACTIONS: Thực thi gộp toàn bộ entity actions của 1 device.
    */
-  private async handleSceneDeviceActions(job: Job): Promise<any> {
-    const { deviceToken, actions } = job.data as {
-      deviceToken: string;
-      actions: { entityCode: string; value: any }[];
-    };
+  private async handleSceneDeviceActions(
+    job: Job,
+  ): Promise<{ success: boolean; deviceToken?: string; entityCount?: number; skipped?: boolean; error?: string }> {
+    const { deviceToken, actions } = job.data as SceneDeviceActionsPayload;
 
     const device = await this.databaseService.device.findUnique({
       where: { token: deviceToken },
@@ -242,20 +356,17 @@ export class DeviceControlProcessor extends WorkerHost {
       return { success: false, deviceToken, error: 'Device not found' };
     }
 
-    const entities = device.entities.filter((e) =>
-      actions.some((a) => a.entityCode === e.code),
-    );
-    const newEntities = entities
+    const actionMap = new Map(actions.map((a) => [a.entityCode, a.value]));
+    const newEntities: DeviceEntity[] = device.entities
+      .filter((e) => actionMap.has(e.code))
       .map((e) => {
-        const act = actions.find((a) => a.entityCode === e.code);
-        if (!act) return null;
-        const value = act.value;
-        if (value !== undefined && value !== null && !isNaN(Number(value))) {
-          return { ...e, state: Number(value) };
+        const value = actionMap.get(e.code);
+        if (value !== undefined && value !== null) {
+          const numVal = Number(value);
+          if (!Number.isNaN(numVal)) return { ...e, state: numVal, stateText: e.stateText };
         }
-        return { ...e, stateText: value };
-      })
-      .filter(Boolean) as any[];
+        return { ...e, stateText: value !== undefined ? String(value) : null };
+      });
 
     if (newEntities.length === 0) {
       this.logger.warn(`Scene device ${deviceToken}: no valid actions`);
@@ -268,26 +379,52 @@ export class DeviceControlProcessor extends WorkerHost {
       this.logger.log(
         `✅ Scene device ${deviceToken}: ${newEntities.length} entity(ies)`,
       );
+
+      // Notify realtime UI
+      this.redisService.publish(
+        'socket:emit',
+        JSON.stringify({
+          room: `device_${device.token}`,
+          event: 'COMMAND_SENT',
+          data: {
+            deviceId: device.id,
+            values: newEntities.map((e) => ({
+              entityCode: e.code,
+              value: e.state ?? e.stateText,
+            })),
+            timestamp: new Date(),
+            status: 'sent',
+          },
+        }),
+      );
+
       return {
         success: true,
         deviceToken,
         entityCount: newEntities.length,
       };
-    } catch (err: any) {
-      this.logger.error(`❌ Scene device ${deviceToken}: ${err?.message}`);
-      throw err;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`❌ Scene device ${deviceToken}: ${message}`);
+
+      this.redisService.publish(
+        'socket:emit',
+        JSON.stringify({
+          room: `device_${device.token}`,
+          event: 'COMMAND_ERROR',
+          data: { deviceId: device.id, error: message },
+        }),
+      );
+
+      throw error;
     }
   }
 
   /**
    * CHECK_DEVICE_STATE_TRIGGERS: Đánh giá scene triggers khi device state thay đổi.
-   * Now uses entityCode instead of featureCode.
    */
-  private async handleCheckDeviceStateTriggers(job: Job): Promise<any> {
-    const { deviceToken } = job.data as {
-      deviceToken: string;
-      updates: { entityCode: string; state: any; attributes?: any[] }[];
-    };
+  private async handleCheckDeviceStateTriggers(job: Job): Promise<{ ok: boolean }> {
+    const { deviceToken } = job.data as CheckDeviceStateTriggersPayload;
 
     const scenes = await this.databaseService.scene.findMany({
       where: { active: true },
@@ -295,33 +432,30 @@ export class DeviceControlProcessor extends WorkerHost {
     });
 
     for (const scene of scenes) {
-      const triggers = (scene.triggers as any[]) ?? [];
+      const triggers = Array.isArray(scene.triggers) ? (scene.triggers as Record<string, unknown>[]) : [];
       for (const trigger of triggers) {
-        if (
-          trigger?.type !== SceneTriggerType.DEVICE_STATE ||
-          !trigger.deviceStateConfig?.conditions?.length
-        )
-          continue;
-        const hasThisDevice = trigger.deviceStateConfig.conditions.some(
-          (c: any) => c.deviceToken === deviceToken,
+        if (trigger?.['type'] !== SceneTriggerType.DEVICE_STATE) continue;
+
+        const deviceStateConfig = trigger['deviceStateConfig'] as {
+          conditionLogic: 'and' | 'or';
+          conditions: ConditionConfig[];
+        } | undefined;
+
+        if (!deviceStateConfig?.conditions?.length) continue;
+
+        const hasThisDevice = deviceStateConfig.conditions.some(
+          (c) => c.deviceToken === deviceToken,
         );
         if (!hasThisDevice) continue;
 
-        const logic = trigger.deviceStateConfig.conditionLogic as 'and' | 'or';
-        const conditions = trigger.deviceStateConfig.conditions as Array<{
-          deviceToken: string;
-          entityCode: string;
-          attributeKey?: string;
-          value?: any;
-          operator?: string;
-        }>;
+        const logic = deviceStateConfig.conditionLogic;
+        const conditions = deviceStateConfig.conditions;
 
-        let match = false;
-        if (logic === 'and') {
-          match = await this.evaluateConditionsAll(conditions);
-        } else {
-          match = await this.evaluateConditionsAny(conditions);
-        }
+        const match =
+          logic === 'and'
+            ? await this.evaluateConditionsAll(conditions)
+            : await this.evaluateConditionsAny(conditions);
+
         if (match) {
           await this.deviceQueue.add(
             DEVICE_JOBS.RUN_SCENE,
@@ -337,34 +471,16 @@ export class DeviceControlProcessor extends WorkerHost {
     return { ok: true };
   }
 
-  private async evaluateConditionsAll(
-    conditions: Array<{
-      deviceToken: string;
-      entityCode: string;
-      attributeKey?: string;
-      value?: any;
-      operator?: string;
-    }>,
-  ): Promise<boolean> {
+  private async evaluateConditionsAll(conditions: ConditionConfig[]): Promise<boolean> {
     for (const c of conditions) {
-      const ok = await this.evaluateOneCondition(c);
-      if (!ok) return false;
+      if (!(await this.evaluateOneCondition(c))) return false;
     }
     return true;
   }
 
-  private async evaluateConditionsAny(
-    conditions: Array<{
-      deviceToken: string;
-      entityCode: string;
-      attributeKey?: string;
-      value?: any;
-      operator?: string;
-    }>,
-  ): Promise<boolean> {
+  private async evaluateConditionsAny(conditions: ConditionConfig[]): Promise<boolean> {
     for (const c of conditions) {
-      const ok = await this.evaluateOneCondition(c);
-      if (ok) return true;
+      if (await this.evaluateOneCondition(c)) return true;
     }
     return false;
   }
@@ -373,13 +489,7 @@ export class DeviceControlProcessor extends WorkerHost {
    * Evaluate 1 condition: read entity state from Redis, compare with expected value.
    * Supports both entity primary state and specific attribute values.
    */
-  private async evaluateOneCondition(condition: {
-    deviceToken: string;
-    entityCode: string;
-    attributeKey?: string;
-    value?: any;
-    operator?: string;
-  }): Promise<boolean> {
+  private async evaluateOneCondition(condition: ConditionConfig): Promise<boolean> {
     const device = await this.databaseService.device.findUnique({
       where: { token: condition.deviceToken },
       select: { id: true },
@@ -392,20 +502,18 @@ export class DeviceControlProcessor extends WorkerHost {
     );
     if (raw === null) return false;
 
-    let entityState: any;
+    let entityState: EntityState;
     try {
-      entityState = JSON.parse(raw);
+      entityState = JSON.parse(raw) as EntityState;
     } catch {
       entityState = {};
     }
 
     // Get the value to compare: attribute or primary state
-    let current: any;
-    if (condition.attributeKey) {
-      current = entityState[condition.attributeKey];
-    } else {
-      current = entityState.state;
-    }
+    let current: string | number | boolean | unknown =
+      condition.attributeKey
+        ? entityState[condition.attributeKey]
+        : entityState.state;
 
     if (current === undefined || current === null) return false;
 
@@ -413,7 +521,7 @@ export class DeviceControlProcessor extends WorkerHost {
     const n = Number(current);
     current = Number.isNaN(n) ? current : n;
 
-    const op = condition.operator ?? 'eq';
+    const op: CompareOperator = (condition.operator as CompareOperator) ?? 'eq';
     const expected = condition.value;
 
     switch (op) {
@@ -434,7 +542,7 @@ export class DeviceControlProcessor extends WorkerHost {
     }
   }
 
-  private valuesEqual(a: any, b: any): boolean {
+  private valuesEqual(a: unknown, b: unknown): boolean {
     if (a === b) return true;
     if (typeof a === 'number' && typeof b === 'number') return a === b;
     if (typeof a === 'string' && typeof b === 'string') return a === b;
@@ -443,15 +551,13 @@ export class DeviceControlProcessor extends WorkerHost {
 
   /**
    * Hard-delete Device (cascade) + Redis cleanup.
-   * Called by iot-gateway after it sends unbind command to chip.
    * Idempotent: safe to call even if device already deleted.
    */
-  private async handleHardDeleteDevice(job: Job): Promise<any> {
-    const { deviceId, token } = job.data;
+  private async handleHardDeleteDevice(job: Job): Promise<{ success: boolean; skipped?: boolean; error?: string }> {
+    const { deviceId, token } = job.data as { deviceId: string; token: string };
     this.logger.log(`🗑️ Hard-deleting device: ${deviceId} (token: ${token})`);
 
     try {
-      // 1. Hard delete Device (cascade: Entity, Attribute, History, Share)
       const device = await this.databaseService.device.findFirst({
         where: { id: deviceId, unboundAt: { not: null } },
       });
@@ -464,12 +570,15 @@ export class DeviceControlProcessor extends WorkerHost {
       await this.databaseService.device.delete({ where: { id: deviceId } });
       this.logger.log(`✅ Device ${deviceId} hard-deleted from DB`);
 
-      // 2. Redis cleanup
+      // Redis cleanup
       await this.redisService.del(`status:${token}`).catch(() => undefined);
       await this.redisService.del(`device:shadow:${token}`).catch(() => undefined);
 
       const trackingKey = `device:${deviceId}:_ekeys`;
-      const entityKeys = await this.redisService.smembers(trackingKey).catch(() => [] as string[]);
+      const entityKeys = await this.redisService
+        .smembers(trackingKey)
+        .catch(() => [] as string[]);
+
       if (entityKeys.length > 0) {
         await this.redisService.del([...entityKeys, trackingKey]).catch(() => undefined);
       } else {

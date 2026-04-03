@@ -54,3 +54,9 @@ export * from './integration/drivers/mqtt-generic.driver';
 export * from './integration/drivers/zigbee.generic.driver';
 export * from './integration/interfaces/device-driver.interface';
 export * from './integration/integration.module';
+
+// Utils
+export * from './utils/schedule-next-calculator';
+
+// Services (shared across apps)
+export * from './services/scene-trigger-index.service';

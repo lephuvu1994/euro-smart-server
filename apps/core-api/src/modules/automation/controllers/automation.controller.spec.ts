@@ -22,6 +22,11 @@ const createMockAutomationService = () => ({
   getTimers: jest.fn(),
   createSchedule: jest.fn(),
   getSchedules: jest.fn(),
+  deleteTimer: jest.fn(),
+  deleteSchedule: jest.fn(),
+  toggleSchedule: jest.fn(),
+  getExecutionStats: jest.fn(),
+  getQueueMetrics: jest.fn(),
 });
 
 describe('AutomationController', () => {
@@ -88,6 +93,45 @@ describe('AutomationController', () => {
       const mockReq = { user: { userId: 'user-1' } } as IRequest;
       await controller.getSchedules(mockReq);
       expect(service.getSchedules).toHaveBeenCalledWith('user-1');
+    });
+  });
+
+  describe('deleteTimer', () => {
+    it('should delete a timer', async () => {
+      const mockReq = { user: { userId: 'user-1' } } as IRequest;
+      await controller.deleteTimer(mockReq, 't1');
+      expect(service.deleteTimer).toHaveBeenCalledWith('user-1', 't1');
+    });
+  });
+
+  describe('deleteSchedule', () => {
+    it('should delete a schedule', async () => {
+      const mockReq = { user: { userId: 'user-1' } } as IRequest;
+      await controller.deleteSchedule(mockReq, 's1');
+      expect(service.deleteSchedule).toHaveBeenCalledWith('user-1', 's1');
+    });
+  });
+
+  describe('toggleSchedule', () => {
+    it('should toggle a schedule', async () => {
+      const mockReq = { user: { userId: 'user-1' } } as IRequest;
+      await controller.toggleSchedule(mockReq, 's1', { isActive: false });
+      expect(service.toggleSchedule).toHaveBeenCalledWith('user-1', 's1', false);
+    });
+  });
+
+  describe('getStats', () => {
+    it('should call getExecutionStats', async () => {
+      const mockReq = { user: { userId: 'user-1' } } as IRequest;
+      await controller.getStats(mockReq);
+      expect(service.getExecutionStats).toHaveBeenCalledWith('user-1');
+    });
+  });
+
+  describe('getQueueMetrics', () => {
+    it('should call getQueueMetrics', async () => {
+      await controller.getQueueMetrics();
+      expect(service.getQueueMetrics).toHaveBeenCalled();
     });
   });
 });

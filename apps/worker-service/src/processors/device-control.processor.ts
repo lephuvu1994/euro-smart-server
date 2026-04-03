@@ -435,7 +435,7 @@ export class DeviceControlProcessor extends WorkerHost {
 
     const scenes = await this.databaseService.scene.findMany({
       where: { id: { in: sceneIds }, active: true },
-      select: { id: true, name: true, triggers: true },
+      select: { id: true, name: true, triggers: true, minIntervalSeconds: true, lastFiredAt: true },
     });
 
     for (const scene of scenes) {
@@ -464,14 +464,32 @@ export class DeviceControlProcessor extends WorkerHost {
             : await this.evaluateConditionsAny(conditions);
 
         if (match) {
+          if (scene.minIntervalSeconds && scene.lastFiredAt) {
+            const elapsed = (Date.now() - scene.lastFiredAt.getTime()) / 1000;
+            if (elapsed < scene.minIntervalSeconds) {
+              this.logger.debug(
+                `[DEVICE_STATE] Scene "${scene.name}" skipped due to rate limit (${elapsed.toFixed(1)}s < ${scene.minIntervalSeconds}s)`,
+              );
+              break; // Skip other triggers for this scene too
+            }
+          }
+
           await this.deviceQueue.add(
             DEVICE_JOBS.RUN_SCENE,
             { sceneId: scene.id },
             { priority: 1, attempts: 1, removeOnComplete: true },
           );
+
+          await this.databaseService.scene.update({
+            where: { id: scene.id },
+            data: { lastFiredAt: new Date() },
+          });
+
           this.logger.log(
             `[DEVICE_STATE] Fired scene "${scene.name}" (${scene.id})`,
           );
+
+          break; // Stop evaluating triggers since the scene has fired
         }
       }
     }

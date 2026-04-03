@@ -111,6 +111,15 @@ export class SceneService {
     dto: CreateSceneDto,
   ): Promise<SceneResponseDto> {
     await this.ensureUserCanAccessHome(userId, homeId);
+
+    const [user, sceneCount] = await Promise.all([
+      this.databaseService.user.findUnique({ where: { id: userId }, select: { maxScenes: true } }),
+      this.databaseService.scene.count({ where: { homeId } }),
+    ]);
+
+    if (sceneCount >= (user?.maxScenes ?? 100)) {
+      throw new HttpException('scene.error.sceneQuotaExceeded', HttpStatus.BAD_REQUEST);
+    }
     const scene = await this.databaseService.scene.create({
       data: {
         homeId,

@@ -175,4 +175,16 @@ export class AutomationService {
       data: { isActive, nextExecuteAt },
     });
   }
+
+  async getExecutionStats(userId: string) {
+    const [successCount, failCount] = await Promise.all([
+      this.prisma.scheduleExecutionLog.count({ where: { userId, status: 'SUCCESS' } }),
+      this.prisma.scheduleExecutionLog.count({ where: { userId, status: 'FAILED' } }),
+    ]);
+    return { successCount, failCount, totalCount: successCount + failCount };
+  }
+
+  async getQueueMetrics() {
+    return this.automationQueue.getJobCounts();
+  }
 }

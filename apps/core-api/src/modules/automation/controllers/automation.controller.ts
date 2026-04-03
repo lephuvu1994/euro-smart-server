@@ -28,6 +28,18 @@ class ToggleScheduleDto {
 export class AutomationController {
   constructor(private readonly automationService: AutomationService) {}
 
+  @ApiOperation({ summary: 'Get automation execution stats' })
+  @Get('stats')
+  getStats(@Req() req: IRequest) {
+    return this.automationService.getExecutionStats(req.user.userId);
+  }
+
+  @ApiOperation({ summary: 'Get BullMQ queue metrics (Admin only)' })
+  @Get('queue-metrics')
+  getQueueMetrics() {
+    return this.automationService.getQueueMetrics();
+  }
+
   // ── Timers ──────────────────────────────────────────────────────────────
 
   @ApiOperation({ summary: 'Create a one-shot timer' })

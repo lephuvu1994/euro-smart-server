@@ -1,30 +1,89 @@
-import { Body, Controller, Get, Post, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Patch,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AutomationService } from '../services/automation.service';
 import { CreateTimerDto } from '../dto/create-timer.dto';
 import { CreateScheduleDto } from '../dto/create-schedule.dto';
 import { IRequest } from '@app/common';
+import { JwtAccessGuard } from '@app/common';
 
+class ToggleScheduleDto {
+  isActive!: boolean;
+}
+
+@ApiTags('Automation')
+@UseGuards(JwtAccessGuard)
 @Controller('v1/automation')
 export class AutomationController {
   constructor(private readonly automationService: AutomationService) {}
 
+  // ── Timers ──────────────────────────────────────────────────────────────
+
+  @ApiOperation({ summary: 'Create a one-shot timer' })
   @Post('timers')
-  async createTimer(@Req() req: IRequest, @Body() dto: CreateTimerDto) {
+  createTimer(@Req() req: IRequest, @Body() dto: CreateTimerDto) {
     return this.automationService.createTimer(req.user.userId, dto);
   }
 
+  @ApiOperation({ summary: 'List all timers for current user' })
   @Get('timers')
-  async getTimers(@Req() req: IRequest) {
+  getTimers(@Req() req: IRequest) {
     return this.automationService.getTimers(req.user.userId);
   }
 
+  @ApiOperation({ summary: 'Cancel a pending timer' })
+  @Delete('timers/:timerId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  deleteTimer(@Req() req: IRequest, @Param('timerId') timerId: string) {
+    return this.automationService.deleteTimer(req.user.userId, timerId);
+  }
+
+  // ── Schedules ────────────────────────────────────────────────────────────
+
+  @ApiOperation({ summary: 'Create a recurring schedule' })
   @Post('schedules')
-  async createSchedule(@Req() req: IRequest, @Body() dto: CreateScheduleDto) {
+  createSchedule(@Req() req: IRequest, @Body() dto: CreateScheduleDto) {
     return this.automationService.createSchedule(req.user.userId, dto);
   }
 
+  @ApiOperation({ summary: 'List all schedules for current user' })
   @Get('schedules')
-  async getSchedules(@Req() req: IRequest) {
+  getSchedules(@Req() req: IRequest) {
     return this.automationService.getSchedules(req.user.userId);
+  }
+
+  @ApiOperation({ summary: 'Enable or disable a schedule' })
+  @Patch('schedules/:scheduleId/toggle')
+  toggleSchedule(
+    @Req() req: IRequest,
+    @Param('scheduleId') scheduleId: string,
+    @Body() body: ToggleScheduleDto,
+  ) {
+    return this.automationService.toggleSchedule(
+      req.user.userId,
+      scheduleId,
+      body.isActive,
+    );
+  }
+
+  @ApiOperation({ summary: 'Delete a schedule' })
+  @Delete('schedules/:scheduleId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  deleteSchedule(
+    @Req() req: IRequest,
+    @Param('scheduleId') scheduleId: string,
+  ) {
+    return this.automationService.deleteSchedule(req.user.userId, scheduleId);
   }
 }

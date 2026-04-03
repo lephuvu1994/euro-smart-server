@@ -1,10 +1,21 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { DatabaseService } from '@app/database';
 import { InjectQueue } from '@nestjs/bullmq';
-import { APP_BULLMQ_QUEUES, DEVICE_JOBS } from '@app/common';
+import { APP_BULLMQ_QUEUES, DEVICE_JOBS, calculateNextExecution } from '@app/common';
 import { Queue } from 'bullmq';
+import { DeviceSchedule, DeviceTimer, Prisma } from '@prisma/client';
 import { CreateTimerDto } from '../dto/create-timer.dto';
 import { CreateScheduleDto } from '../dto/create-schedule.dto';
+
+// ---------------------------------------------------------------------------
+// Typed action item — no `any`
+// ---------------------------------------------------------------------------
+interface AutomationAction {
+  state?: number | string | boolean;
+  value?: number | string | boolean;
+  delay?: number;
+  [key: string]: unknown;
+}
 
 @Injectable()
 export class AutomationService {
@@ -14,9 +25,15 @@ export class AutomationService {
     private readonly automationQueue: Queue,
   ) {}
 
-  async createTimer(userId: string, dto: CreateTimerDto) {
+  async createTimer(userId: string, dto: CreateTimerDto): Promise<DeviceTimer> {
     const executeAt = new Date(dto.executeAt);
-    
+
+    if (executeAt <= new Date()) {
+      throw new BadRequestException('automation.error.executeDateMustBeFuture');
+    }
+
+    const actions: AutomationAction[] = (dto.actions as AutomationAction[]) ?? [];
+
     const timer = await this.prisma.deviceTimer.create({
       data: {
         userId,
@@ -24,85 +41,110 @@ export class AutomationService {
         targetType: dto.targetType,
         targetId: dto.targetId,
         service: dto.service,
-        actions: dto.actions || [] as any,
+        actions: actions as unknown as Prisma.InputJsonValue,
         executeAt,
       },
     });
 
     const delay = executeAt.getTime() - Date.now();
-    
-    // Add job to BullMQ
+
+    // Enqueue with full payload so worker does not need a DB round-trip
     await this.automationQueue.add(
       DEVICE_JOBS.TIMER_EXECUTE,
-      { timerId: timer.id },
-      { delay: delay > 0 ? delay : 0, removeOnComplete: true }
+      {
+        timerId: timer.id,
+        actions,
+        targetType: timer.targetType,
+        targetId: timer.targetId,
+        service: timer.service,
+        userId: timer.userId,
+      },
+      { delay: delay > 0 ? delay : 0, removeOnComplete: true },
     );
 
     return timer;
   }
 
-  async createSchedule(userId: string, dto: CreateScheduleDto) {
-    const nextExecuteAt = this.calculateNextExecution(dto);
+  async createSchedule(userId: string, dto: CreateScheduleDto): Promise<DeviceSchedule> {
+    const nextExecuteAt = calculateNextExecution({
+      cronExpression: dto.cronExpression,
+      daysOfWeek: dto.daysOfWeek,
+      timeOfDay: dto.timeOfDay,
+      timezone: dto.timezone,
+    });
 
-    const schedule = await this.prisma.deviceSchedule.create({
+    const actions: AutomationAction[] = (dto.actions as AutomationAction[]) ?? [];
+
+    return this.prisma.deviceSchedule.create({
       data: {
         userId,
         name: dto.name,
         targetType: dto.targetType,
         targetId: dto.targetId,
         service: dto.service,
-        actions: dto.actions || [] as any,
+        actions: actions as unknown as Prisma.InputJsonValue,
         cronExpression: dto.cronExpression,
-        daysOfWeek: dto.daysOfWeek || [],
+        daysOfWeek: dto.daysOfWeek ?? [],
         timeOfDay: dto.timeOfDay,
-        timezone: dto.timezone || 'Asia/Ho_Chi_Minh',
-        jitterSeconds: dto.jitterSeconds || 0,
+        timezone: dto.timezone ?? 'Asia/Ho_Chi_Minh',
+        jitterSeconds: dto.jitterSeconds ?? 0,
         isActive: true,
         nextExecuteAt,
       },
     });
-
-    return schedule;
   }
 
-  private calculateNextExecution(dto: Partial<CreateScheduleDto>): Date | null {
-    if (dto.cronExpression) {
-      try {
-        const cronParser = require('cron-parser');
-        const interval = cronParser.parseExpression(dto.cronExpression, { tz: dto.timezone || 'Asia/Ho_Chi_Minh' });
-        return interval.next().toDate();
-      } catch (_err) {
-        return null;
-      }
-    }
-
-    if (dto.daysOfWeek && dto.daysOfWeek.length > 0 && dto.timeOfDay) {
-      // timeOfDay format: "HH:mm"
-      const [hour, minute] = dto.timeOfDay.split(':').map(Number);
-      
-      const now = new Date();
-      // Simple timezone handling for demonstration, production would strictly use timezone lib.
-      const candidate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute, 0, 0);
-
-      // Find the next day that matches
-      for (let i = 0; i <= 7; i++) {
-        const testDate = new Date(candidate.getTime() + i * 24 * 60 * 60 * 1000);
-        if (dto.daysOfWeek.includes(testDate.getDay())) {
-          if (testDate > now) {
-            return testDate;
-          }
-        }
-      }
-    }
-
-    return null;
-  }
-
-  async getTimers(userId: string) {
+  async getTimers(userId: string): Promise<DeviceTimer[]> {
     return this.prisma.deviceTimer.findMany({ where: { userId } });
   }
 
-  async getSchedules(userId: string) {
+  async getSchedules(userId: string): Promise<DeviceSchedule[]> {
     return this.prisma.deviceSchedule.findMany({ where: { userId } });
+  }
+
+  async deleteTimer(userId: string, timerId: string): Promise<void> {
+    const timer = await this.prisma.deviceTimer.findFirst({
+      where: { id: timerId, userId },
+    });
+    if (!timer) throw new NotFoundException('automation.error.timerNotFound');
+
+    // Remove BullMQ job if jobId is stored
+    await this.prisma.deviceTimer.delete({ where: { id: timerId } });
+  }
+
+  async deleteSchedule(userId: string, scheduleId: string): Promise<void> {
+    const schedule = await this.prisma.deviceSchedule.findFirst({
+      where: { id: scheduleId, userId },
+    });
+    if (!schedule) throw new NotFoundException('automation.error.scheduleNotFound');
+
+    await this.prisma.deviceSchedule.delete({ where: { id: scheduleId } });
+  }
+
+  async toggleSchedule(
+    userId: string,
+    scheduleId: string,
+    isActive: boolean,
+  ): Promise<DeviceSchedule> {
+    const schedule = await this.prisma.deviceSchedule.findFirst({
+      where: { id: scheduleId, userId },
+    });
+    if (!schedule) throw new NotFoundException('automation.error.scheduleNotFound');
+
+    // Recalculate nextExecuteAt when re-enabling
+    const nextExecuteAt =
+      isActive
+        ? calculateNextExecution({
+            cronExpression: schedule.cronExpression,
+            daysOfWeek: schedule.daysOfWeek,
+            timeOfDay: schedule.timeOfDay,
+            timezone: schedule.timezone,
+          })
+        : schedule.nextExecuteAt;
+
+    return this.prisma.deviceSchedule.update({
+      where: { id: scheduleId },
+      data: { isActive, nextExecuteAt },
+    });
   }
 }

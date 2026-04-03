@@ -4,8 +4,17 @@ import { DatabaseService } from '@app/database';
 import { RedisService } from '@app/redis-cache';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { APP_BULLMQ_QUEUES, DEVICE_JOBS } from '@app/common';
+import { APP_BULLMQ_QUEUES, DEVICE_JOBS, calculateNextExecution } from '@app/common';
+import { DeviceSchedule } from '@prisma/client';
 
+/** Batch size per cursor page — keeps memory bounded at any scale */
+const BATCH_SIZE = 500;
+
+interface ScheduleUpdate {
+  id: string;
+  nextExecuteAt: Date | null;
+  isActive: boolean;
+}
 
 @Injectable()
 export class ScheduleCronService {
@@ -18,84 +27,122 @@ export class ScheduleCronService {
     private readonly automationQueue: Queue,
   ) {}
 
-  @Cron('0 * * * * *') // Run at 0 seconds of every minute
-  async scanSchedules() {
-    // Distributed Lock
-    const lock = await this.redis.getClient().set('lock:schedule_cron', '1', 'EX', 55, 'NX');
-    if (!lock) {
-      return; 
-    }
+  /** Runs at second 0 of every minute */
+  @Cron('0 * * * * *')
+  async scanSchedules(): Promise<void> {
+    // Distributed lock — prevents duplicate execution across multiple worker instances
+    const lock = await this.redis
+      .getClient()
+      .set('lock:schedule_cron', '1', 'EX', 55, 'NX');
+    if (!lock) return;
 
     try {
-      const now = new Date();
-      const jobsToRun = await this.prisma.deviceSchedule.findMany({
-        where: { 
-          isActive: true, 
-          nextExecuteAt: { lte: now } 
-        },
+      await this.processBatches();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error in schedule cron: ${message}`);
+    }
+  }
+
+  private async processBatches(): Promise<void> {
+    const now = new Date();
+    let cursor: string | undefined;
+    const allUpdates: ScheduleUpdate[] = [];
+    let totalQueued = 0;
+
+    // Cursor-based pagination — prevents loading all rows into memory
+    while (true) {
+      const batch: DeviceSchedule[] = await this.prisma.deviceSchedule.findMany({
+        where: { isActive: true, nextExecuteAt: { lte: now } },
+        take: BATCH_SIZE,
+        orderBy: { id: 'asc' },
+        ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
       });
 
-      if (jobsToRun.length === 0) return;
+      if (batch.length === 0) break;
+      cursor = batch[batch.length - 1].id;
 
-      this.logger.log(`Found ${jobsToRun.length} schedules to execute.`);
+      // Enqueue batch of BullMQ jobs with full payload (zero extra DB reads in processor)
+      const bulkJobs = batch.map((schedule) => {
+        const jitterMs =
+          schedule.jitterSeconds > 0
+            ? Math.floor(Math.random() * schedule.jitterSeconds * 1000)
+            : 0;
 
-      const bulkJobs = jobsToRun.map(schedule => {
-        // Jittering: random 0 -> jitterSeconds.
-        const jitterMs = schedule.jitterSeconds > 0 
-          ? Math.floor(Math.random() * (schedule.jitterSeconds * 1000))
-          : 0;
-        
         return {
           name: DEVICE_JOBS.SCHEDULE_EXECUTE,
-          data: { scheduleId: schedule.id },
-          opts: { delay: jitterMs, removeOnComplete: true }
+          data: {
+            scheduleId: schedule.id,
+            // Serialize full payload — AutomationProcessor skips re-querying DB
+            actions: schedule.actions,
+            targetType: schedule.targetType,
+            targetId: schedule.targetId,
+            service: schedule.service,
+            userId: schedule.userId,
+          },
+          opts: { delay: jitterMs, removeOnComplete: true },
         };
       });
 
-      // Add bulk
       await this.automationQueue.addBulk(bulkJobs);
+      totalQueued += batch.length;
 
-      // Recalculate nextExecuteAt
-      for (const schedule of jobsToRun) {
-        let nextTs: Date | null = null;
-        
-        if (schedule.cronExpression) {
-          try {
-            const cronParser = require('cron-parser');
-            const interval = cronParser.parseExpression(schedule.cronExpression, { tz: schedule.timezone });
-            nextTs = interval.next().toDate();
-          } catch (_e) {
-            nextTs = null;
-          }
-        } else if (schedule.daysOfWeek && schedule.daysOfWeek.length > 0 && schedule.timeOfDay) {
-          const [hour, minute] = schedule.timeOfDay.split(':').map(Number);
-          const candidate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute, 0, 0);
+      // Compute nextExecuteAt in-memory (no DB round-trip per schedule)
+      for (const schedule of batch) {
+        const nextExecuteAt = calculateNextExecution(
+          {
+            cronExpression: schedule.cronExpression,
+            daysOfWeek: schedule.daysOfWeek,
+            timeOfDay: schedule.timeOfDay,
+            timezone: schedule.timezone ?? undefined,
+          },
+          now,
+        );
 
-          for (let i = 1; i <= 7; i++) { // look into the future
-            const testDate = new Date(candidate.getTime() + i * 24 * 60 * 60 * 1000);
-            if (schedule.daysOfWeek.includes(testDate.getDay())) {
-              nextTs = testDate;
-              break;
-            }
-          }
-        }
-
-        if (nextTs) {
-          await this.prisma.deviceSchedule.update({
-            where: { id: schedule.id },
-            data: { nextExecuteAt: nextTs },
-          });
-        } else {
-           // Deactivate if no valid next execute at
-           await this.prisma.deviceSchedule.update({
-            where: { id: schedule.id },
-            data: { isActive: false },
-          });
-        }
+        allUpdates.push({
+          id: schedule.id,
+          nextExecuteAt,
+          isActive: nextExecuteAt !== null,
+        });
       }
 
-    } catch (error) {
-      this.logger.error(`Error in schedule cron: ${error.message}`);
+      if (batch.length < BATCH_SIZE) break;
     }
+
+    if (totalQueued === 0) return;
+    this.logger.log(`Queued ${totalQueued} schedule(s) for execution.`);
+
+    // Bulk update via single raw SQL — replaces N sequential UPDATE statements
+    await this.bulkUpdateSchedules(allUpdates);
+  }
+
+  /**
+   * Performs a single SQL UPDATE...FROM VALUES instead of N individual statements.
+   * Zero N+1 problem regardless of how many schedules fired.
+   */
+  private async bulkUpdateSchedules(updates: ScheduleUpdate[]): Promise<void> {
+    if (updates.length === 0) return;
+
+    const valueRows = updates
+      .map((u) => {
+        const nextTs = u.nextExecuteAt
+          ? `'${u.nextExecuteAt.toISOString()}'::timestamptz`
+          : 'NULL';
+        return `('${u.id}'::uuid, ${nextTs}, ${u.isActive})`;
+      })
+      .join(',\n  ');
+
+    await this.prisma.$executeRawUnsafe(`
+      UPDATE t_device_schedule AS s
+      SET
+        next_execute_at = v.next_execute_at,
+        is_active       = v.is_active
+      FROM (VALUES
+        ${valueRows}
+      ) AS v(id, next_execute_at, is_active)
+      WHERE s.id = v.id
+    `);
+
+    this.logger.log(`Bulk-updated ${updates.length} schedule(s).`);
   }
 }

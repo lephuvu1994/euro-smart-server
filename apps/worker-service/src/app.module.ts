@@ -14,6 +14,7 @@ import { DeviceStatusProcessor } from './processors/device-status.processor';
 import { NotificationProcessor } from './processors/notification.processor';
 import { MidNightScheduleWorker } from './schedulers/midnight.scheduler';
 import { AutomationModule } from './modules/automation/automation.module';
+import { SceneWorkerModule } from './modules/scene/scene-worker.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { AutomationModule } from './modules/automation/automation.module';
       { name: APP_BULLMQ_QUEUES.PUSH_NOTIFICATION },
     ),
     AutomationModule,
+    SceneWorkerModule,
   ],
   providers: [
     EmailProcessorWorker,

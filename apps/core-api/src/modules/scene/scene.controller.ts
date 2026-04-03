@@ -1,7 +1,9 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
   HttpStatus,
   Param,
   Patch,
@@ -120,5 +122,15 @@ export class SceneController {
     @Param('sceneId') sceneId: string,
   ): Promise<{ jobId: string; message: string }> {
     return this.sceneService.runScene(sceneId, user.userId);
+  }
+
+  @Delete(':sceneId')
+  @ApiOperation({ summary: 'Xoá scene' })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteScene(
+    @AuthUser() user: IAuthUser,
+    @Param('sceneId') sceneId: string,
+  ): Promise<void> {
+    return this.sceneService.deleteScene(sceneId, user.userId);
   }
 }

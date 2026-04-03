@@ -24,11 +24,7 @@ Thay vì điều khiển thủ công, hệ thống tự động nhận diện **
 - [x] Redis Reverse-Index: `SceneTriggerIndexService` — O(1) lookup `scene_trigger:device:{token}` → Set\<sceneId\>.
 - [x] API Endpoints: GET/POST/PATCH/DELETE /v1/scenes + POST /v1/scenes/:id/run + POST /v1/scenes/triggers/location.
 
-**B. Phía Mobile App (App: new-app)**
-
-- [ ] Thiết kế UI/UX "Danh sách ngữ cảnh": Hiển thị các Scene cơ bản (Ra khỏi nhà, Về nhà, Đi ngủ...), có nút Kích hoạt nhanh bằng tay.
-- [ ] Thiết kế UI/UX "Trình tạo Builder ngữ cảnh": Trải nghiệm kéo-thả hoặc danh sách luồng công việc chọn **IF** (Time, Device changes) và **THEN** (On/Off công tắc, Delay).
-- [ ] Tích hợp API và State Management (Zustand + React Query) để đồng bộ thông tin cấu hình lên Server.
+👉 **Phía Mobile App (new-app)**: Chuyển sang theo dõi tại repo `new-app` ở đường dẫn `../../new-app/.agents/smarthome_todo.md`
 
 **C. Phía Thiết bị Nhúng (Firmware: switch_door)**
 
@@ -61,12 +57,7 @@ Tính năng cho phép chủ sở hữu thiết bị (Owner) có thể chia sẻ 
 - [ ] Logic thu hồi (Revoke): Chủ sở hữu có thể ngắt kết nối bất kỳ người dùng nào đang được chia sẻ.
 - [ ] Notification: Gửi thông báo cho người nhận khi có lời mời mới và thông báo cho chủ sở hữu khi lời mời được chấp nhận.
 
-**B. Phía Mobile App (App: new-app)**
-
-- [ ] Thiết kế UI trang "Quản lý thành viên/Chia sẻ": Hiển thị danh sách những người đang có quyền truy cập thiết bị.
-- [ ] Thiết kế UI trang "Mời thành viên": Nhập ID, Email hoặc quét mã QR của người nhận.
-- [ ] Tích hợp API chia sẻ: Gọi các endpoint mới để thực hiện luồng mời và chấp nhận.
-- [ ] Xử lý Trạng thái hiển thị (UI logic): Ẩn các nút "Setting" hoặc "Delete" nếu người dùng hiện tại chỉ có quyền Viewer/Editor.
+👉 **Phía Mobile App (new-app)**: Chuyển sang theo dõi tại repo `new-app` ở đường dẫn `../../new-app/.agents/smarthome_todo.md`
 
 ### 3. Những câu hỏi Mở / Thảo luận kiến trúc (Open Issues)
 
@@ -94,10 +85,7 @@ Cho phép người dùng đặt lịch bật/tắt thiết bị theo thời gian
 - [x] API: POST/GET/DELETE timers, POST/GET/DELETE/PATCH(toggle) schedules.
 - [ ] Store `jobId` vào `DeviceTimer` để hỗ trợ cancel job đang pending (xem Task 3.1 bên dưới).
 
-**B. Phía Mobile App (App: new-app)**
-
-- [ ] UI thiết lập thời gian (Time picker).
-- [ ] UI chọn ngày lặp lại trong tuần.
+👉 **Phía Mobile App (new-app)**: Chuyển sang theo dõi tại repo `new-app` ở đường dẫn `../../new-app/.agents/smarthome_todo.md`
 
 ---
 
@@ -116,11 +104,7 @@ Cho phép người dùng thay đổi thông tin định danh cá nhân như Tên
 - [ ] Validation nâng cao: Kiểm tra độ dài, ký tự đặc biệt cho tên người dùng.
 - [ ] Thực hiện Manual Verify (Kiểm tra thực tế luồng upload avatar, update state, UI phản hồi) trên thiết bị thật / simulator.
 
-**B. Phía Mobile App (App: new-app)**
-- [ ] Thiết kế UI màn hình "Hồ sơ cá nhân" (Profile): Hiển thị thông tin hiện tại và các trường cho phép chỉnh sửa.
-- [ ] Tích hợp API Update: Gọi endpoint `PUT /v1/user` khi người dùng nhấn "Lưu".
-- [ ] Chức năng đổi Avatar: Tích hợp `expo-image-picker` để chọn ảnh từ thư viện hoặc chụp ảnh mới.
-- [ ] Đồng bộ State: Cập nhật thông tin mới vào Zustand store ngay sau khi update thành công để hiển thị đồng bộ trên toàn app.
+👉 **Phía Mobile App (new-app)**: Chuyển sang theo dõi tại repo `new-app` ở đường dẫn `../../new-app/.agents/smarthome_todo.md`
 
 ### 3. Những câu hỏi Mở / Thảo luận kiến trúc (Open Issues)
 - Có nên cho phép đổi Số điện thoại / Email tại đây không? (Thường cần qua luồng OTP riêng để đảm bảo bảo mật).

@@ -6,7 +6,7 @@ Tài liệu này dùng để theo dõi, phân tích và lên kế hoạch (To-Do
 
 ## Tính năng 1: Smart Scene (Ngữ cảnh / Tự động hóa)
 
-**Trạng thái**: Chuẩn bị triển khai / Đang lên kế hoạch.
+**Trạng thái**: ✅ Core đã triển khai. Đang optimize scale 50k–200k thiết bị.
 
 ### 1. Mô tả tổng quan
 
@@ -17,28 +17,29 @@ Thay vì điều khiển thủ công, hệ thống tự động nhận diện **
 
 **A. Phía Server (Backend: core-api & worker-service)**
 
-- [ ] Cấu trúc lại Database Schema cho `Scene`: Cần làm rõ cấu trúc lưu trữ `triggers (JSON)` và `actions (JSON)`. Hệ thống cần parse JSON này một cách sạch nhất và dễ mở rộng các phép logic (AND / OR).
-- [ ] Phát triển **Scene Rule Engine**: Service đọc các điều kiện từ Database (ví dụ "Nhiệt độ > 30°C") liên tục mỗi khi `Device-Status Processor` nhận telemetry mới từ MQTT.
-- [ ] Phát triển Scheduler Worker: Tích hợp Node-cron hoặc BullMQ Repeatable Jobs trong `worker-service` để xử lý các Trigger hẹn giờ thời gian thực (Time-based triggers).
-- [ ] Phát triển **Action Executor**: Dịch JSON các hành động cần làm thành các bản payload MQTT (Ví dụ: `{"state": 1}`, `{"position": 100}`) và bắn xuống các device cụ thể.
+- [x] Cấu trúc lại Database Schema cho `Scene`: triggers (JSON) và actions (JSON) với logic AND/OR.
+- [x] Phát triển **Scene Rule Engine**: `handleCheckDeviceStateTriggers` trong `DeviceControlProcessor` evaluate conditions từ Redis.
+- [x] Phát triển Scheduler Worker: `SceneScheduleCronService` trong `worker-service` với distributed Redis lock.
+- [x] Phát triển **Action Executor**: `handleSceneDeviceActions` → MQTT `driver.setValueBulk` + realtime `socket:emit`.
+- [x] Redis Reverse-Index: `SceneTriggerIndexService` — O(1) lookup `scene_trigger:device:{token}` → Set\<sceneId\>.
+- [x] API Endpoints: GET/POST/PATCH/DELETE /v1/scenes + POST /v1/scenes/:id/run + POST /v1/scenes/triggers/location.
 
 **B. Phía Mobile App (App: new-app)**
 
-- [ ] Khởi tạo thư mục và Route mới: `src/features/scene` hoặc mở rộng trên trang Smart-Screen hiện thời.
 - [ ] Thiết kế UI/UX "Danh sách ngữ cảnh": Hiển thị các Scene cơ bản (Ra khỏi nhà, Về nhà, Đi ngủ...), có nút Kích hoạt nhanh bằng tay.
-- [ ] Thiết kế UI/UX "Trình tạo Builder ngữ cảnh": Trải nghiệm kéo-thả hoặc danh sách luồng công việc chọn **IF** (Time, Device changes, Cảnh báo) và **THEN** (On/Off công tắc, Delay n phút).
-- [ ] Tích hợp API và State Management (Zustand + React Query) để đồng bộ thông tin cấu hình này lên Server.
+- [ ] Thiết kế UI/UX "Trình tạo Builder ngữ cảnh": Trải nghiệm kéo-thả hoặc danh sách luồng công việc chọn **IF** (Time, Device changes) và **THEN** (On/Off công tắc, Delay).
+- [ ] Tích hợp API và State Management (Zustand + React Query) để đồng bộ thông tin cấu hình lên Server.
 
 **C. Phía Thiết bị Nhúng (Firmware: switch_door)**
 
-- [ ] Tối ưu hóa MQTT Receiver: Khi một Scene kích hoạt nhiều thiết bị cùng lúc trong 1 khoảng thời gian cực ngắn (Milliseconds), thiết bị nhận cần chịu tải và đáp ứng lập tức không bị miss (rơi bản tin).
-- [ ] Tối ưu hóa hiệu năng đo báo trạng thái: Rút ngắn thời gian trễ khi công tắc chuyển trạng thái để báo về Server làm Trigger mồi (Event Trigger) cho các Scene tiếp theo.
+- [ ] Tối ưu hóa MQTT Receiver: Khi một Scene kích hoạt nhiều thiết bị cùng lúc, thiết bị nhận cần chịu tải không bị miss bản tin.
+- [ ] Tối ưu hóa hiệu năng đo báo trạng thái: Rút ngắn delay khi công tắc chuyển trạng thái để báo về Server làm Trigger.
 
 ### 3. Những câu hỏi Mở / Thảo luận kiến trúc (Open Issues)
 
-- Engine chạy trên đám mây (Cloud) hoàn toàn hay hỗ trợ Local Scene (Offline)? Nếu offline thì Gateway cục bộ hay Tự thân các MQTT Device liên lạc được với nhau qua mạng LAN (LAN Broadcasting)?
-- Việc thực thi Scene Actions có hỗ trợ Delay không? (VD: Đóng rèm, 10 giây sau tắt đèn). Nếu có, backend BullMQ sẽ phải vận hành tiến trình Queue bị tạm ngưng (Delayed jobs).
-- Xử lý xung đột (Collision): Chuyện gì xảy ra khi Scene 1 ra lệnh mở công tắc, trùng thời điểm Scene 2 ra lệnh tắt công tắc? Ràng buộc tính ưu tiên ra sao?
+- Engine chạy trên đám mây (Cloud) hoàn toàn hay hỗ trợ Local Scene (Offline)?
+- Việc thực thi Scene Actions có hỗ trợ Delay không? (VD: Đóng rèm, 10 giây sau tắt đèn). Nếu có, BullMQ Delayed jobs.
+- Xử lý xung đột (Collision): Scene 1 mở công tắc, trùng thời điểm Scene 2 tắt công tắc → cần priority.
 
 ---
 
@@ -77,7 +78,7 @@ Tính năng cho phép chủ sở hữu thiết bị (Owner) có thể chia sẻ 
 
 ## Tính năng 3: Timer & Schedule (Hẹn giờ và Lịch trình)
 
-**Trạng thái**: Đang lên kế hoạch.
+**Trạng thái**: ✅ Đã triển khai — đang optimize.
 
 ### 1. Mô tả tổng quan
 
@@ -87,9 +88,11 @@ Cho phép người dùng đặt lịch bật/tắt thiết bị theo thời gian
 
 **A. Phía Server (Backend: worker-service)**
 
-- [ ] Xây dựng bảng `DeviceTimer` và `DeviceSchedule`.
-- [ ] Tích hợp BullMQ để quản lý các Jobs đếm ngược (Countdown).
-- [ ] Xây dựng Scheduler (Cron) để quét và thực thi các lịch trình lặp lại hàng ngày/hàng tuần.
+- [x] Xây dựng bảng `DeviceTimer` và `DeviceSchedule`.
+- [x] Tích hợp BullMQ để quản lý các Jobs đếm ngược (Countdown).
+- [x] Xây dựng Scheduler (Cron) cursor-based pagination để quét và thực thi các lịch trình.
+- [x] API: POST/GET/DELETE timers, POST/GET/DELETE/PATCH(toggle) schedules.
+- [ ] Store `jobId` vào `DeviceTimer` để hỗ trợ cancel job đang pending (xem Task 3.1 bên dưới).
 
 **B. Phía Mobile App (App: new-app)**
 
@@ -122,3 +125,170 @@ Cho phép người dùng thay đổi thông tin định danh cá nhân như Tên
 ### 3. Những câu hỏi Mở / Thảo luận kiến trúc (Open Issues)
 - Có nên cho phép đổi Số điện thoại / Email tại đây không? (Thường cần qua luồng OTP riêng để đảm bảo bảo mật).
 - Kích thước ảnh tối đa cho Avatar là bao nhiêu để tối ưu dung lượng lưu trữ?
+
+---
+
+## ⚙️ Scalability Engine Refactor (50k–200k devices)
+
+**Trạng thái**: 🔄 Đang thực hiện — 8.2/10. Mục tiêu: **9.5/10**.
+**Last commit**: `cce4835` — `feat(scalability): refactor automation & scene engine`
+
+### Đã hoàn thành ✅
+
+| Item | Mô tả |
+|---|---|
+| Single Consumer | Xóa `core-api/device-control.processor.ts` (450 dòng dead code). Worker là consumer duy nhất. |
+| socket:emit notify | Merge realtime notify vào worker: `COMMAND_SENT`/`COMMAND_ERROR` cho cả 3 handlers |
+| Cursor batch cron | `ScheduleCronService`: 500 records/page, bulk raw SQL UPDATE, không còn OOM |
+| Optimistic payload | `AutomationProcessor`: 0 DB reads trên hot path, full payload từ cron |
+| Redis Reverse-Index | `SceneTriggerIndexService` tạo và export từ `@app/common` |
+| SceneService index | `createScene`/`updateScene`/`deleteScene` gọi `rebuildIndex`/`removeIndex` |
+| Scene cron → worker | `SceneScheduleCronService` + distributed Redis lock chống duplicate fire |
+| Shared util | `calculateNextExecution()` trong `libs/common/src/utils/schedule-next-calculator.ts` |
+| New API endpoints | DELETE timer, DELETE schedule, PATCH schedule/toggle, DELETE scene |
+| Zero `any` types | Tất cả file đã dùng typed interfaces, Prisma.InputJsonValue, type guards |
+
+---
+
+### P0 — Critical (làm đầu session tiếp theo)
+
+#### Task P0.1: Kết nối Redis Index vào DeviceControlProcessor
+**File**: `apps/worker-service/src/processors/device-control.processor.ts`
+
+Thêm `SceneTriggerIndexService` vào constructor và thay `handleCheckDeviceStateTriggers`:
+```typescript
+// THAY: full scan
+const scenes = await this.databaseService.scene.findMany({ where: { active: true } });
+
+// BẰNG: O(1) Redis index
+const sceneIds = await this.sceneTriggerIndexService.getSceneIdsForDevice(deviceToken);
+if (sceneIds.length === 0) return { ok: true };
+const scenes = await this.databaseService.scene.findMany({
+  where: { id: { in: sceneIds }, active: true },
+  select: { id: true, name: true, triggers: true },
+});
+```
+Cũng cần inject `SceneTriggerIndexService` vào provider trong `app.module.ts` (hoặc qua `CommonModule`).
+
+#### Task P0.2: Rebuild Index on Worker Startup
+**File mới**: `apps/worker-service/src/startup/index-rebuild.service.ts`
+
+```typescript
+@Injectable()
+export class IndexRebuildService implements OnModuleInit {
+  async onModuleInit(): Promise<void> {
+    await this.indexService.rebuildAllIndexes(async () =>
+      this.prisma.scene.findMany({ where: { active: true }, select: { id: true, triggers: true } })
+    );
+  }
+}
+```
+Thêm vào `apps/worker-service/src/app.module.ts` providers.
+
+#### Task P0.3: DB Performance Indexes
+**File mới**: `prisma/migrations/XXXX_add_performance_indexes/migration.sql`
+
+```sql
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_device_schedule_active_next
+  ON t_device_schedule (is_active, next_execute_at) WHERE is_active = true;
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_scene_active
+  ON t_scene (active) WHERE active = true;
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_scene_triggers_gin
+  ON t_scene USING GIN (triggers);
+```
+
+---
+
+### P1 — Important (sau P0)
+
+#### Task P1.1: Schema — Scene Rate Limiting
+**File**: `prisma/schema.prisma`
+```prisma
+model Scene {
+  minIntervalSeconds Int?     @default(60)
+  lastFiredAt        DateTime?
+}
+```
+Sau migrate: check `elapsed < minIntervalSeconds` trong `handleCheckDeviceStateTriggers` trước khi fire.
+
+#### Task P1.2: Schema — User Automation Quota
+**File**: `prisma/schema.prisma`
+```prisma
+model User {
+  maxTimers    Int @default(50)
+  maxSchedules Int @default(50)
+  maxScenes    Int @default(100)
+}
+```
+Guard trong `AutomationService.createTimer`, `createSchedule` và `SceneService.createScene`.
+
+#### Task P1.3: Timer Job Cancellation
+**File**: `prisma/schema.prisma` → thêm `jobId String?` vào `DeviceTimer`
+**File**: `apps/core-api/src/modules/automation/services/automation.service.ts`
+- Sau `automationQueue.add(...)` → store `job.id` vào `timer.jobId`
+- Trong `deleteTimer()` → `automationQueue.getJob(jobId).then(j => j?.remove())`
+
+---
+
+### P2 — Reliability (sau P1)
+
+#### Task P2.1: Dead Letter Queue Alerts
+**File**: `apps/worker-service/src/processors/device-control.processor.ts`
+```typescript
+this.deviceQueue.on('failed', (job, error) => {
+  this.logger.error(`Job ${job.name} failed: ${error.message}`, job.data);
+});
+```
+
+#### Task P2.2: socket:emit Retry (3 attempts)
+**File**: `libs/common/src/events/socket-event.publisher.ts` (kiểm tra file này trước)
+Nếu chưa có retry: thêm vòng lặp 3 lần với backoff 100ms.
+
+---
+
+### P3 — Nice to have
+
+#### Task P3.1: API — Execution Logs
+`GET /v1/automation/stats` → timerCount, scheduleCount, recentLogs (10 gần nhất)
+
+#### Task P3.2: API — Queue Metrics (admin)
+`GET /v1/admin/metrics/queues` → job counts cho DEVICE_CONTROL và AUTOMATION queues
+
+---
+
+### Technical Context (không được quên khi làm tiếp)
+
+**Redis key schema:**
+```
+scene_trigger:device:{deviceToken}   → Set<sceneId>   (reverse index)
+scene_trigger:tracked:{sceneId}      → Set<deviceToken> (cleanup tracking)
+scene_cooldown:{sceneId}             → "1" EX 60       (dedup per minute)
+lock:schedule_cron                   → "1" EX 55        (distributed lock)
+lock:scene_schedule                  → "1" EX 55        (distributed lock)
+device:{deviceId}:entity:{code}      → JSON state       (existing)
+cmd_user:{token}:{entityCode}        → Set<userId> EX 10 (existing)
+```
+
+**Cron-parser version:** v3 → dùng `CronExpressionParser.parse()`, không phải `parseExpression()`
+```typescript
+import { CronExpressionParser } from 'cron-parser';
+const interval = CronExpressionParser.parse(expr, { tz, currentDate: from });
+```
+
+**Pattern typed payload (không dùng any):**
+```typescript
+interface MyPayload { token: string; value: string | number | boolean; }
+const data = job.data as MyPayload;
+```
+
+**BullMQ Queue names:**
+```
+APP_BULLMQ_QUEUES.DEVICE_CONTROL     = "device-control"
+APP_BULLMQ_QUEUES.AUTOMATION         = "automation"
+APP_BULLMQ_QUEUES.PUSH_NOTIFICATION  = "push-notification"
+```
+
+**Score hiện tại: 41/50 (8.2/10) | Mục tiêu: 47.5/50 (9.5/10)**
+P0 → +2.0 điểm | P1 → +1.5 điểm | P2 → +1.0 điểm | P3 → +2.0 điểm

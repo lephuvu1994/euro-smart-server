@@ -1,6 +1,6 @@
 // src/modules/device/processors/device-control.processor.ts
 // Single source of truth — worker-service is the ONLY consumer of DEVICE_CONTROL queue.
-import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Job, Queue } from 'bullmq';
 import { Logger } from '@nestjs/common';
@@ -108,6 +108,14 @@ export class DeviceControlProcessor extends WorkerHost {
         this.logger.warn(`Unknown job name: ${job.name}`);
         return;
     }
+  }
+
+  @OnWorkerEvent('failed')
+  onFailed(job: Job, error: Error) {
+    this.logger.error(
+      `[DLQ Alert] Job ${job?.name} failed after ${job?.attemptsMade} attempts: ${error?.message}`,
+      { jobId: job?.id, data: job?.data },
+    );
   }
 
   /**

@@ -6,7 +6,7 @@ import { Job, Queue } from 'bullmq';
 import { Logger } from '@nestjs/common';
 import { APP_BULLMQ_QUEUES } from '@app/common';
 import { RedisService } from '@app/redis-cache';
-import { IntegrationManager, SceneTriggerType, DEVICE_JOBS } from '@app/common';
+import { IntegrationManager, SceneTriggerType, DEVICE_JOBS, SceneTriggerIndexService } from '@app/common';
 import { DatabaseService } from '@app/database';
 import { DeviceEntity } from '@prisma/client';
 
@@ -77,6 +77,7 @@ export class DeviceControlProcessor extends WorkerHost {
     private readonly integrationManager: IntegrationManager,
     private readonly databaseService: DatabaseService,
     private readonly redisService: RedisService,
+    private readonly sceneTriggerIndexService: SceneTriggerIndexService,
     @InjectQueue(APP_BULLMQ_QUEUES.DEVICE_CONTROL)
     private readonly deviceQueue: Queue,
   ) {
@@ -426,8 +427,14 @@ export class DeviceControlProcessor extends WorkerHost {
   private async handleCheckDeviceStateTriggers(job: Job): Promise<{ ok: boolean }> {
     const { deviceToken } = job.data as CheckDeviceStateTriggersPayload;
 
+    const sceneIds = await this.sceneTriggerIndexService.getSceneIdsForDevice(deviceToken);
+    
+    if (sceneIds.length === 0) {
+      return { ok: true };
+    }
+
     const scenes = await this.databaseService.scene.findMany({
-      where: { active: true },
+      where: { id: { in: sceneIds }, active: true },
       select: { id: true, name: true, triggers: true },
     });
 

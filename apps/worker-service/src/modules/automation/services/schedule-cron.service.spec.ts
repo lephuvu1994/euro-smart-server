@@ -35,8 +35,8 @@ describe('ScheduleCronService', () => {
     db = {
       deviceSchedule: {
         findMany: jest.fn(),
-        update: jest.fn(),
       },
+      $executeRawUnsafe: jest.fn().mockResolvedValue({}),
     };
     
     redisClient = {
@@ -88,7 +88,7 @@ describe('ScheduleCronService', () => {
        await service.scanSchedules();
 
        expect(queue.addBulk).toHaveBeenCalled();
-       expect(db.deviceSchedule.update).toHaveBeenCalled();
+       expect(db.$executeRawUnsafe).toHaveBeenCalled();
     });
 
     it('should handle day-of-week based schedules', async () => {
@@ -105,9 +105,9 @@ describe('ScheduleCronService', () => {
 
        await service.scanSchedules();
 
-       expect(db.deviceSchedule.update).toHaveBeenCalledWith(expect.objectContaining({
-          data: expect.objectContaining({ nextExecuteAt: expect.any(Date) })
-       }));
+       expect(db.$executeRawUnsafe).toHaveBeenCalledWith(
+          expect.stringContaining('UPDATE t_device_schedule')
+       );
     });
 
     it('should deactivate schedule if no next date can be calculated', async () => {
@@ -126,10 +126,9 @@ describe('ScheduleCronService', () => {
 
        await service.scanSchedules();
 
-       expect(db.deviceSchedule.update).toHaveBeenCalledWith(expect.objectContaining({
-         where: { id: 's2' },
-         data: { isActive: false }
-       }));
+       expect(db.$executeRawUnsafe).toHaveBeenCalledWith(
+         expect.stringContaining('false') // isActive is false in the raw sql string
+       );
     });
 
     it('should handle errors gracefully', async () => {

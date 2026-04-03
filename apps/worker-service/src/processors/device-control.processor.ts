@@ -550,9 +550,11 @@ export class DeviceControlProcessor extends WorkerHost {
 
     if (current === undefined || current === null) return false;
 
-    // Normalize to number if both sides are numeric
-    const n = Number(current);
-    current = Number.isNaN(n) ? current : n;
+    // Normalize to number if it's a string representation of a number, skip booleans
+    if (typeof current !== 'boolean') {
+      const n = Number(current);
+      current = Number.isNaN(n) ? current : n;
+    }
 
     const op: CompareOperator = (condition.operator as CompareOperator) ?? 'eq';
     const expected = condition.value;

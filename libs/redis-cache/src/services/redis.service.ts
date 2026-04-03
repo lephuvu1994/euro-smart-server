@@ -77,7 +77,7 @@ export class RedisService implements OnModuleDestroy {
   ): Promise<number> {
     // Trường hợp 1: Truyền vào một Object (rawData từ MQTT)
     if (typeof fieldOrObject === 'object') {
-      const pipeline = {};
+      const pipeline: Record<string, string> = {};
       for (const [k, v] of Object.entries(fieldOrObject)) {
         pipeline[k] = typeof v === 'object' ? JSON.stringify(v) : String(v);
       }

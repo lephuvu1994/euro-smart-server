@@ -15,6 +15,8 @@ import { NotificationProcessor } from './processors/notification.processor';
 import { MidNightScheduleWorker } from './schedulers/midnight.scheduler';
 import { AutomationModule } from './modules/automation/automation.module';
 import { SceneWorkerModule } from './modules/scene/scene-worker.module';
+import { SceneTriggerIndexService } from '@app/common';
+import { IndexRebuildService } from './startup/index-rebuild.service';
 
 @Module({
   imports: [
@@ -60,6 +62,8 @@ import { SceneWorkerModule } from './modules/scene/scene-worker.module';
     DeviceStatusProcessor,
     NotificationProcessor,
     MidNightScheduleWorker,
+    SceneTriggerIndexService,
+    IndexRebuildService,
   ],
 })
 export class AppModule {}

@@ -33,9 +33,7 @@ export class EmqxAuthService {
       const userId = dto.username.replace('user_', '');
       const timestamp = this.extractTimestampFromClientId(dto.clientid);
       if (!timestamp) {
-        this.logger.warn(
-          `Auth denied: malformed clientid="${dto.clientid}"`,
-        );
+        this.logger.warn(`Auth denied: malformed clientid="${dto.clientid}"`);
         return { result: 'deny' };
       }
 
@@ -70,9 +68,7 @@ export class EmqxAuthService {
   // ═══════════════════════════════════════════
   // ACL: Ownership + Shared check
   // ═══════════════════════════════════════════
-  async authorize(
-    dto: EmqxAclDto,
-  ): Promise<{ result: 'allow' | 'deny' }> {
+  async authorize(dto: EmqxAclDto): Promise<{ result: 'allow' | 'deny' }> {
     // Server services → allow all
     const mqttUserCfg = await this.db.systemConfig.findUnique({
       where: { key: 'MQTT_USER' },
@@ -83,13 +79,12 @@ export class EmqxAuthService {
     }
 
     // Embedded device — username format "device_{token}"
+    // Devices can publish AND subscribe, but ONLY to their own topics:
+    //   device/{token}/status  (publish)
+    //   device/{token}/set     (subscribe)
+    //   device/{token}/license (subscribe)
     if (dto.username.startsWith('device_')) {
       const token = dto.username.replace('device_', '');
-      // Devices can only subscribe to their own topics; deny publish
-      if (dto.action === 'publish') {
-        return { result: 'deny' };
-      }
-      // Topic must contain the device token
       const topicToken = this.extractTokenFromTopic(dto.topic);
       return { result: topicToken === token ? 'allow' : 'deny' };
     }
@@ -107,7 +102,9 @@ export class EmqxAuthService {
     // Extract device token from topic: "COMPANY/MODEL/{token}/state"
     const token = this.extractTokenFromTopic(dto.topic);
     if (!token) {
-      this.logger.warn(`ACL denied: cannot extract token from topic="${dto.topic}"`);
+      this.logger.warn(
+        `ACL denied: cannot extract token from topic="${dto.topic}"`,
+      );
       return { result: 'deny' };
     }
 

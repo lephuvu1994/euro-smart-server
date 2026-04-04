@@ -39,15 +39,24 @@ function mockSystemConfig(
   db: ReturnType<typeof createMockDatabaseService>,
   overrides: Record<string, string | null> = {},
 ) {
-  db.systemConfig.findUnique.mockImplementation(({ where }: { where: { key: string } }) => {
-    const defaults: Record<string, string> = {
-      MQTT_USER: MOCK_MQTT_USER,
-      MQTT_PASS: MOCK_MQTT_PASS,
-      MQTT_WSS_URL: MOCK_WSS_URL,
-    };
-    const val = overrides[where.key] !== undefined ? overrides[where.key] : defaults[where.key];
-    return Promise.resolve(val !== null && val !== undefined ? { key: where.key, value: val } : null);
-  });
+  db.systemConfig.findUnique.mockImplementation(
+    ({ where }: { where: { key: string } }) => {
+      const defaults: Record<string, string> = {
+        MQTT_USER: MOCK_MQTT_USER,
+        MQTT_PASS: MOCK_MQTT_PASS,
+        MQTT_WSS_URL: MOCK_WSS_URL,
+      };
+      const val =
+        overrides[where.key] !== undefined
+          ? overrides[where.key]
+          : defaults[where.key];
+      return Promise.resolve(
+        val !== null && val !== undefined
+          ? { key: where.key, value: val }
+          : null,
+      );
+    },
+  );
 }
 
 describe('EmqxAuthService', () => {
@@ -63,10 +72,7 @@ describe('EmqxAuthService', () => {
     process.env.MQTT_WSS_URL = MOCK_WSS_URL;
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        EmqxAuthService,
-        { provide: DatabaseService, useValue: db },
-      ],
+      providers: [EmqxAuthService, { provide: DatabaseService, useValue: db }],
     }).compile();
 
     service = module.get<EmqxAuthService>(EmqxAuthService);
@@ -238,17 +244,27 @@ describe('EmqxAuthService', () => {
       mockSystemConfig(db);
       const result = await service.authorize({
         username: `device_${MOCK_DEVICE_TOKEN}`,
-        topic: `BKTech/1001/${MOCK_DEVICE_TOKEN}/set`,
+        topic: `device/${MOCK_DEVICE_TOKEN}/set`,
         action: 'subscribe',
       });
       expect(result).toEqual({ result: 'allow' });
     });
 
-    it('should deny device from publishing', async () => {
+    it('should allow device to publish to its own topic', async () => {
       mockSystemConfig(db);
       const result = await service.authorize({
         username: `device_${MOCK_DEVICE_TOKEN}`,
-        topic: `BKTech/1001/${MOCK_DEVICE_TOKEN}/set`,
+        topic: `device/${MOCK_DEVICE_TOKEN}/status`,
+        action: 'publish',
+      });
+      expect(result).toEqual({ result: 'allow' });
+    });
+
+    it('should deny device from publishing to another device topic', async () => {
+      mockSystemConfig(db);
+      const result = await service.authorize({
+        username: `device_${MOCK_DEVICE_TOKEN}`,
+        topic: `device/${MOCK_OTHER_DEVICE_TOKEN}/status`,
         action: 'publish',
       });
       expect(result).toEqual({ result: 'deny' });
@@ -258,7 +274,7 @@ describe('EmqxAuthService', () => {
       mockSystemConfig(db);
       const result = await service.authorize({
         username: `device_${MOCK_DEVICE_TOKEN}`,
-        topic: `BKTech/1001/${MOCK_OTHER_DEVICE_TOKEN}/set`,
+        topic: `device/${MOCK_OTHER_DEVICE_TOKEN}/set`,
         action: 'subscribe',
       });
       expect(result).toEqual({ result: 'deny' });
@@ -269,7 +285,7 @@ describe('EmqxAuthService', () => {
       mockSystemConfig(db);
       const result = await service.authorize({
         username: `user_${MOCK_USER_ID}`,
-        topic: '+/+/any-token/state',
+        topic: `device/any-token/state`,
         action: 'publish',
       });
       expect(result).toEqual({ result: 'deny' });
@@ -277,11 +293,14 @@ describe('EmqxAuthService', () => {
 
     it('should allow user to subscribe to owned device', async () => {
       mockSystemConfig(db);
-      db.device.findUnique.mockResolvedValue({ id: 'dev-1', ownerId: MOCK_USER_ID });
+      db.device.findUnique.mockResolvedValue({
+        id: 'dev-1',
+        ownerId: MOCK_USER_ID,
+      });
 
       const result = await service.authorize({
         username: `user_${MOCK_USER_ID}`,
-        topic: `COMPANY/MODEL/${MOCK_DEVICE_TOKEN}/state`,
+        topic: `device/${MOCK_DEVICE_TOKEN}/status`,
         action: 'subscribe',
       });
       expect(result).toEqual({ result: 'allow' });
@@ -293,12 +312,19 @@ describe('EmqxAuthService', () => {
 
     it('should allow user to subscribe to shared device', async () => {
       mockSystemConfig(db);
-      db.device.findUnique.mockResolvedValue({ id: 'dev-shared', ownerId: 'other-owner' });
-      db.deviceShare.findFirst.mockResolvedValue({ id: 'share-1', deviceId: 'dev-shared', userId: MOCK_USER_ID });
+      db.device.findUnique.mockResolvedValue({
+        id: 'dev-shared',
+        ownerId: 'other-owner',
+      });
+      db.deviceShare.findFirst.mockResolvedValue({
+        id: 'share-1',
+        deviceId: 'dev-shared',
+        userId: MOCK_USER_ID,
+      });
 
       const result = await service.authorize({
         username: `user_${MOCK_USER_ID}`,
-        topic: `COMPANY/MODEL/${MOCK_SHARED_DEVICE_TOKEN}/state`,
+        topic: `device/${MOCK_SHARED_DEVICE_TOKEN}/status`,
         action: 'subscribe',
       });
       expect(result).toEqual({ result: 'allow' });
@@ -306,12 +332,15 @@ describe('EmqxAuthService', () => {
 
     it('should deny user subscribing to unowned/unshared device', async () => {
       mockSystemConfig(db);
-      db.device.findUnique.mockResolvedValue({ id: 'dev-other', ownerId: 'another-user' });
+      db.device.findUnique.mockResolvedValue({
+        id: 'dev-other',
+        ownerId: 'another-user',
+      });
       db.deviceShare.findFirst.mockResolvedValue(null);
 
       const result = await service.authorize({
         username: `user_${MOCK_USER_ID}`,
-        topic: `COMPANY/MODEL/${MOCK_OTHER_DEVICE_TOKEN}/state`,
+        topic: `device/${MOCK_OTHER_DEVICE_TOKEN}/status`,
         action: 'subscribe',
       });
       expect(result).toEqual({ result: 'deny' });
@@ -323,7 +352,7 @@ describe('EmqxAuthService', () => {
 
       const result = await service.authorize({
         username: `user_${MOCK_USER_ID}`,
-        topic: `COMPANY/MODEL/non-existent-token/state`,
+        topic: `device/non-existent-token/state`,
         action: 'subscribe',
       });
       expect(result).toEqual({ result: 'deny' });
@@ -365,7 +394,7 @@ describe('EmqxAuthService', () => {
 
       const result = await service.authorize({
         username: `user_${MOCK_USER_ID}`,
-        topic: `COMPANY/MODEL/${MOCK_DEVICE_TOKEN}/state`,
+        topic: `device/${MOCK_DEVICE_TOKEN}/status`,
         action: 'subscribe',
       });
       expect(result).toEqual({ result: 'deny' });

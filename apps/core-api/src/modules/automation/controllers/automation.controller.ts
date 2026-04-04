@@ -27,7 +27,7 @@ class ToggleScheduleDto {
 
 @ApiTags('Automation')
 @UseGuards(JwtAccessGuard)
-@Controller('v1/automation')
+@Controller('automation')
 export class AutomationController {
   constructor(private readonly automationService: AutomationService) {}
 

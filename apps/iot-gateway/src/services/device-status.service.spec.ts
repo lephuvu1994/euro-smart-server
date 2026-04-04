@@ -28,6 +28,7 @@ const mockRedisService = {
   set: jest.fn(),
   del: jest.fn(),
   hmset: jest.fn(),
+  setnxWithTtl: jest.fn(),
 };
 
 const mockMqttService = {
@@ -111,6 +112,7 @@ describe('DeviceStatusService', () => {
       const payload = { online: true };
       db.device.findFirst.mockResolvedValue(null);
       redis.get.mockResolvedValue(null); // was offline
+      redis.setnxWithTtl.mockResolvedValue(true); // acquire lock
       db.device.findUnique.mockResolvedValue({
         id: 'dev-1',
         ownerId: 'user-1',
@@ -141,6 +143,7 @@ describe('DeviceStatusService', () => {
       const payload = { online: true };
       db.device.findFirst.mockResolvedValue(null);
       redis.get.mockResolvedValue(null);
+      redis.setnxWithTtl.mockResolvedValue(true);
       db.device.findUnique.mockResolvedValue({
         id: 'dev-1',
         ownerId: 'user-1',
@@ -166,6 +169,7 @@ describe('DeviceStatusService', () => {
       const payload = { online: false };
       db.device.findFirst.mockResolvedValue(null);
       redis.get.mockResolvedValue('online'); // was online
+      redis.setnxWithTtl.mockResolvedValue(true); // acquire lock
       db.device.findUnique.mockResolvedValue({
         id: 'dev-1',
         ownerId: 'user-1',
@@ -205,6 +209,7 @@ describe('DeviceStatusService', () => {
       const payload = { online: true };
       db.device.findFirst.mockResolvedValue(null);
       redis.get.mockResolvedValue(null); // was offline
+      redis.setnxWithTtl.mockResolvedValue(true);
       db.device.findUnique.mockResolvedValue(null); // device not found
 
       await service.processStatus(mockDeviceToken, payload);
@@ -230,6 +235,7 @@ describe('DeviceStatusService', () => {
       const payload = { online: true };
       db.device.findFirst.mockResolvedValue(null);
       redis.get.mockResolvedValue(null);
+      redis.setnxWithTtl.mockResolvedValue(true);
       db.device.findUnique.mockResolvedValue({
         id: 'dev-1',
         ownerId: 'user-1',
@@ -255,6 +261,7 @@ describe('DeviceStatusService', () => {
     it('should forward to deviceStateService', async () => {
       const payload = { online: true, state: 'OPEN' };
       db.device.findFirst.mockResolvedValue(null);
+      redis.get.mockResolvedValue('online'); // no transition
 
       await service.processStatus(mockDeviceToken, payload);
 

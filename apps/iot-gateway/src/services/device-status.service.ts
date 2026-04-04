@@ -115,80 +115,99 @@ export class DeviceStatusService {
       const wasOnline = previousStatus === 'online';
       const isNowOnline = newEvent === EDeviceConnectionStatus.ONLINE;
       if (wasOnline !== isNowOnline) {
-        // Connection log — independent
-        parallel.push(
-          this.statusQueue.add(
-            DEVICE_JOBS.RECORD_CONNECTION_LOG,
-            { token: deviceToken, event: newEvent },
-            { removeOnComplete: true, attempts: 2 },
-          ),
+        // ★ Anti-duplicate lock: chỉ 1 worker được gửi noti trong 5s
+        // Tránh race condition khi chip gửi 2+ bản tin gần nhau
+        const lockKey = `status_transition_lock:${deviceToken}`;
+        const acquired = await this.redisService.setnxWithTtl(
+          lockKey,
+          newEvent,
+          5000, // 5s TTL
         );
 
-        // Device lookup → notification dispatch (chained, but parallel to everything else)
-        parallel.push(
-          this.databaseService.device
-            .findUnique({
-              where: { token: deviceToken },
-              select: {
-                id: true,
-                name: true,
-                ownerId: true,
-                homeId: true,
-                sharedUsers: { select: { userId: true } },
-                home: { select: { members: { select: { userId: true } } } },
-              },
-            })
-            .then(async (device) => {
-              if (!device) return;
+        if (acquired) {
+          // Connection log — independent
+          parallel.push(
+            this.statusQueue.add(
+              DEVICE_JOBS.RECORD_CONNECTION_LOG,
+              { token: deviceToken, event: newEvent },
+              { removeOnComplete: true, attempts: 2 },
+            ),
+          );
 
-              // Pre-flight check: ensure at least one target user has a pushToken
-              const targetUserIds = new Set<string>();
-              targetUserIds.add(device.ownerId);
-              if (device.sharedUsers) {
-                device.sharedUsers.forEach((s) => targetUserIds.add(s.userId));
-              }
-              if (device.home?.members) {
-                device.home.members.forEach((m) => targetUserIds.add(m.userId));
-              }
-
-              if (targetUserIds.size > 0) {
-                const activeSession =
-                  await this.databaseService.session.findFirst({
-                    where: {
-                      userId: { in: Array.from(targetUserIds) },
-                      pushToken: { not: null },
-                    },
-                    select: { id: true },
-                  });
-                if (!activeSession) return; // Skip pushing to Redis if no one has a token
-              }
-
-              const jobName =
-                newEvent === EDeviceConnectionStatus.OFFLINE
-                  ? 'push_offline_alert'
-                  : 'push_online_alert';
-              const alertEvent =
-                newEvent === EDeviceConnectionStatus.OFFLINE
-                  ? EDeviceAlertEvent.OFFLINE
-                  : EDeviceAlertEvent.ONLINE;
-              const titleKey = `device.alert.${newEvent}.title`;
-              const bodyKey = `device.alert.${newEvent}.body`;
-              return this.notificationQueue.add(
-                jobName,
-                {
-                  type: 'deviceAlert',
-                  payload: {
-                    deviceId: device.id,
-                    eventType: alertEvent,
-                    titleKey,
-                    bodyKey,
-                    data: { deviceName: device.name },
-                  },
+          // Device lookup → notification dispatch (chained, but parallel to everything else)
+          parallel.push(
+            this.databaseService.device
+              .findUnique({
+                where: { token: deviceToken },
+                select: {
+                  id: true,
+                  name: true,
+                  ownerId: true,
+                  homeId: true,
+                  sharedUsers: { select: { userId: true } },
+                  home: { select: { members: { select: { userId: true } } } },
                 },
-                { removeOnComplete: true, attempts: 1 },
-              );
-            }),
-        );
+              })
+              .then(async (device) => {
+                if (!device) return;
+
+                // Pre-flight check: ensure at least one target user has a pushToken
+                const targetUserIds = new Set<string>();
+                targetUserIds.add(device.ownerId);
+                if (device.sharedUsers) {
+                  device.sharedUsers.forEach((s) =>
+                    targetUserIds.add(s.userId),
+                  );
+                }
+                if (device.home?.members) {
+                  device.home.members.forEach((m) =>
+                    targetUserIds.add(m.userId),
+                  );
+                }
+
+                if (targetUserIds.size > 0) {
+                  const activeSession =
+                    await this.databaseService.session.findFirst({
+                      where: {
+                        userId: { in: Array.from(targetUserIds) },
+                        pushToken: { not: null },
+                      },
+                      select: { id: true },
+                    });
+                  if (!activeSession) return; // Skip pushing to Redis if no one has a token
+                }
+
+                const jobName =
+                  newEvent === EDeviceConnectionStatus.OFFLINE
+                    ? 'push_offline_alert'
+                    : 'push_online_alert';
+                const alertEvent =
+                  newEvent === EDeviceConnectionStatus.OFFLINE
+                    ? EDeviceAlertEvent.OFFLINE
+                    : EDeviceAlertEvent.ONLINE;
+                const titleKey = `device.alert.${newEvent}.title`;
+                const bodyKey = `device.alert.${newEvent}.body`;
+                return this.notificationQueue.add(
+                  jobName,
+                  {
+                    type: 'deviceAlert',
+                    payload: {
+                      deviceId: device.id,
+                      eventType: alertEvent,
+                      titleKey,
+                      bodyKey,
+                      data: { deviceName: device.name },
+                    },
+                  },
+                  { removeOnComplete: true, attempts: 1 },
+                );
+              }),
+          );
+        } else {
+          this.logger.debug(
+            `[STATUS] Skipped duplicate transition notification for ${deviceToken} (lock held)`,
+          );
+        }
       }
 
       // 5. Process state history (firmware may bundle telemetry in status message)

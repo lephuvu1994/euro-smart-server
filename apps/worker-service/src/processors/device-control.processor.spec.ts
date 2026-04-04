@@ -1,10 +1,30 @@
-jest.mock('@faker-js/faker', () => ({ faker: { string: { alphanumeric: () => 'abc', uuid: () => 'uuid' }, internet: { email: () => 'test@test.com' }, person: { firstName: () => 'First', lastName: () => 'Last' }, number: { int: () => 1 }, phone: { number: () => '123' }, date: { past: () => new Date(), future: () => new Date() }, datatype: { boolean: () => true } } }));
-jest.mock('expo-server-sdk', () => ({ __esModule: true, default: jest.fn(), Expo: jest.fn() }));
+jest.mock('@faker-js/faker', () => ({
+  faker: {
+    string: { alphanumeric: () => 'abc', uuid: () => 'uuid' },
+    internet: { email: () => 'test@test.com' },
+    person: { firstName: () => 'First', lastName: () => 'Last' },
+    number: { int: () => 1 },
+    phone: { number: () => '123' },
+    date: { past: () => new Date(), future: () => new Date() },
+    datatype: { boolean: () => true },
+  },
+}));
+jest.mock('expo-server-sdk', () => ({
+  __esModule: true,
+  default: jest.fn(),
+  Expo: jest.fn(),
+}));
 import { Test, TestingModule } from '@nestjs/testing';
 import { DeviceControlProcessor } from './device-control.processor';
 import { DatabaseService } from '@app/database';
 import { RedisService } from '@app/redis-cache';
-import { IntegrationManager, SceneTriggerType, DEVICE_JOBS, SceneTriggerIndexService, APP_BULLMQ_QUEUES } from '@app/common';
+import {
+  IntegrationManager,
+  SceneTriggerType,
+  DEVICE_JOBS,
+  SceneTriggerIndexService,
+  APP_BULLMQ_QUEUES,
+} from '@app/common';
 import { SocketEventPublisher } from '@app/common/events/socket-event.publisher';
 import { getQueueToken } from '@nestjs/bullmq';
 import { Job, Queue } from 'bullmq';
@@ -60,10 +80,16 @@ describe('DeviceControlProcessor', () => {
         DeviceControlProcessor,
         { provide: DatabaseService, useValue: mockDatabase },
         { provide: RedisService, useValue: mockRedis },
-        { provide: SceneTriggerIndexService, useValue: mockSceneTriggerIndexService },
+        {
+          provide: SceneTriggerIndexService,
+          useValue: mockSceneTriggerIndexService,
+        },
         { provide: IntegrationManager, useValue: mockIntegrationManager },
         { provide: SocketEventPublisher, useValue: mockSocketPublisher },
-        { provide: getQueueToken(APP_BULLMQ_QUEUES.DEVICE_CONTROL), useValue: mockQueue },
+        {
+          provide: getQueueToken(APP_BULLMQ_QUEUES.DEVICE_CONTROL),
+          useValue: mockQueue,
+        },
       ],
     }).compile();
 
@@ -80,16 +106,24 @@ describe('DeviceControlProcessor', () => {
 
   describe('onFailed', () => {
     it('should log DLQ alert on job failure', () => {
-      const mockJob = { name: 'test_job', id: '123', attemptsMade: 3, data: {} } as unknown as Job;
+      const mockJob = {
+        name: 'test_job',
+        id: '123',
+        attemptsMade: 3,
+        data: {},
+      } as unknown as Job;
       const error = new Error('Test error');
-      
-      const loggerSpy = jest.spyOn((processor as any).logger, 'error').mockImplementation(() => {});
-      
+
+      // eslint-disable-next-line @typescript-eslint/no-empty-function
+      const loggerSpy = jest
+        .spyOn((processor as any).logger, 'error')
+        .mockImplementation(() => {});
+
       processor.onFailed(mockJob, error);
-      
+
       expect(loggerSpy).toHaveBeenCalledWith(
         `[DLQ Alert] Job test_job failed after 3 attempts: Test error`,
-        { jobId: '123', data: {} }
+        { jobId: '123', data: {} },
       );
     });
   });
@@ -97,7 +131,7 @@ describe('DeviceControlProcessor', () => {
   describe('handleCheckDeviceStateTriggers', () => {
     it('should return immediately if no scenes match the device index', async () => {
       sceneTriggerIndexService.getSceneIdsForDevice.mockResolvedValueOnce([]);
-      
+
       const job = {
         name: DEVICE_JOBS.CHECK_DEVICE_STATE_TRIGGERS,
         data: { deviceToken: 'device-1' },
@@ -109,8 +143,10 @@ describe('DeviceControlProcessor', () => {
     });
 
     it('should evaluate trigger logic and push to RUN_SCENE if matching', async () => {
-      sceneTriggerIndexService.getSceneIdsForDevice.mockResolvedValueOnce(['scene-1']);
-      
+      sceneTriggerIndexService.getSceneIdsForDevice.mockResolvedValueOnce([
+        'scene-1',
+      ]);
+
       const mockScene = {
         id: 'scene-1',
         name: 'Auto Lights',
@@ -122,17 +158,24 @@ describe('DeviceControlProcessor', () => {
             deviceStateConfig: {
               conditionLogic: 'and',
               conditions: [
-                { deviceToken: 'device-1', entityCode: 'door_sensor', value: true, operator: 'eq' }
-              ]
-            }
-          }
-        ]
+                {
+                  deviceToken: 'device-1',
+                  entityCode: 'door_sensor',
+                  value: true,
+                  operator: 'eq',
+                },
+              ],
+            },
+          },
+        ],
       };
-      
+
       databaseService.scene.findMany.mockResolvedValueOnce([mockScene as any]);
-      
+
       // Mock batch-resolve deviceToken → deviceId via findMany
-      databaseService.device.findMany.mockResolvedValueOnce([{ id: 'device-1', token: 'device-1' }]);
+      databaseService.device.findMany.mockResolvedValueOnce([
+        { id: 'device-1', token: 'device-1' },
+      ]);
       redisService.get.mockResolvedValueOnce(JSON.stringify({ state: true }));
 
       const job = {
@@ -143,23 +186,25 @@ describe('DeviceControlProcessor', () => {
       await processor.process(job);
 
       expect(deviceQueue.add).toHaveBeenCalledWith(
-        DEVICE_JOBS.RUN_SCENE, 
-        { sceneId: 'scene-1' }, 
-        expect.any(Object)
+        DEVICE_JOBS.RUN_SCENE,
+        { sceneId: 'scene-1' },
+        expect.any(Object),
       );
-      
+
       expect(databaseService.scene.update).toHaveBeenCalledWith({
         where: { id: 'scene-1' },
-        data: { lastFiredAt: expect.any(Date) }
+        data: { lastFiredAt: expect.any(Date) },
       });
     });
 
     it('should skip pushing RUN_SCENE if rate limited (minIntervalSeconds not met)', async () => {
-      sceneTriggerIndexService.getSceneIdsForDevice.mockResolvedValueOnce(['scene-1']);
-      
+      sceneTriggerIndexService.getSceneIdsForDevice.mockResolvedValueOnce([
+        'scene-1',
+      ]);
+
       const recentlyFired = new Date();
       recentlyFired.setSeconds(recentlyFired.getSeconds() - 10); // Fired 10 seconds ago
-      
+
       const mockScene = {
         id: 'scene-1',
         name: 'Auto Lights',
@@ -171,16 +216,23 @@ describe('DeviceControlProcessor', () => {
             deviceStateConfig: {
               conditionLogic: 'or',
               conditions: [
-                { deviceToken: 'device-1', entityCode: 'door_sensor', value: true, operator: 'eq' }
-              ]
-            }
-          }
-        ]
+                {
+                  deviceToken: 'device-1',
+                  entityCode: 'door_sensor',
+                  value: true,
+                  operator: 'eq',
+                },
+              ],
+            },
+          },
+        ],
       };
-      
+
       databaseService.scene.findMany.mockResolvedValueOnce([mockScene as any]);
-      
-      databaseService.device.findMany.mockResolvedValueOnce([{ id: 'device-1', token: 'device-1' }]);
+
+      databaseService.device.findMany.mockResolvedValueOnce([
+        { id: 'device-1', token: 'device-1' },
+      ]);
       redisService.get.mockResolvedValueOnce(JSON.stringify({ state: true }));
 
       const job = {

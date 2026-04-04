@@ -19,6 +19,7 @@ describe('DeviceControlProcessor', () => {
     const mockDatabase = {
       device: {
         findUnique: jest.fn(),
+        findMany: jest.fn(),
       },
       scene: {
         findMany: jest.fn(),
@@ -123,9 +124,9 @@ describe('DeviceControlProcessor', () => {
       
       databaseService.scene.findMany.mockResolvedValueOnce([mockScene as any]);
       
-      // Mock evaluateOneCondition via database & redis calls
-      databaseService.device.findUnique.mockResolvedValueOnce({ id: 'device-1', token: 'device-1' } as any);
-      redisService.get.mockResolvedValueOnce(JSON.stringify({ state: true })); // Simulating Redis state returning true string
+      // Mock batch-resolve deviceToken → deviceId via findMany
+      databaseService.device.findMany.mockResolvedValueOnce([{ id: 'device-1', token: 'device-1' }]);
+      redisService.get.mockResolvedValueOnce(JSON.stringify({ state: true }));
 
       const job = {
         name: DEVICE_JOBS.CHECK_DEVICE_STATE_TRIGGERS,
@@ -172,7 +173,7 @@ describe('DeviceControlProcessor', () => {
       
       databaseService.scene.findMany.mockResolvedValueOnce([mockScene as any]);
       
-      databaseService.device.findUnique.mockResolvedValueOnce({ token: 'device-1', id: 'device-1' } as any);
+      databaseService.device.findMany.mockResolvedValueOnce([{ id: 'device-1', token: 'device-1' }]);
       redisService.get.mockResolvedValueOnce(JSON.stringify({ state: true }));
 
       const job = {

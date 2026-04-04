@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { RedisService } from '@app/redis-cache';
 
 export interface ISocketEvent {
@@ -11,6 +11,8 @@ export const SOCKET_EVENTS_CHANNEL = 'socket:events';
 
 @Injectable()
 export class SocketEventPublisher {
+  private readonly logger = new Logger(SocketEventPublisher.name);
+
   constructor(private readonly redisService: RedisService) {}
 
   private async publishWithRetry(payload: ISocketEvent): Promise<void> {
@@ -24,7 +26,7 @@ export class SocketEventPublisher {
       } catch (error: unknown) {
         if (attempt === 3) {
           const errMsg = error instanceof Error ? error.message : String(error);
-          console.error(`Socket publish failed after 3 attempts: ${errMsg}`);
+          this.logger.error(`Socket publish failed after 3 attempts: ${errMsg}`);
           return;
         }
         await new Promise((resolve) => setTimeout(resolve, attempt * 100));

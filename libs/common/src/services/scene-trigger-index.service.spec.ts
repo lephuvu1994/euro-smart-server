@@ -96,6 +96,9 @@ describe('SceneTriggerIndexService', () => {
       expect(service.removeIndex).toHaveBeenCalledWith('scene-1');
       expect(redisService.sadd).toHaveBeenCalledWith('scene_trigger:device:token-A', 'scene-1');
       expect(redisService.sadd).toHaveBeenCalledWith('scene_trigger:device:token-B', 'scene-1');
+      // Verify tracking set is also populated
+      expect(redisService.sadd).toHaveBeenCalledWith('scene_trigger:tracked:scene-1', 'token-A');
+      expect(redisService.sadd).toHaveBeenCalledWith('scene_trigger:tracked:scene-1', 'token-B');
     });
   });
 

@@ -114,10 +114,9 @@ describe('DeviceControlProcessor', () => {
       } as unknown as Job;
       const error = new Error('Test error');
 
-      // eslint-disable-next-line @typescript-eslint/no-empty-function
       const loggerSpy = jest
         .spyOn((processor as any).logger, 'error')
-        .mockImplementation(() => {});
+        .mockImplementation(jest.fn());
 
       processor.onFailed(mockJob, error);
 

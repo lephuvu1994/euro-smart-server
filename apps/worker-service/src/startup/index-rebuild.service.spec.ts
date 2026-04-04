@@ -1,5 +1,19 @@
-jest.mock('@faker-js/faker', () => ({ faker: { string: { alphanumeric: () => 'abc', uuid: () => 'uuid' }, internet: { email: () => 'test@test.com' }, person: { firstName: () => 'First', lastName: () => 'Last' }, number: { int: () => 1 }, phone: { number: () => '123' }, date: { past: () => new Date(), future: () => new Date() }, datatype: { boolean: () => true } } }));
-jest.mock('expo-server-sdk', () => ({ __esModule: true, default: jest.fn(), Expo: jest.fn() }));
+jest.mock('@faker-js/faker', () => ({
+  faker: {
+    string: { alphanumeric: () => 'abc', uuid: () => 'uuid' },
+    internet: { email: () => 'test@test.com' },
+    person: { firstName: () => 'First', lastName: () => 'Last' },
+    number: { int: () => 1 },
+    phone: { number: () => '123' },
+    date: { past: () => new Date(), future: () => new Date() },
+    datatype: { boolean: () => true },
+  },
+}));
+jest.mock('expo-server-sdk', () => ({
+  __esModule: true,
+  default: jest.fn(),
+  Expo: jest.fn(),
+}));
 import { Test, TestingModule } from '@nestjs/testing';
 import { IndexRebuildService } from './index-rebuild.service';
 import { DatabaseService } from '@app/database';
@@ -35,7 +49,9 @@ describe('IndexRebuildService', () => {
     prismaService = module.get(DatabaseService);
 
     // Suppress regular logs during testing to keep output clean, but let us verify error paths
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
     jest.spyOn(Logger.prototype, 'log').mockImplementation(() => {});
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
     jest.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
   });
 
@@ -49,7 +65,9 @@ describe('IndexRebuildService', () => {
 
   it('should call rebuildAllIndexes with a callback that queries active scenes', async () => {
     const mockScenes = [{ id: 'scene-1', triggers: [] }];
-    (prismaService.scene.findMany as jest.Mock).mockResolvedValueOnce(mockScenes);
+    (prismaService.scene.findMany as jest.Mock).mockResolvedValueOnce(
+      mockScenes,
+    );
 
     // Mock rebuildAllIndexes to immediately invoke the passed callback
     indexService.rebuildAllIndexes.mockImplementationOnce(async (cb) => {
@@ -67,12 +85,16 @@ describe('IndexRebuildService', () => {
   });
 
   it('should catch and log errors if rebuildAllIndexes fails', async () => {
-    indexService.rebuildAllIndexes.mockRejectedValueOnce(new Error('Redis connection lost'));
+    indexService.rebuildAllIndexes.mockRejectedValueOnce(
+      new Error('Redis connection lost'),
+    );
 
     // Should not throw, but just catch the error internally
     await expect(service.onModuleInit()).resolves.toBeUndefined();
-    
+
     // Verify logger error was called
-    expect(Logger.prototype.error).toHaveBeenCalledWith('Failed to rebuild Redis trigger index: Redis connection lost');
+    expect(Logger.prototype.error).toHaveBeenCalledWith(
+      'Failed to rebuild Redis trigger index: Redis connection lost',
+    );
   });
 });

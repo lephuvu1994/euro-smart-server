@@ -17,7 +17,7 @@ export class MqttGenericDriver implements IDeviceDriver {
   async setValue(device: any, entity: any, value: any): Promise<boolean> {
     try {
       const suffix = (entity.commandSuffix ?? 'set').replace(/^\//, '');
-      const topic = `${device.partner.code}/${device.deviceModel.code}/${device.token}/${suffix}`;
+      const topic = `device/${device.token}/${suffix}`;
 
       let payloadStr = '';
       if (entity.commandKey) {
@@ -45,8 +45,11 @@ export class MqttGenericDriver implements IDeviceDriver {
       if (entities.length === 0) return true;
 
       // Dùng commandSuffix của entity đầu tiên (bulk thường cùng suffix)
-      const suffix = ((entities[0] as any).commandSuffix ?? 'set').replace(/^\//, '');
-      const topic = `${device.partner.code}/${device.deviceModel.code}/${device.token}/${suffix}`;
+      const suffix = ((entities[0] as any).commandSuffix ?? 'set').replace(
+        /^\//,
+        '',
+      );
+      const topic = `device/${device.token}/${suffix}`;
 
       // Gộp payload: { commandKey1: value1, commandKey2: value2, ... }
       const payload: Record<string, any> = {};
@@ -73,13 +76,20 @@ export class MqttGenericDriver implements IDeviceDriver {
    * Dùng cho: unbind, OTA URL, system commands...
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  async publishRaw(device: any, payload: Record<string, any>): Promise<boolean> {
+  async publishRaw(
+    device: any,
+    payload: Record<string, any>,
+  ): Promise<boolean> {
     try {
-      const topic = `${device.partner.code}/${device.deviceModel.code}/${device.token}/set`;
-      await this.mqttService.publish(topic, JSON.stringify(payload), { qos: 1 });
+      const topic = `device/${device.token}/set`;
+      await this.mqttService.publish(topic, JSON.stringify(payload), {
+        qos: 1,
+      });
       return true;
     } catch (error: any) {
-      this.logger.error(`Failed publishRaw to ${device.token}: ${error?.message}`);
+      this.logger.error(
+        `Failed publishRaw to ${device.token}: ${error?.message}`,
+      );
       return false;
     }
   }

@@ -1,4 +1,4 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Job, Queue } from 'bullmq';
 import { APP_BULLMQ_QUEUES, DEVICE_JOBS } from '@app/common';
 import { Injectable, Logger } from '@nestjs/common';
@@ -54,6 +54,14 @@ export class AutomationProcessor extends WorkerHost {
     private readonly deviceControlQueue: Queue,
   ) {
     super();
+  }
+
+  @OnWorkerEvent('failed')
+  onFailed(job: Job, error: Error) {
+    this.logger.error(
+      `[DLQ] ${job?.name} failed after ${job?.attemptsMade} attempts: ${error?.message}`,
+      { jobId: job?.id, data: job?.data },
+    );
   }
 
   async process(job: Job): Promise<unknown> {

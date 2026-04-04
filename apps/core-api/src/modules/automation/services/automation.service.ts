@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
 import { DatabaseService } from '@app/database';
 import { InjectQueue } from '@nestjs/bullmq';
 import { APP_BULLMQ_QUEUES, DEVICE_JOBS, calculateNextExecution } from '@app/common';
@@ -19,6 +19,8 @@ interface AutomationAction {
 
 @Injectable()
 export class AutomationService {
+  private readonly logger = new Logger(AutomationService.name);
+
   constructor(
     private readonly prisma: DatabaseService,
     @InjectQueue(APP_BULLMQ_QUEUES.AUTOMATION)
@@ -26,6 +28,14 @@ export class AutomationService {
   ) {}
 
   async createTimer(userId: string, dto: CreateTimerDto): Promise<DeviceTimer> {
+    const [user, timerCount] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: userId }, select: { maxTimers: true } }),
+      this.prisma.deviceTimer.count({ where: { userId } }),
+    ]);
+
+    if (timerCount >= (user?.maxTimers ?? 50)) {
+      throw new BadRequestException('automation.error.timerQuotaExceeded');
+    }
     const executeAt = new Date(dto.executeAt);
 
     if (executeAt <= new Date()) {
@@ -49,7 +59,7 @@ export class AutomationService {
     const delay = executeAt.getTime() - Date.now();
 
     // Enqueue with full payload so worker does not need a DB round-trip
-    await this.automationQueue.add(
+    const job = await this.automationQueue.add(
       DEVICE_JOBS.TIMER_EXECUTE,
       {
         timerId: timer.id,
@@ -62,10 +72,25 @@ export class AutomationService {
       { delay: delay > 0 ? delay : 0, removeOnComplete: true },
     );
 
+    if (job?.id) {
+      await this.prisma.deviceTimer.update({
+        where: { id: timer.id },
+        data: { jobId: String(job.id) },
+      });
+    }
+
     return timer;
   }
 
   async createSchedule(userId: string, dto: CreateScheduleDto): Promise<DeviceSchedule> {
+    const [user, scheduleCount] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: userId }, select: { maxSchedules: true } }),
+      this.prisma.deviceSchedule.count({ where: { userId } }),
+    ]);
+
+    if (scheduleCount >= (user?.maxSchedules ?? 50)) {
+      throw new BadRequestException('automation.error.scheduleQuotaExceeded');
+    }
     const nextExecuteAt = calculateNextExecution({
       cronExpression: dto.cronExpression,
       daysOfWeek: dto.daysOfWeek,
@@ -109,6 +134,11 @@ export class AutomationService {
     if (!timer) throw new NotFoundException('automation.error.timerNotFound');
 
     // Remove BullMQ job if jobId is stored
+    if (timer.jobId) {
+      const job = await this.automationQueue.getJob(timer.jobId);
+      if (job) await job.remove().catch((err: Error) => this.logger.warn(`Failed to remove BullMQ job ${timer.jobId}: ${err.message}`));
+    }
+
     await this.prisma.deviceTimer.delete({ where: { id: timerId } });
   }
 
@@ -146,5 +176,17 @@ export class AutomationService {
       where: { id: scheduleId },
       data: { isActive, nextExecuteAt },
     });
+  }
+
+  async getExecutionStats(userId: string) {
+    const [successCount, failCount] = await Promise.all([
+      this.prisma.scheduleExecutionLog.count({ where: { userId, status: 'SUCCESS' } }),
+      this.prisma.scheduleExecutionLog.count({ where: { userId, status: 'FAILED' } }),
+    ]);
+    return { successCount, failCount, totalCount: successCount + failCount };
+  }
+
+  async getQueueMetrics() {
+    return this.automationQueue.getJobCounts();
   }
 }

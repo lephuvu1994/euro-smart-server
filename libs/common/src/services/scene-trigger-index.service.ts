@@ -28,6 +28,8 @@ export class SceneTriggerIndexService {
     // First remove any stale entries for this scene across all device keys
     await this.removeIndex(sceneId);
 
+    const trackingKey = `scene_trigger:tracked:${sceneId}`;
+
     for (const trigger of triggers) {
       if (trigger.type !== 'DEVICE_STATE') continue;
       const conditions = trigger.deviceStateConfig?.conditions ?? [];
@@ -35,16 +37,16 @@ export class SceneTriggerIndexService {
         if (!condition.deviceToken) continue;
         const key = `${SCENE_TRIGGER_PREFIX}${condition.deviceToken}`;
         await this.redis.sadd(key, sceneId);
+        // Track which deviceTokens this scene references, so removeIndex can clean up
+        await this.redis.sadd(trackingKey, condition.deviceToken);
       }
     }
   }
 
   /**
    * Remove all index entries for a scene (on DELETE).
-   * Because Redis doesn't support "find all keys matching pattern + filter by value" atomically,
-   * we track which device-keys this scene is indexed under via a secondary set.
-   *
-   * Tracking key: scene_trigger:tracked:{sceneId} → Set<deviceToken>
+   * Uses the tracking set `scene_trigger:tracked:{sceneId}` to know which
+   * device keys contain this sceneId, then removes from each.
    */
   async removeIndex(sceneId: string): Promise<void> {
     const trackingKey = `scene_trigger:tracked:${sceneId}`;
@@ -69,7 +71,7 @@ export class SceneTriggerIndexService {
 
   /**
    * Rebuild the full index from DB — run once on worker startup as a safety net.
-   * Uses batching to avoid loading all scenes into memory.
+   * Flushes both device-index keys AND tracking keys before rebuilding.
    */
   async rebuildAllIndexes(
     findActiveScenes: () => Promise<Array<{ id: string; triggers: unknown }>>,
@@ -77,7 +79,7 @@ export class SceneTriggerIndexService {
     this.logger.log('Rebuilding device-state trigger index...');
     const scenes = await findActiveScenes();
 
-    // Flush all existing index keys (pattern scan)
+    // Flush all existing index keys AND tracking keys (pattern scan)
     const client = this.redis.getClient();
     const keys: string[] = [];
     let scanCursor = '0';
@@ -85,7 +87,7 @@ export class SceneTriggerIndexService {
       const [nextCursor, batch] = await client.scan(
         scanCursor,
         'MATCH',
-        `${SCENE_TRIGGER_PREFIX}*`,
+        'scene_trigger:*',
         'COUNT',
         '100',
       );

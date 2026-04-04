@@ -13,7 +13,7 @@ export class MqttGenericDriver implements IDeviceDriver {
   async setValue(device: any, entity: any, value: any): Promise<boolean> {
     try {
       const suffix = entity.commandSuffix ?? 'set';
-      const topic = `${device.partner.code}/${device.deviceModel.code}/${device.token}/${suffix}`;
+      const topic = `device/${device.token}/${suffix}`;
 
       let payloadStr = '';
       if (entity.commandKey) {
@@ -37,7 +37,7 @@ export class MqttGenericDriver implements IDeviceDriver {
       if (entities.length === 0) return true;
 
       const suffix = (entities[0] as any).commandSuffix ?? 'set';
-      const topic = `${device.partner.code}/${device.deviceModel.code}/${device.token}/${suffix}`;
+      const topic = `device/${device.token}/${suffix}`;
 
       const payload: Record<string, any> = {};
       for (const entity of entities as any[]) {

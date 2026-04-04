@@ -40,8 +40,6 @@ export class DeviceStatusService {
         select: {
           id: true,
           token: true,
-          partner: { select: { code: true } },
-          deviceModel: { select: { code: true } },
         },
       });
 
@@ -50,7 +48,7 @@ export class DeviceStatusService {
           `[UNBIND] Device ${deviceToken} is unbound. Sending unbind command...`,
         );
 
-        const cmdTopic = `${unboundDevice.partner.code}/${unboundDevice.deviceModel.code}/${deviceToken}/set`;
+        const cmdTopic = `device/${deviceToken}/set`;
 
         // ★ PARALLEL: publish + hard-delete are independent
         await Promise.all([

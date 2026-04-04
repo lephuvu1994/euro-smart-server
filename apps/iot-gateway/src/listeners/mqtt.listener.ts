@@ -16,19 +16,19 @@ export class MqttListener implements OnApplicationBootstrap {
   onApplicationBootstrap() {
     // QoS 0: Status/heartbeat
     this.mqttService.subscribe(
-      '+/+/+/status',
+      'device/+/status',
       this.handleStatusMessage.bind(this),
       { qos: 0 },
     );
     // QoS 0: Telemetry — sensor data
     this.mqttService.subscribe(
-      '+/+/+/telemetry',
+      'device/+/telemetry',
       this.handleTelemetryMessage.bind(this),
       { qos: 0 },
     );
     // QoS 1: State feedback — device control response
     this.mqttService.subscribe(
-      '+/+/+/state',
+      'device/+/state',
       this.handleStateMessage.bind(this),
       { qos: 1 },
     );
@@ -74,11 +74,11 @@ export class MqttListener implements OnApplicationBootstrap {
     }
 
     const parts = topic.split('/');
-    if (!parts || parts.length < 4) {
+    // Topic: "device/{token}/status"
+    if (parts.length < 3 || parts[0] !== 'device') {
       this.logger.error(`Invalid topic format: ${topic}`);
       return null;
     }
-    // Topic: "COMPANY_A/DEVICE_CODE/DEVICE_TOKEN/status"
-    return parts[2];
+    return parts[1];
   }
 }

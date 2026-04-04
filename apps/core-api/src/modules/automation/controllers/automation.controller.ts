@@ -17,6 +17,9 @@ import { CreateTimerDto } from '../dto/create-timer.dto';
 import { CreateScheduleDto } from '../dto/create-schedule.dto';
 import { IRequest } from '@app/common';
 import { JwtAccessGuard } from '@app/common';
+import { AllowedRoles } from '@app/common/request/decorators/request.role.decorator';
+import { RolesGuard } from '@app/common/request/guards/roles.guard';
+import { UserRole } from '@prisma/client';
 
 class ToggleScheduleDto {
   isActive!: boolean;
@@ -35,6 +38,8 @@ export class AutomationController {
   }
 
   @ApiOperation({ summary: 'Get BullMQ queue metrics (Admin only)' })
+  @UseGuards(RolesGuard)
+  @AllowedRoles([UserRole.ADMIN])
   @Get('queue-metrics')
   getQueueMetrics() {
     return this.automationService.getQueueMetrics();

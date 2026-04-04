@@ -7,6 +7,7 @@ import { Logger } from '@nestjs/common';
 import { APP_BULLMQ_QUEUES } from '@app/common';
 import { RedisService } from '@app/redis-cache';
 import { IntegrationManager, SceneTriggerType, DEVICE_JOBS, SceneTriggerIndexService } from '@app/common';
+import { SocketEventPublisher } from '@app/common/events/socket-event.publisher';
 import { DatabaseService } from '@app/database';
 import { DeviceEntity } from '@prisma/client';
 
@@ -69,7 +70,9 @@ interface EntityState {
   [key: string]: unknown;
 }
 
-@Processor(APP_BULLMQ_QUEUES.DEVICE_CONTROL)
+@Processor(APP_BULLMQ_QUEUES.DEVICE_CONTROL, {
+  concurrency: 20,
+})
 export class DeviceControlProcessor extends WorkerHost {
   private readonly logger = new Logger(DeviceControlProcessor.name);
 
@@ -78,6 +81,7 @@ export class DeviceControlProcessor extends WorkerHost {
     private readonly databaseService: DatabaseService,
     private readonly redisService: RedisService,
     private readonly sceneTriggerIndexService: SceneTriggerIndexService,
+    private readonly socketPublisher: SocketEventPublisher,
     @InjectQueue(APP_BULLMQ_QUEUES.DEVICE_CONTROL)
     private readonly deviceQueue: Queue,
   ) {
@@ -166,35 +170,24 @@ export class DeviceControlProcessor extends WorkerHost {
         `✅ [${driver.name}] Command dispatched for ${device.token}`,
       );
 
-      // Notify realtime UI
-      this.redisService.publish(
-        'socket:emit',
-        JSON.stringify({
-          room: `device_${device.token}`,
-          event: 'COMMAND_SENT',
-          data: {
-            deviceId: device.id,
-            entityCode,
-            value,
-            timestamp: new Date(),
-            status: 'sent',
-          },
-        }),
-      );
+      // Notify realtime UI (with retry)
+      await this.socketPublisher.emitToDevice(device.token, 'COMMAND_SENT', {
+        deviceId: device.id,
+        entityCode,
+        value,
+        timestamp: new Date(),
+        status: 'sent',
+      });
 
       return { success: true };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.error(`❌ Failed to control device: ${message}`);
 
-      this.redisService.publish(
-        'socket:emit',
-        JSON.stringify({
-          room: `device_${device.token}`,
-          event: 'COMMAND_ERROR',
-          data: { deviceId: device.id, error: message },
-        }),
-      );
+      await this.socketPublisher.emitToDevice(device.token, 'COMMAND_ERROR', {
+        deviceId: device.id,
+        error: message,
+      });
 
       throw error;
     }
@@ -260,37 +253,26 @@ export class DeviceControlProcessor extends WorkerHost {
         `✅ [${driver.name}] Command dispatched for ${device.token}`,
       );
 
-      // Notify realtime UI
-      this.redisService.publish(
-        'socket:emit',
-        JSON.stringify({
-          room: `device_${device.token}`,
-          event: 'COMMAND_SENT',
-          data: {
-            deviceId: device.id,
-            values: entityPayloads.map((ep) => ({
-              entityCode: ep.entityCode,
-              value: ep.value,
-            })),
-            timestamp: new Date(),
-            status: 'sent',
-          },
-        }),
-      );
+      // Notify realtime UI (with retry)
+      await this.socketPublisher.emitToDevice(device.token, 'COMMAND_SENT', {
+        deviceId: device.id,
+        values: entityPayloads.map((ep) => ({
+          entityCode: ep.entityCode,
+          value: ep.value,
+        })),
+        timestamp: new Date(),
+        status: 'sent',
+      });
 
       return { success: true };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.error(`❌ Failed to control device: ${message}`);
 
-      this.redisService.publish(
-        'socket:emit',
-        JSON.stringify({
-          room: `device_${device.token}`,
-          event: 'COMMAND_ERROR',
-          data: { deviceId: device.id, error: message },
-        }),
-      );
+      await this.socketPublisher.emitToDevice(device.token, 'COMMAND_ERROR', {
+        deviceId: device.id,
+        error: message,
+      });
 
       throw error;
     }
@@ -389,23 +371,16 @@ export class DeviceControlProcessor extends WorkerHost {
         `✅ Scene device ${deviceToken}: ${newEntities.length} entity(ies)`,
       );
 
-      // Notify realtime UI
-      this.redisService.publish(
-        'socket:emit',
-        JSON.stringify({
-          room: `device_${device.token}`,
-          event: 'COMMAND_SENT',
-          data: {
-            deviceId: device.id,
-            values: newEntities.map((e) => ({
-              entityCode: e.code,
-              value: e.state ?? e.stateText,
-            })),
-            timestamp: new Date(),
-            status: 'sent',
-          },
-        }),
-      );
+      // Notify realtime UI (with retry)
+      await this.socketPublisher.emitToDevice(device.token, 'COMMAND_SENT', {
+        deviceId: device.id,
+        values: newEntities.map((e) => ({
+          entityCode: e.code,
+          value: e.state ?? e.stateText,
+        })),
+        timestamp: new Date(),
+        status: 'sent',
+      });
 
       return {
         success: true,
@@ -416,14 +391,10 @@ export class DeviceControlProcessor extends WorkerHost {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.error(`❌ Scene device ${deviceToken}: ${message}`);
 
-      this.redisService.publish(
-        'socket:emit',
-        JSON.stringify({
-          room: `device_${device.token}`,
-          event: 'COMMAND_ERROR',
-          data: { deviceId: device.id, error: message },
-        }),
-      );
+      await this.socketPublisher.emitToDevice(device.token, 'COMMAND_ERROR', {
+        deviceId: device.id,
+        error: message,
+      });
 
       throw error;
     }

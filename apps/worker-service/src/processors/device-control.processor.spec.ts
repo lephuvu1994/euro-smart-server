@@ -5,6 +5,7 @@ import { DeviceControlProcessor } from './device-control.processor';
 import { DatabaseService } from '@app/database';
 import { RedisService } from '@app/redis-cache';
 import { IntegrationManager, SceneTriggerType, DEVICE_JOBS, SceneTriggerIndexService, APP_BULLMQ_QUEUES } from '@app/common';
+import { SocketEventPublisher } from '@app/common/events/socket-event.publisher';
 import { getQueueToken } from '@nestjs/bullmq';
 import { Job, Queue } from 'bullmq';
 
@@ -49,6 +50,11 @@ describe('DeviceControlProcessor', () => {
       getProvider: jest.fn(),
     };
 
+    const mockSocketPublisher = {
+      emitToDevice: jest.fn().mockResolvedValue(undefined),
+      emitToRoom: jest.fn().mockResolvedValue(undefined),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         DeviceControlProcessor,
@@ -56,6 +62,7 @@ describe('DeviceControlProcessor', () => {
         { provide: RedisService, useValue: mockRedis },
         { provide: SceneTriggerIndexService, useValue: mockSceneTriggerIndexService },
         { provide: IntegrationManager, useValue: mockIntegrationManager },
+        { provide: SocketEventPublisher, useValue: mockSocketPublisher },
         { provide: getQueueToken(APP_BULLMQ_QUEUES.DEVICE_CONTROL), useValue: mockQueue },
       ],
     }).compile();

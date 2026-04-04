@@ -12,6 +12,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { IsBoolean } from 'class-validator';
 import { AutomationService } from '../services/automation.service';
 import { CreateTimerDto } from '../dto/create-timer.dto';
 import { CreateScheduleDto } from '../dto/create-schedule.dto';
@@ -22,6 +23,7 @@ import { RolesGuard } from '@app/common/request/guards/roles.guard';
 import { UserRole } from '@prisma/client';
 
 class ToggleScheduleDto {
+  @IsBoolean()
   isActive!: boolean;
 }
 

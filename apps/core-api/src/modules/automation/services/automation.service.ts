@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
 import { DatabaseService } from '@app/database';
 import { InjectQueue } from '@nestjs/bullmq';
 import { APP_BULLMQ_QUEUES, DEVICE_JOBS, calculateNextExecution } from '@app/common';
@@ -19,6 +19,8 @@ interface AutomationAction {
 
 @Injectable()
 export class AutomationService {
+  private readonly logger = new Logger(AutomationService.name);
+
   constructor(
     private readonly prisma: DatabaseService,
     @InjectQueue(APP_BULLMQ_QUEUES.AUTOMATION)
@@ -134,7 +136,7 @@ export class AutomationService {
     // Remove BullMQ job if jobId is stored
     if (timer.jobId) {
       const job = await this.automationQueue.getJob(timer.jobId);
-      if (job) await job.remove().catch((err: Error) => console.log('Remove job err:', err.message));
+      if (job) await job.remove().catch((err: Error) => this.logger.warn(`Failed to remove BullMQ job ${timer.jobId}: ${err.message}`));
     }
 
     await this.prisma.deviceTimer.delete({ where: { id: timerId } });

@@ -446,6 +446,21 @@ export class DeviceControlProcessor extends WorkerHost {
       select: { id: true, name: true, triggers: true, minIntervalSeconds: true, lastFiredAt: true },
     });
 
+    // Batch-resolve all deviceTokens → deviceIds upfront (eliminates N+1 queries)
+    const allTokens = new Set<string>();
+    for (const scene of scenes) {
+      const triggers = Array.isArray(scene.triggers) ? (scene.triggers as Record<string, unknown>[]) : [];
+      for (const trigger of triggers) {
+        if (trigger?.['type'] !== SceneTriggerType.DEVICE_STATE) continue;
+        const cfg = trigger['deviceStateConfig'] as { conditions?: ConditionConfig[] } | undefined;
+        for (const c of cfg?.conditions ?? []) {
+          if (c.deviceToken) allTokens.add(c.deviceToken);
+        }
+      }
+    }
+
+    const tokenMap = await this.resolveDeviceTokens([...allTokens]);
+
     for (const scene of scenes) {
       const triggers = Array.isArray(scene.triggers) ? (scene.triggers as Record<string, unknown>[]) : [];
       for (const trigger of triggers) {
@@ -468,8 +483,8 @@ export class DeviceControlProcessor extends WorkerHost {
 
         const match =
           logic === 'and'
-            ? await this.evaluateConditionsAll(conditions)
-            : await this.evaluateConditionsAny(conditions);
+            ? await this.evaluateConditionsAll(conditions, tokenMap)
+            : await this.evaluateConditionsAny(conditions, tokenMap);
 
         if (match) {
           if (scene.minIntervalSeconds && scene.lastFiredAt) {
@@ -504,34 +519,43 @@ export class DeviceControlProcessor extends WorkerHost {
     return { ok: true };
   }
 
-  private async evaluateConditionsAll(conditions: ConditionConfig[]): Promise<boolean> {
+  /**
+   * Batch-resolve deviceTokens → deviceIds in a single DB query.
+   */
+  private async resolveDeviceTokens(tokens: string[]): Promise<Map<string, string>> {
+    if (tokens.length === 0) return new Map();
+    const devices = await this.databaseService.device.findMany({
+      where: { token: { in: tokens } },
+      select: { id: true, token: true },
+    });
+    return new Map(devices.map((d) => [d.token, d.id]));
+  }
+
+  private async evaluateConditionsAll(conditions: ConditionConfig[], tokenMap: Map<string, string>): Promise<boolean> {
     for (const c of conditions) {
-      if (!(await this.evaluateOneCondition(c))) return false;
+      if (!(await this.evaluateOneCondition(c, tokenMap))) return false;
     }
     return true;
   }
 
-  private async evaluateConditionsAny(conditions: ConditionConfig[]): Promise<boolean> {
+  private async evaluateConditionsAny(conditions: ConditionConfig[], tokenMap: Map<string, string>): Promise<boolean> {
     for (const c of conditions) {
-      if (await this.evaluateOneCondition(c)) return true;
+      if (await this.evaluateOneCondition(c, tokenMap)) return true;
     }
     return false;
   }
 
   /**
    * Evaluate 1 condition: read entity state from Redis, compare with expected value.
-   * Supports both entity primary state and specific attribute values.
+   * Uses pre-resolved tokenMap to avoid per-condition DB lookups.
    */
-  private async evaluateOneCondition(condition: ConditionConfig): Promise<boolean> {
-    const device = await this.databaseService.device.findUnique({
-      where: { token: condition.deviceToken },
-      select: { id: true },
-    });
-    if (!device) return false;
+  private async evaluateOneCondition(condition: ConditionConfig, tokenMap: Map<string, string>): Promise<boolean> {
+    const deviceId = tokenMap.get(condition.deviceToken);
+    if (!deviceId) return false;
 
     // Read entity state from Redis
     const raw = await this.redisService.get(
-      `device:${device.id}:entity:${condition.entityCode}`,
+      `device:${deviceId}:entity:${condition.entityCode}`,
     );
     if (raw === null) return false;
 

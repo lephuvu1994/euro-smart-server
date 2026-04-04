@@ -1,4 +1,4 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { APP_BULLMQ_QUEUES } from '@app/common/enums/app.enum';
@@ -30,6 +30,14 @@ export class NotificationProcessor extends WorkerHost {
     private readonly messageService: MessageService,
   ) {
     super();
+  }
+
+  @OnWorkerEvent('failed')
+  onFailed(job: Job, error: Error) {
+    this.logger.error(
+      `[DLQ] ${job?.name} failed after ${job?.attemptsMade} attempts: ${error?.message}`,
+      { jobId: job?.id, data: job?.data },
+    );
   }
 
   async process(job: Job<PushNotificationJobData>): Promise<void> {

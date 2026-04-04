@@ -1,4 +1,4 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { Logger } from '@nestjs/common';
 import { APP_BULLMQ_QUEUES, DEVICE_JOBS } from '@app/common';
@@ -10,6 +10,14 @@ export class DeviceStatusProcessor extends WorkerHost {
 
   constructor(private readonly db: DatabaseService) {
     super();
+  }
+
+  @OnWorkerEvent('failed')
+  onFailed(job: Job, error: Error) {
+    this.logger.error(
+      `[DLQ] ${job?.name} failed after ${job?.attemptsMade} attempts: ${error?.message}`,
+      { jobId: job?.id, data: job?.data },
+    );
   }
 
   async process(job: Job): Promise<any> {

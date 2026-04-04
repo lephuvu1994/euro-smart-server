@@ -70,6 +70,11 @@ model User {
   role      UserRole @default(USER)
   avatar    String?  @map("avatar")
 
+  // Automation Quotas
+  maxTimers    Int @default(50)
+  maxSchedules Int @default(50)
+  maxScenes    Int @default(100)
+
   // OTP
   otpCode     String?   @map("otp_code")
   otpExpire   DateTime? @map("otp_expire")
@@ -492,6 +497,10 @@ model Scene {
   active    Boolean  @default(true)
   triggers  Json     @default("[]")
   actions   Json     @default("[]")
+  
+  minIntervalSeconds Int?      @default(60)
+  lastFiredAt        DateTime?
+  
   homeId    String   @map("home_id") @db.Uuid
   home      Home     @relation(fields: [homeId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now()) @map("created_at")

@@ -21,17 +21,17 @@ jest.mock('@faker-js/faker', () => ({
 const createMockDatabaseService = () => ({
   deviceTimer: {
     findUnique: jest.fn(),
-    delete: jest.fn(),
+    delete: jest.fn().mockResolvedValue({}),
   },
   deviceSchedule: {
     findUnique: jest.fn(),
-    update: jest.fn(),
+    update: jest.fn().mockResolvedValue({}),
   },
   deviceEntity: {
     findUnique: jest.fn(),
   },
   scheduleExecutionLog: {
-    create: jest.fn(),
+    create: jest.fn().mockResolvedValue({}),
   },
 });
 

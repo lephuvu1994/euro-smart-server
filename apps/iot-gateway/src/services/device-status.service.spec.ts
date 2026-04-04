@@ -88,8 +88,6 @@ describe('DeviceStatusService', () => {
       const mockUnboundDevice = {
         id: 'dev-1',
         token: mockDeviceToken,
-        partner: { code: 'BKTech' },
-        deviceModel: { code: '1001' },
       };
 
       db.device.findFirst.mockResolvedValue(mockUnboundDevice);
@@ -97,7 +95,7 @@ describe('DeviceStatusService', () => {
       await service.processStatus(mockDeviceToken, payload);
 
       expect(mqtt.publish).toHaveBeenCalledWith(
-        'BKTech/1001/token-123/set',
+        'device/token-123/set',
         JSON.stringify({ action: 'unbind' }),
         expect.any(Object),
       );

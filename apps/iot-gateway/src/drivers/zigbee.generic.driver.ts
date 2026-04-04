@@ -17,7 +17,7 @@ export class ZigbeeGenericDriver implements IDeviceDriver {
       if (entityConfig.mqtt) {
         const mqttConfig = entityConfig.mqtt;
         const topic = (mqttConfig.topicPattern ?? '')
-          .replace('{{partnerCode}}', device.partner.code)
+          .replace('{{partnerCode}}', 'device')
           .replace('{{deviceToken}}', device.token);
 
         let payloadStr = '';
@@ -36,7 +36,7 @@ export class ZigbeeGenericDriver implements IDeviceDriver {
       }
 
       const suffix = entity.commandSuffix ?? 'set';
-      const topic = `${device.partner.code}/${device.deviceModel.code}/${device.token}/${suffix}`;
+      const topic = `device/${device.token}/${suffix}`;
       const payloadStr = entity.commandKey
         ? JSON.stringify({ [entity.commandKey]: value })
         : JSON.stringify(value);
@@ -57,7 +57,7 @@ export class ZigbeeGenericDriver implements IDeviceDriver {
 
       const firstEntity = entities[0] as any;
       const suffix = firstEntity.commandSuffix ?? 'set';
-      const topic = `${device.partner.code}/${device.deviceModel.code}/${device.token}/${suffix}`;
+      const topic = `device/${device.token}/${suffix}`;
 
       const payload: Record<string, any> = {};
       for (const entity of entities as any[]) {

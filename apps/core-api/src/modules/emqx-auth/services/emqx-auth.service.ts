@@ -172,10 +172,10 @@ export class EmqxAuthService {
 
   // ─── Helpers ───────────────────────────────
   private extractTokenFromTopic(topic: string): string | null {
-    // Topic format: "COMPANY/MODEL/{token}/state" or "+/+/{token}/state"
+    // Topic format: "device/{token}/action"
     const parts = topic.split('/');
-    if (parts.length < 3) return null;
-    return parts[2] || null;
+    if (parts.length < 3 || parts[0] !== 'device') return null;
+    return parts[1] || null;
   }
 
   private extractTimestampFromClientId(clientId: string): string | null {

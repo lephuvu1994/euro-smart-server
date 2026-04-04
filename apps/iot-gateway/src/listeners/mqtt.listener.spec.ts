@@ -47,7 +47,7 @@ describe('MqttListener', () => {
 
   describe('handleStatusMessage', () => {
     it('should extract token and call status service', async () => {
-      const topic = 'BKTech/1001/token-1/status';
+      const topic = 'device/token-1/status';
       const payload = Buffer.from(JSON.stringify({ online: true }));
 
       await (listener as any).handleStatusMessage(topic, payload);
@@ -58,7 +58,7 @@ describe('MqttListener', () => {
     });
 
     it('should log error if JSON is invalid in status message', async () => {
-      const topic = 'BKTech/1001/token-1/status';
+      const topic = 'device/token-1/status';
       const payload = Buffer.from('invalid-json');
       const loggerSpy = jest.spyOn((listener as any).logger, 'error');
 
@@ -81,7 +81,7 @@ describe('MqttListener', () => {
 
   describe('handleStateMessage', () => {
     it('should extract token and call state service', async () => {
-      const topic = 'BKTech/1001/token-1/state';
+      const topic = 'device/token-1/state';
       const payload = Buffer.from(JSON.stringify({ state: 'OPEN' }));
 
       await listener.handleStateMessage(topic, payload);
@@ -105,7 +105,7 @@ describe('MqttListener', () => {
     });
 
     it('should log error if JSON is invalid in state message', async () => {
-      const topic = 'BKTech/1001/token-1/state';
+      const topic = 'device/token-1/state';
       const payload = Buffer.from('invalid-json');
       const loggerSpy = jest.spyOn((listener as any).logger, 'error');
 

@@ -69,7 +69,7 @@ Tính năng cho phép chủ sở hữu thiết bị (Owner) có thể chia sẻ 
 
 ## Tính năng 3: Timer & Schedule (Hẹn giờ và Lịch trình)
 
-**Trạng thái**: ✅ Backend đã triển khai. 🔄 **Đang làm UI App**.
+**Trạng thái**: ✅ Backend đã triển khai. ✅ **Đã hoàn thành UI App**.
 
 ### 1. Mô tả tổng quan
 
@@ -88,44 +88,43 @@ Cho phép người dùng đặt lịch bật/tắt thiết bị theo thời gian
 
 **B. Phía Mobile App (eec-app-smarthome)**
 
-- [ ] `automationService.ts` — API client cho timers + schedules (CRUD).
-- [ ] `DeviceActionBar` — Bottom action bar dùng chung cho **tất cả** detail screens.
+- [x] `automationService.ts` — API client cho timers + schedules (CRUD).
+- [x] `DeviceActionBar` — Bottom action bar dùng chung cho **tất cả** detail screens.
   - Single entity: 2 button (Đếm ngược, Hẹn giờ)
   - Group entity (nhiều switch): 4 button (Bật tất, Tắt tất, Đếm ngược, Hẹn giờ)
-- [ ] `CountdownModal` — Bottom sheet chọn giờ/phút/giây (wheel) + toggle trạng thái BẬT/TẮT.
+- [x] `CountdownModal` — Bottom sheet chọn giờ/phút/giây (wheel) + toggle trạng thái BẬT/TẮT.
   - Group: thêm TabView chọn switch cụ thể phía trên wheel.
-- [ ] `SelectEntitySheet` — Bottom sheet chọn switch (dùng cho group trước khi vào Schedule Editor).
-- [ ] `ScheduleEditorScreen` — Màn hình hẹn giờ (`/device/[id]/schedule` route).
+- [x] `SelectEntitySheet` — Bottom sheet chọn switch (dùng cho group trước khi vào Schedule Editor).
+- [x] `ScheduleEditorScreen` — Màn hình hẹn giờ (`/device/[id]/schedule` route).
   - Chọn giờ (TimePicker)
   - Chọn ngày lặp lại Mon–Sun (multi-select)
-  - Toggle thông báo push
   - Toggle bật/tắt lịch
   - Header nút Lưu
   - List các schedule đang có + toggle bật/tắt từng cái
-- [ ] Tích hợp `DeviceActionBar` vào `SwitchDetailScreen`, `CurtainDetailScreen`, `LightDetailScreen`, `ClimateDetailScreen`.
+- [x] Tích hợp `DeviceActionBar` vào `SwitchDetailScreen`, `CurtainDetailScreen`, `LightDetailScreen`, `ClimateDetailScreen`.
 
 ### 3. API Contract (đã verify hoạt động)
 
-```
+```json
 POST /v1/automation/timers
 {
-  "targetType": "DEVICE",
-  "targetId": "device-uuid",
+  "targetType": "DEVICE_ENTITY",
+  "targetId": "entity-uuid",
   "service": "device-control",
   "executeAt": "2026-04-05T03:00:00.000Z",
-  "actions": [{ "entityCode": "main", "value": 0 }]
+  "actions": [{ "value": 0 }]
 }
 
 POST /v1/automation/schedules
 {
   "name": "Tắt đèn hằng đêm",
-  "targetType": "DEVICE",
-  "targetId": "device-uuid",
+  "targetType": "DEVICE_ENTITY",
+  "targetId": "entity-uuid",
   "service": "device-control",
   "daysOfWeek": [1, 2, 3, 4, 5],
   "timeOfDay": "22:00",
   "timezone": "Asia/Ho_Chi_Minh",
-  "actions": [{ "entityCode": "main", "value": 0 }]
+  "actions": [{ "value": 0 }]
 }
 
 GET  /v1/automation/timers

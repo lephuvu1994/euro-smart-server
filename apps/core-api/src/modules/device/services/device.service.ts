@@ -142,6 +142,11 @@ export class DeviceService {
         identifier: device.identifier,
         token: device.token,
         status,
+        rssi: shadow['rssi'] !== undefined ? Number(shadow['rssi']) : null,
+        linkquality:
+          shadow['linkquality'] !== undefined
+            ? Number(shadow['linkquality'])
+            : null,
         type: device.deviceModel?.code || 'unknown',
         modelName: device.deviceModel?.name || '',
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -236,6 +241,11 @@ export class DeviceService {
     return {
       ...device,
       status,
+      rssi: shadow['rssi'] !== undefined ? Number(shadow['rssi']) : null,
+      linkquality:
+        shadow['linkquality'] !== undefined
+          ? Number(shadow['linkquality'])
+          : null,
       entities,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       modelConfig: (device.deviceModel as any)?.config ?? null,
@@ -393,16 +403,19 @@ export class DeviceService {
   async getDeviceTimeline(
     deviceId: string,
     userId: string,
-    query: { page?: number; limit?: number; entityCode?: string; from?: string; to?: string },
+    query: {
+      page?: number;
+      limit?: number;
+      entityCode?: string;
+      from?: string;
+      to?: string;
+    },
   ) {
     // 1. Verify ownership
     const device = await this.db.device.findFirst({
       where: {
         id: deviceId,
-        OR: [
-          { ownerId: userId },
-          { sharedUsers: { some: { userId } } },
-        ],
+        OR: [{ ownerId: userId }, { sharedUsers: { some: { userId } } }],
       },
       select: { id: true },
     });
@@ -446,14 +459,25 @@ export class DeviceService {
           .filter((uid): uid is string => uid !== null),
       ),
     ];
-    const actionUsersMap = new Map<string, { firstName: string | null; lastName: string | null; avatar: string | null }>();
+    const actionUsersMap = new Map<
+      string,
+      {
+        firstName: string | null;
+        lastName: string | null;
+        avatar: string | null;
+      }
+    >();
     if (actionUserIds.length > 0) {
       const users = await this.db.user.findMany({
         where: { id: { in: actionUserIds } },
         select: { id: true, firstName: true, lastName: true, avatar: true },
       });
       for (const u of users) {
-        actionUsersMap.set(u.id, { firstName: u.firstName, lastName: u.lastName, avatar: u.avatar });
+        actionUsersMap.set(u.id, {
+          firstName: u.firstName,
+          lastName: u.lastName,
+          avatar: u.avatar,
+        });
       }
     }
 
@@ -483,9 +507,13 @@ export class DeviceService {
     const timeline: TimelineItem[] = [];
 
     for (const s of stateHistory) {
-      const actionUser = s.actionByUserId ? actionUsersMap.get(s.actionByUserId) : null;
+      const actionUser = s.actionByUserId
+        ? actionUsersMap.get(s.actionByUserId)
+        : null;
       const userName = actionUser
-        ? [actionUser.lastName, actionUser.firstName].filter(Boolean).join(' ') || null
+        ? [actionUser.lastName, actionUser.firstName]
+            .filter(Boolean)
+            .join(' ') || null
         : null;
 
       timeline.push({
@@ -528,7 +556,12 @@ export class DeviceService {
     };
   }
 
-  async updateEntityName(deviceId: string, userId: string, entityCode: string, name: string) {
+  async updateEntityName(
+    deviceId: string,
+    userId: string,
+    entityCode: string,
+    name: string,
+  ) {
     // 1. Verify device exists and belongs to user's home
     const device = await this.db.device.findFirst({
       where: {
@@ -544,7 +577,9 @@ export class DeviceService {
     });
 
     if (!device) {
-      throw new NotFoundException(`Device with ID ${deviceId} not found or access denied`);
+      throw new NotFoundException(
+        `Device with ID ${deviceId} not found or access denied`,
+      );
     }
 
     // 2. Find the entity
@@ -553,7 +588,9 @@ export class DeviceService {
     });
 
     if (!entity) {
-      throw new NotFoundException(`Entity ${entityCode} not found on device ${deviceId}`);
+      throw new NotFoundException(
+        `Entity ${entityCode} not found on device ${deviceId}`,
+      );
     }
 
     // 3. Update the entity's name
@@ -581,7 +618,9 @@ export class DeviceService {
     });
 
     if (!device) {
-      throw new NotFoundException(`Device with ID ${deviceId} not found or access denied`);
+      throw new NotFoundException(
+        `Device with ID ${deviceId} not found or access denied`,
+      );
     }
 
     // 2. Update the device's name
@@ -593,7 +632,11 @@ export class DeviceService {
     return updatedDevice;
   }
 
-  async updateNotifyConfig(deviceId: string, userId: string, notifyConfig: Record<string, boolean>) {
+  async updateNotifyConfig(
+    deviceId: string,
+    userId: string,
+    notifyConfig: Record<string, boolean>,
+  ) {
     // 1. Verify device exists and belongs to user or shared
     const device = await this.db.device.findFirst({
       where: {
@@ -607,11 +650,14 @@ export class DeviceService {
     });
 
     if (!device) {
-      throw new NotFoundException(`Device with ID ${deviceId} not found or access denied`);
+      throw new NotFoundException(
+        `Device with ID ${deviceId} not found or access denied`,
+      );
     }
 
     // 2. Merge existing config with new notifyConfig
-    const currentConfig = (device.customConfig as Record<string, unknown>) || {};
+    const currentConfig =
+      (device.customConfig as Record<string, unknown>) || {};
     const updatedConfig = {
       ...currentConfig,
       notify: {
@@ -642,7 +688,9 @@ export class DeviceService {
     });
 
     if (!device) {
-      throw new NotFoundException(`Device with ID ${deviceId} not found or access denied`);
+      throw new NotFoundException(
+        `Device with ID ${deviceId} not found or access denied`,
+      );
     }
 
     // 2. Extract and return notify config

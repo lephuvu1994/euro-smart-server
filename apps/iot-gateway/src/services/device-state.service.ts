@@ -8,6 +8,7 @@ import {
   EDeviceAlertEvent,
 } from '@app/common/enums/app.enum';
 import { DEVICE_JOBS } from '@app/common/enums/device-job.enum';
+import { isTransientState } from '@app/common';
 import { DatabaseService } from '@app/database';
 
 @Injectable()
@@ -204,10 +205,11 @@ export class DeviceStateService {
               }
 
               // Skip history and push notifications for intermediate/transient states
-              // (e.g. OPENING, CLOSING for curtain devices). Only final states should log.
-              const INTERMEDIATE_STATES = ['OPENING', 'CLOSING'];
-              const isIntermediateState =
-                INTERMEDIATE_STATES.includes(stateLabel);
+              // (e.g. OPENING, CLOSING for curtain devices, UNLOCKING for locks).
+              const isIntermediateState = isTransientState(
+                entity.domain,
+                stateLabel,
+              );
 
               if (!isIntermediateState) {
                 // Record state history with action author

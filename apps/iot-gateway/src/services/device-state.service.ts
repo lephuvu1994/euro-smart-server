@@ -235,7 +235,13 @@ export class DeviceStateService {
                 shouldNotify = !!activeSession;
               }
 
-              if (shouldNotify) {
+              // Skip push notifications for intermediate/transient states
+              // (e.g. OPENING, CLOSING for curtain devices). Only final states should notify.
+              const INTERMEDIATE_STATES = ['OPENING', 'CLOSING'];
+              const isIntermediateState =
+                INTERMEDIATE_STATES.includes(stateLabel);
+
+              if (shouldNotify && !isIntermediateState) {
                 writePromises.push(
                   this.notificationQueue.add(
                     'push_state_change',

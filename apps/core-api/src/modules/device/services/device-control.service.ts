@@ -188,19 +188,33 @@ export class DeviceControlService {
   /**
    * Validate giá trị dựa trên EntityDomain
    */
-  private validateEntityValue(domain: string, value: string | number | boolean) {
+  private validateEntityValue(
+    domain: string,
+    value: string | number | boolean,
+  ) {
     switch (domain) {
       case 'switch':
       case 'switch_':
-        if (value !== 0 && value !== 1 && value !== true && value !== false && value !== 'on' && value !== 'off') {
-          throw new BadRequestException('Giá trị switch phải là 0/1, true/false, hoặc on/off');
+        if (
+          value !== 0 &&
+          value !== 1 &&
+          value !== true &&
+          value !== false &&
+          value !== 'on' &&
+          value !== 'off'
+        ) {
+          throw new BadRequestException(
+            'Giá trị switch phải là 0/1, true/false, hoặc on/off',
+          );
         }
         break;
 
       case 'button':
         // Trigger action: string command (e.g. RF learn: 'open'/'close') hoặc 1/true
         if (typeof value !== 'string' && value !== 1 && value !== true)
-          throw new BadRequestException('Giá trị button phải là string hoặc 1/true');
+          throw new BadRequestException(
+            'Giá trị button phải là string hoặc 1/true',
+          );
         break;
 
       case 'light':
@@ -210,7 +224,7 @@ export class DeviceControlService {
         break;
 
       case 'curtain': {
-        const allowed = ['OPEN', 'CLOSE', 'STOP'];
+        const allowed = ['OPEN', 'CLOSE', 'STOP', 'DIR_REV', 'DIR_FWD'];
         if (typeof value === 'string' && !allowed.includes(value)) {
           throw new BadRequestException(
             `Giá trị curtain không hợp lệ. Cho phép: ${allowed.join(', ')}`,
@@ -228,20 +242,27 @@ export class DeviceControlService {
 
       case 'config':
         // Pass-through: server không validate nội dung, chip tự xử lý
-        if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        if (
+          typeof value !== 'object' ||
+          value === null ||
+          Array.isArray(value)
+        ) {
           throw new BadRequestException('Giá trị config phải là object');
         }
         break;
 
-
       case 'update':
         if (typeof value !== 'string' || !value.startsWith('http')) {
-          throw new BadRequestException('Giá trị update (OTA) phải là HTTP/HTTPS URL');
+          throw new BadRequestException(
+            'Giá trị update (OTA) phải là HTTP/HTTPS URL',
+          );
         }
         break;
 
       case 'sensor':
-        throw new BadRequestException('Sensor là read-only, không thể điều khiển');
+        throw new BadRequestException(
+          'Sensor là read-only, không thể điều khiển',
+        );
     }
   }
 

@@ -11,6 +11,7 @@ export * from './notification/services/notification.service';
 export * from './enums/app.enum';
 export * from './enums/device-job.enum';
 export * from './enums/scene.enum';
+export * from './constants/entity-domain.constant';
 
 // DTOs (shared across apps)
 export * from './dtos/user.response.dto';

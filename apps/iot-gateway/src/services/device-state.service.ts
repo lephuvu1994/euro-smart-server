@@ -203,27 +203,35 @@ export class DeviceStateService {
                 }
               }
 
-              // Record state history with action author
-              writePromises.push(
-                this.statusQueue.add(
-                  DEVICE_JOBS.RECORD_STATE_HISTORY,
-                  {
-                    entityId: entity.id,
-                    value: isNumber ? entityUpdate.state : null,
-                    valueText: isString ? stateLabel : null,
-                    source,
-                    actionUserId: actionUserIds[0] || null,
-                  },
-                  { removeOnComplete: true, attempts: 2 },
-                ),
-              );
+              // Skip history and push notifications for intermediate/transient states
+              // (e.g. OPENING, CLOSING for curtain devices). Only final states should log.
+              const INTERMEDIATE_STATES = ['OPENING', 'CLOSING'];
+              const isIntermediateState =
+                INTERMEDIATE_STATES.includes(stateLabel);
+
+              if (!isIntermediateState) {
+                // Record state history with action author
+                writePromises.push(
+                  this.statusQueue.add(
+                    DEVICE_JOBS.RECORD_STATE_HISTORY,
+                    {
+                      entityId: entity.id,
+                      value: isNumber ? entityUpdate.state : null,
+                      valueText: isString ? stateLabel : null,
+                      source,
+                      actionUserId: actionUserIds[0] || null,
+                    },
+                    { removeOnComplete: true, attempts: 2 },
+                  ),
+                );
+              }
 
               // ★ Notification token pre-flight logic
               const notifyUserIds = new Set(allTargetUserIds);
               for (const uid of actionUserIds) notifyUserIds.delete(uid);
 
               let shouldNotify = false;
-              if (notifyUserIds.size > 0) {
+              if (notifyUserIds.size > 0 && !isIntermediateState) {
                 const activeSession =
                   await this.databaseService.session.findFirst({
                     where: {
@@ -235,13 +243,7 @@ export class DeviceStateService {
                 shouldNotify = !!activeSession;
               }
 
-              // Skip push notifications for intermediate/transient states
-              // (e.g. OPENING, CLOSING for curtain devices). Only final states should notify.
-              const INTERMEDIATE_STATES = ['OPENING', 'CLOSING'];
-              const isIntermediateState =
-                INTERMEDIATE_STATES.includes(stateLabel);
-
-              if (shouldNotify && !isIntermediateState) {
+              if (shouldNotify) {
                 writePromises.push(
                   this.notificationQueue.add(
                     'push_state_change',

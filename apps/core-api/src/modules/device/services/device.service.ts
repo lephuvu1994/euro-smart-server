@@ -465,18 +465,22 @@ export class DeviceService {
         firstName: string | null;
         lastName: string | null;
         avatar: string | null;
+        email: string | null;
+        phone: string | null;
       }
     >();
     if (actionUserIds.length > 0) {
       const users = await this.db.user.findMany({
         where: { id: { in: actionUserIds } },
-        select: { id: true, firstName: true, lastName: true, avatar: true },
+        select: { id: true, firstName: true, lastName: true, avatar: true, email: true, phone: true },
       });
       for (const u of users) {
         actionUsersMap.set(u.id, {
           firstName: u.firstName,
           lastName: u.lastName,
           avatar: u.avatar,
+          email: u.email ?? null,
+          phone: u.phone ?? null,
         });
       }
     }
@@ -500,7 +504,7 @@ export class DeviceService {
       entityCode: string | null;
       entityName: string | null;
       source: string | null;
-      actionBy: { userName: string | null; userAvatar: string | null } | null;
+      actionBy: { userName: string | null; userAvatar: string | null, userEmail: string | null, userPhone: string | null } | null;
       createdAt: Date;
     };
 
@@ -523,7 +527,12 @@ export class DeviceService {
         entityName: s.entity.name,
         source: s.source ?? 'mqtt',
         actionBy: s.actionByUserId
-          ? { userName, userAvatar: actionUser?.avatar ?? null }
+          ? {
+              userName,
+              userAvatar: actionUser?.avatar ?? null,
+              userEmail: actionUser?.email ?? null,
+              userPhone: actionUser?.phone ?? null,
+            }
           : null,
         createdAt: s.createdAt,
       });

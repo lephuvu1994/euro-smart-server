@@ -1,0 +1,11 @@
+FROM emqx/emqx:5.8.5
+
+# Copy custom configuration
+COPY ./deploy/docker/emqx-custom.conf /opt/emqx/etc/emqx-custom.conf
+
+USER root
+# Append include statement to the main emqx.conf
+RUN echo '\ninclude "/opt/emqx/etc/emqx-custom.conf"' >> /opt/emqx/etc/emqx.conf
+
+# Revert to EMQX default user
+USER emqx

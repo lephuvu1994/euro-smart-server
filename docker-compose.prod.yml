@@ -92,7 +92,10 @@ services:
       - '${TAILSCALE_IP:-127.0.0.1}:6379:6379'
 
   emqx:
-    image: emqx/emqx:5.8.5
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.emqx
+    image: aurathink-emqx-prod:5.8.5
     container_name: aurathink-emqx-prod
     restart: unless-stopped
     ports:
@@ -111,8 +114,7 @@ services:
       EMQX_DASHBOARD__DEFAULT_USERNAME: ${EMQX_DASHBOARD_USER:-admin}
       EMQX_DASHBOARD__DEFAULT_PASSWORD: ${EMQX_DASHBOARD_PASS:?EMQX_DASHBOARD_PASS is required}
       
-      # Custom HOCON configuration for Authentication/Authorization webhooks
-      EMQX_CUSTOM_CONFIG: "/opt/emqx/etc/emqx-custom.conf"
+      # Note: Cấu hình auth/authz được nhúng vào emqx.conf qua deploy/docker/Dockerfile.emqx
 
       # Performance tuning
       EMQX_BROKER__SHARED_SUBSCRIPTION: 'true'

@@ -1,8 +1,10 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { TerminusModule } from '@nestjs/terminus';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
 import { CacheModule } from '@nestjs/cache-manager';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import * as redisStore from 'cache-manager-ioredis';
 
 import { DatabaseModule } from '@app/database';
@@ -34,6 +36,8 @@ import { AutomationModule } from './modules/automation/automation.module';
       envFilePath: ['.env'],
       expandVariables: true,
     }),
+    // Rate limiting: 100 requests per minute per IP (global)
+    ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
     DatabaseModule,
     RedisModule,
     AuthModule,
@@ -78,5 +82,8 @@ import { AutomationModule } from './modules/automation/automation.module';
     AutomationModule,
   ],
   controllers: [HealthController],
+  providers: [
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+  ],
 })
 export class AppModule {}

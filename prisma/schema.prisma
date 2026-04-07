@@ -119,6 +119,7 @@ model Session {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([userId])
+  @@index([userId, pushToken])
   @@map("t_session")
 }
 

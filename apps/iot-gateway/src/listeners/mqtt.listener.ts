@@ -50,8 +50,19 @@ export class MqttListener implements OnApplicationBootstrap {
     }
   }
 
-  private async handleTelemetryMessage(_topic: string, _payload: Buffer) {
-    // TODO: Forward to generic telemetry processor (TimescaleDB)
+  private async handleTelemetryMessage(topic: string, payload: Buffer) {
+    const token = this.extractToken(topic);
+    if (!token) return;
+
+    try {
+      const rawData = JSON.parse(payload.toString());
+      // Telemetry uses the same entity→attribute mapping as state messages
+      await this.deviceStateService.processState(token, rawData);
+    } catch (error) {
+      this.logger.error(
+        `Failed to parse telemetry message for ${token}: ${error.message}`,
+      );
+    }
   }
 
   public async handleStateMessage(topic: string, payload: Buffer) {

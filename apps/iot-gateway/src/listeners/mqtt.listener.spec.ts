@@ -4,6 +4,19 @@ import { MqttService } from '@app/common/mqtt/mqtt.service';
 import { DeviceStatusService } from '../services/device-status.service';
 import { DeviceStateService } from '../services/device-state.service';
 
+jest.mock('expo-server-sdk', () => ({ __esModule: true, default: jest.fn(), Expo: jest.fn() }));
+jest.mock('@faker-js/faker', () => ({
+  faker: {
+    string: { alphanumeric: () => 'abc', uuid: () => 'uuid' },
+    internet: { email: () => 'test@test.com' },
+    person: { firstName: () => 'First', lastName: () => 'Last' },
+    number: { int: () => 1 },
+    phone: { number: () => '123' },
+    date: { past: () => new Date(), future: () => new Date() },
+    datatype: { boolean: () => true },
+  },
+}));
+
 const mockMqttService = {
   subscribe: jest.fn(),
 };
@@ -50,7 +63,7 @@ describe('MqttListener', () => {
       const topic = 'device/token-1/status';
       const payload = Buffer.from(JSON.stringify({ online: true }));
 
-      await (listener as any).handleStatusMessage(topic, payload);
+      await listener['handleStatusMessage'](topic, payload);
 
       expect(statusService.processStatus).toHaveBeenCalledWith('token-1', {
         online: true,
@@ -60,9 +73,9 @@ describe('MqttListener', () => {
     it('should log error if JSON is invalid in status message', async () => {
       const topic = 'device/token-1/status';
       const payload = Buffer.from('invalid-json');
-      const loggerSpy = jest.spyOn((listener as any).logger, 'error');
+      const loggerSpy = jest.spyOn(listener['logger'], 'error');
 
-      await (listener as any).handleStatusMessage(topic, payload);
+      await listener['handleStatusMessage'](topic, payload);
 
       expect(loggerSpy).toHaveBeenCalledWith(
         expect.stringContaining('Failed to parse status message'),
@@ -73,7 +86,7 @@ describe('MqttListener', () => {
       const topic = 'invalid-topic';
       const payload = Buffer.from('{}');
 
-      await (listener as any).handleStatusMessage(topic, payload);
+      await listener['handleStatusMessage'](topic, payload);
 
       expect(statusService.processStatus).not.toHaveBeenCalled();
     });
@@ -94,7 +107,7 @@ describe('MqttListener', () => {
     it('should skip if token cannot be extracted in state message', async () => {
       const topic = 'invalid-topic';
       const payload = Buffer.from('{}');
-      const loggerSpy = jest.spyOn((listener as any).logger, 'error');
+      const loggerSpy = jest.spyOn(listener['logger'], 'error');
 
       await listener.handleStateMessage(topic, payload);
 
@@ -107,7 +120,7 @@ describe('MqttListener', () => {
     it('should log error if JSON is invalid in state message', async () => {
       const topic = 'device/token-1/state';
       const payload = Buffer.from('invalid-json');
-      const loggerSpy = jest.spyOn((listener as any).logger, 'error');
+      const loggerSpy = jest.spyOn(listener['logger'], 'error');
 
       await listener.handleStateMessage(topic, payload);
 
@@ -119,11 +132,11 @@ describe('MqttListener', () => {
 
   describe('extractToken', () => {
     it('should return null for null topic', () => {
-      expect((listener as any).extractToken(null)).toBeNull();
+      expect(listener['extractToken'](null)).toBeNull();
     });
 
     it('should return null for non-string topic', () => {
-      expect((listener as any).extractToken(123)).toBeNull();
+      expect(listener['extractToken'](123 as unknown as string)).toBeNull();
     });
   });
 });

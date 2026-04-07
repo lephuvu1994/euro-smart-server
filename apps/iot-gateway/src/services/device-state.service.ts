@@ -30,7 +30,7 @@ export class DeviceStateService {
    * [ENTITY-BASED] Xử lý phản hồi trạng thái từ thiết bị.
    * Map JSON payload keys → DeviceEntity (via commandKey) + EntityAttribute (via attr config).
    */
-  public async processState(token: string, rawData: Record<string, any>) {
+  public async processState(token: string, rawData: Record<string, unknown>) {
     try {
       // Serialize nested objects for Redis hmset
       const shadowData: Record<string, string | number | boolean> = {};
@@ -45,18 +45,7 @@ export class DeviceStateService {
       // ★ PARALLEL: shadow write + DB query are independent
       const [, device] = await Promise.all([
         this.redisService.hmset(`device:shadow:${token}`, shadowData),
-        this.databaseService.device.findUnique({
-          where: { token },
-          include: {
-            entities: { include: { attributes: true } },
-            sharedUsers: { select: { userId: true } },
-            home: {
-              select: {
-                members: { select: { userId: true } },
-              },
-            },
-          },
-        }),
+        this.getCachedDevice(token),
       ]);
 
       if (!device || !device.entities) return;
@@ -93,7 +82,7 @@ export class DeviceStateService {
 
         // Case A: Primary state
         if (entity.commandKey && rawData[entity.commandKey] !== undefined) {
-          entityUpdate.state = rawData[entity.commandKey];
+          entityUpdate.state = rawData[entity.commandKey] as string | number | boolean;
           entityUpdated = true;
         }
 
@@ -106,7 +95,7 @@ export class DeviceStateService {
           const attrConfig = attr.config as { commandKey?: string } | null;
           const configKey = attrConfig?.commandKey ?? attr.key;
           if (rawData[configKey] !== undefined) {
-            attrUpdates.push({ key: attr.key, value: rawData[configKey] });
+            attrUpdates.push({ key: attr.key, value: rawData[configKey] as string | number | boolean });
           }
         }
 
@@ -304,5 +293,44 @@ export class DeviceStateService {
         `Error processing state message for ${token}: ${e.message}`,
       );
     }
+  }
+
+  /**
+   * Cache-aside pattern for device metadata (entities, sharedUsers, homeMembers).
+   * TTL = 5 minutes — adequate for IoT realtime because device config changes rarely.
+   * State is ALWAYS read from Redis shadow, never from this cache.
+   */
+  private async getCachedDevice(token: string) {
+    const cacheKey = `device:meta:${token}`;
+    const cached = await this.redisService.get(cacheKey);
+    if (cached) {
+      try {
+        return JSON.parse(cached) as Awaited<ReturnType<typeof this.fetchDevice>>;
+      } catch {
+        // corrupt cache — fall through to DB
+      }
+    }
+
+    const device = await this.fetchDevice(token);
+    if (device) {
+      // Fire-and-forget cache write (don't block state processing)
+      void this.redisService.set(cacheKey, JSON.stringify(device), 300);
+    }
+    return device;
+  }
+
+  private fetchDevice(token: string) {
+    return this.databaseService.device.findUnique({
+      where: { token },
+      include: {
+        entities: { include: { attributes: true } },
+        sharedUsers: { select: { userId: true } },
+        home: {
+          select: {
+            members: { select: { userId: true } },
+          },
+        },
+      },
+    });
   }
 }

@@ -1,11 +1,13 @@
 import { Controller, Post, Body } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import { EmqxAuthService } from '../services/emqx-auth.service';
 import { EmqxAuthDto } from '../dto/emqx-auth.dto';
 import { EmqxAclDto } from '../dto/emqx-acl.dto';
 import { PublicRoute } from '@app/common/request/decorators/request.public.decorator';
 
 @ApiTags('internal.emqx')
+@SkipThrottle()
 @Controller('internal/emqx')
 export class EmqxAuthController {
   constructor(private readonly emqxAuthService: EmqxAuthService) {}

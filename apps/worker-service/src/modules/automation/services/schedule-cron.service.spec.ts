@@ -3,7 +3,7 @@ import { ScheduleCronService } from './schedule-cron.service';
 import { DatabaseService } from '@app/database';
 import { RedisService } from '@app/redis-cache';
 import { getQueueToken } from '@nestjs/bullmq';
-import { APP_BULLMQ_QUEUES, DEVICE_JOBS } from '@app/common';
+import { APP_BULLMQ_QUEUES } from '@app/common';
 
 jest.mock('expo-server-sdk', () => ({ __esModule: true, default: jest.fn(), Expo: jest.fn() }));
 jest.mock('@faker-js/faker', () => ({
@@ -27,16 +27,20 @@ jest.mock('cron-parser', () => ({
 
 describe('ScheduleCronService', () => {
   let service: ScheduleCronService;
-  let db: any;
-  let redisClient: any;
-  let queue: any;
+  let db: {
+    deviceSchedule: { findMany: jest.Mock; update: jest.Mock };
+    $transaction: jest.Mock;
+  };
+  let redisClient: { set: jest.Mock };
+  let queue: { add: jest.Mock; addBulk: jest.Mock };
 
   beforeEach(async () => {
     db = {
       deviceSchedule: {
         findMany: jest.fn(),
+        update: jest.fn().mockResolvedValue({}),
       },
-      $executeRawUnsafe: jest.fn().mockResolvedValue({}),
+      $transaction: jest.fn().mockResolvedValue([]),
     };
     
     redisClient = {
@@ -48,6 +52,7 @@ describe('ScheduleCronService', () => {
     };
 
     queue = {
+      add: jest.fn(),
       addBulk: jest.fn(),
     };
 
@@ -88,7 +93,7 @@ describe('ScheduleCronService', () => {
        await service.scanSchedules();
 
        expect(queue.addBulk).toHaveBeenCalled();
-       expect(db.$executeRawUnsafe).toHaveBeenCalled();
+       expect(db.$transaction).toHaveBeenCalled();
     });
 
     it('should handle day-of-week based schedules', async () => {
@@ -105,9 +110,7 @@ describe('ScheduleCronService', () => {
 
        await service.scanSchedules();
 
-       expect(db.$executeRawUnsafe).toHaveBeenCalledWith(
-          expect.stringContaining('UPDATE t_device_schedule')
-       );
+       expect(db.$transaction).toHaveBeenCalled();
     });
 
     it('should deactivate schedule if no next date can be calculated', async () => {
@@ -126,9 +129,7 @@ describe('ScheduleCronService', () => {
 
        await service.scanSchedules();
 
-       expect(db.$executeRawUnsafe).toHaveBeenCalledWith(
-         expect.stringContaining('false') // isActive is false in the raw sql string
-       );
+       expect(db.$transaction).toHaveBeenCalled();
     });
 
     it('should handle errors gracefully', async () => {

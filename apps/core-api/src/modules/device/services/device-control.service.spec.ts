@@ -49,6 +49,7 @@ const createMockDatabaseService = () => ({
 });
 
 const createMockRedisService = () => ({
+  get: jest.fn(),
   hget: jest.fn(),
   hgetall: jest.fn(),
 });
@@ -113,7 +114,7 @@ describe('DeviceControlService', () => {
     describe('domain validation', () => {
       beforeEach(() => {
         db.device.findFirst.mockResolvedValue(mockDevice);
-        redis.hget.mockResolvedValue('1'); // isOnline
+        redis.get.mockResolvedValue('online'); // isOnline
       });
 
       it('should validate switch_ domain', async () => {
@@ -180,7 +181,7 @@ describe('DeviceControlService', () => {
 
     it('should throw HttpException if device is offline', async () => {
       db.device.findFirst.mockResolvedValue(mockDevice);
-      redis.hget.mockResolvedValue(null);
+      redis.get.mockResolvedValue(null);
       await expect(
         service.sendControlCommand(mockDeviceToken, mockUserId, 'switch_1', 1),
       ).rejects.toThrow(HttpException);
@@ -190,7 +191,7 @@ describe('DeviceControlService', () => {
   describe('sendDeviceValueCommand', () => {
     it('should validate multiple entities and add bulk job to queue', async () => {
       db.device.findFirst.mockResolvedValue(mockDevice);
-      redis.hget.mockResolvedValue('1'); // isOnline
+      redis.get.mockResolvedValue('online'); // isOnline
 
       const values = [
         { entityCode: 'switch_1', value: 1 },

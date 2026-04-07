@@ -117,31 +117,24 @@ export class ScheduleCronService {
   }
 
   /**
-   * Performs a single SQL UPDATE...FROM VALUES instead of N individual statements.
-   * Zero N+1 problem regardless of how many schedules fired.
+   * Batch update schedules using Prisma interactive transaction.
+   * Replaces raw SQL to eliminate SQL injection risk from string concatenation.
+   * All updates are sent in a single transaction roundtrip.
    */
   private async bulkUpdateSchedules(updates: ScheduleUpdate[]): Promise<void> {
     if (updates.length === 0) return;
 
-    const valueRows = updates
-      .map((u) => {
-        const nextTs = u.nextExecuteAt
-          ? `'${u.nextExecuteAt.toISOString()}'::timestamptz`
-          : 'NULL';
-        return `('${u.id}'::uuid, ${nextTs}, ${u.isActive})`;
-      })
-      .join(',\n  ');
-
-    await this.prisma.$executeRawUnsafe(`
-      UPDATE t_device_schedule AS s
-      SET
-        next_execute_at = v.next_execute_at,
-        is_active       = v.is_active
-      FROM (VALUES
-        ${valueRows}
-      ) AS v(id, next_execute_at, is_active)
-      WHERE s.id = v.id
-    `);
+    await this.prisma.$transaction(
+      updates.map((u) =>
+        this.prisma.deviceSchedule.update({
+          where: { id: u.id },
+          data: {
+            nextExecuteAt: u.nextExecuteAt,
+            isActive: u.isActive,
+          },
+        }),
+      ),
+    );
 
     this.logger.log(`Bulk-updated ${updates.length} schedule(s).`);
   }

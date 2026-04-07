@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { EmqxAuthService } from '../services/emqx-auth.service';
 import { DatabaseService } from '@app/database';
+import { RedisService } from '@app/redis-cache';
 import * as crypto from 'crypto';
 
 // ─── Test Constants ───────────────────────────
@@ -72,7 +73,11 @@ describe('EmqxAuthService', () => {
     process.env.MQTT_WSS_URL = MOCK_WSS_URL;
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [EmqxAuthService, { provide: DatabaseService, useValue: db }],
+      providers: [
+        EmqxAuthService,
+        { provide: DatabaseService, useValue: db },
+        { provide: RedisService, useValue: { get: jest.fn(), set: jest.fn() } },
+      ],
     }).compile();
 
     service = module.get<EmqxAuthService>(EmqxAuthService);

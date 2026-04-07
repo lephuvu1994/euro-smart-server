@@ -88,3 +88,11 @@ Hệ thống được thiết lập để hỗ trợ nhận thông báo cá nhâ
 - **Loại trừ Người thực hiện (Excluding Initiator)**:
   - Hệ thống hỗ trợ logic thông minh để tránh gửi thông báo phiền hà. Ví dụ, nếu bạn là người trực tiếp bấm nút "Mở cửa" trên App, hệ thống sẽ tự động loại trừ bạn khỏi danh sách nhận thông báo "Cửa đã mở", trong khi các thành viên khác vẫn nhận được tin để đảm bảo an ninh.
 
+## 9. Cơ chế Tối ưu Hiệu năng (Scalability & 200k Devices)
+
+Hệ thống được thiết kế để mở rộng và chịu tải cao (Scalability) lên tới 200,000 thiết bị kết nối đồng thời, cấu trúc tối ưu ở các khía cạnh sau:
+
+- **Redis Caching & Reverse Indexing**: Việc tiêu thụ CPU và kết nối Database được giảm thiểu tối đa bằng Cache. `DeviceStateService` caching 5 phút bằng phương pháp Cache-aside. Automations/Scenes áp dụng kiến trúc O(1) Lookup qua `SceneTriggerIndexService`, thiết bị gửi status lên sẽ không cần Full Scan bảng tính mà chỉ dùng Redis Reverse-Index.
+- **BullMQ Distributed Locking & Dead Letter Queue (DLQ)**: Quá trình lập lịch (Worker Cron) có tích hợp Distributed Lock để tránh tình trạng nhiều Node cùng kích hoạt một Scene. Nếu lệnh fail, BullMQ hỗ trợ DLQ để retry (3 attempts với socket `emitToDevice`) nhằm tăng tính bền bỉ.
+- **Quota & Rate Limiting**: Triển khai trực tiếp `minIntervalSeconds` cho mỗi Scene và `maxSchedules / maxTimers` trên Users ở ranh giới Schema để giới hạn lưu lượng rác ngập lụt hệ thống.
+- **Database Performance Indexes**: Lắp ráp `CONCURRENTLY INDEX` cực nhẹ trên Postgres như GIN index đối với JSON `triggers`, đảm bảo các thao tác đọc và check điều kiện được giảm tải OOM triệt để.

@@ -1,28 +1,29 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DatabaseService } from '@app/database';
+import { RedisService } from '@app/redis-cache';
 import * as crypto from 'crypto';
 import { EmqxAuthDto } from '../dto/emqx-auth.dto';
 import { EmqxAclDto } from '../dto/emqx-acl.dto';
+
+/** TTL for cached systemConfig values (seconds) */
+const CFG_TTL = 300;
 
 @Injectable()
 export class EmqxAuthService {
   private readonly logger = new Logger(EmqxAuthService.name);
 
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly redis: RedisService,
+  ) {}
 
   // ═══════════════════════════════════════════
   // AUTH: Verify credentials
   // ═══════════════════════════════════════════
   async authenticate(dto: EmqxAuthDto): Promise<{ result: 'allow' | 'deny' }> {
     // Case 1: Server services (iot-gateway, worker-service) — global superuser
-    const mqttUserCfg = await this.db.systemConfig.findUnique({
-      where: { key: 'MQTT_USER' },
-    });
-    const mqttPassCfg = await this.db.systemConfig.findUnique({
-      where: { key: 'MQTT_PASS' },
-    });
-    const globalUser = mqttUserCfg?.value || process.env.MQTT_USER;
-    const globalPass = mqttPassCfg?.value || process.env.MQTT_PASS;
+    const globalUser = await this.getCachedConfig('MQTT_USER') ?? process.env.MQTT_USER;
+    const globalPass = await this.getCachedConfig('MQTT_PASS') ?? process.env.MQTT_PASS;
 
     if (dto.username === globalUser) {
       return { result: dto.password === globalPass ? 'allow' : 'deny' };
@@ -70,10 +71,7 @@ export class EmqxAuthService {
   // ═══════════════════════════════════════════
   async authorize(dto: EmqxAclDto): Promise<{ result: 'allow' | 'deny' }> {
     // Server services → allow all
-    const mqttUserCfg = await this.db.systemConfig.findUnique({
-      where: { key: 'MQTT_USER' },
-    });
-    const globalUser = mqttUserCfg?.value || process.env.MQTT_USER;
+    const globalUser = await this.getCachedConfig('MQTT_USER') ?? process.env.MQTT_USER;
     if (dto.username === globalUser) {
       return { result: 'allow' };
     }
@@ -148,10 +146,7 @@ export class EmqxAuthService {
     clientId: string;
   }> {
     // Fetch WSS URL from Admin DB config (fallback to ENV)
-    const wssCfg = await this.db.systemConfig.findUnique({
-      where: { key: 'MQTT_WSS_URL' },
-    });
-    const url = wssCfg?.value || process.env.MQTT_WSS_URL || '';
+    const url = await this.getCachedConfig('MQTT_WSS_URL') ?? process.env.MQTT_WSS_URL ?? '';
 
     const timestamp = Date.now().toString();
     const password = crypto
@@ -168,6 +163,24 @@ export class EmqxAuthService {
   }
 
   // ─── Helpers ───────────────────────────────
+
+  /**
+   * Fetch a systemConfig value from Redis cache (TTL 5min), fallback to DB.
+   * This eliminates repeated DB hits for static configs on every MQTT event.
+   */
+  private async getCachedConfig(key: string): Promise<string | null> {
+    const cacheKey = `emqx:cfg:${key}`;
+    const cached = await this.redis.get(cacheKey);
+    if (cached !== null) return cached;
+
+    const row = await this.db.systemConfig.findUnique({ where: { key } });
+    const value = row?.value ?? null;
+    if (value !== null) {
+      await this.redis.set(cacheKey, value, CFG_TTL);
+    }
+    return value;
+  }
+
   private extractTokenFromTopic(topic: string): string | null {
     // Topic format: "device/{token}/action"
     const parts = topic.split('/');

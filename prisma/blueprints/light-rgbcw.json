@@ -1,6 +1,6 @@
 {
-  "modelCode": "DIMMER_LIGHT",
-  "modelName": "Đèn Dimmer (Độ sáng + Màu sắc)",
+  "modelCode": "LIGHT_RGBCW",
+  "modelName": "Đèn thông minh RGBCW",
   "protocol": "MQTT",
   "entities": [
     {
@@ -12,6 +12,21 @@
       "readOnly": false,
       "sortOrder": 0,
       "attributes": [
+        {
+          "key": "power_on_behavior",
+          "name": "Trạng thái khởi động",
+          "valueType": "ENUM",
+          "enumValues": ["off", "on", "previous"],
+          "readOnly": false,
+          "commandKey": "power_on_behavior"
+        },
+        {
+          "key": "do_not_disturb",
+          "name": "Không làm phiền",
+          "valueType": "BOOLEAN",
+          "readOnly": false,
+          "commandKey": "do_not_disturb"
+        },
         {
           "key": "brightness",
           "name": "Độ sáng",
@@ -33,18 +48,11 @@
           "commandKey": "color_temp"
         },
         {
-          "key": "color_hs",
-          "name": "Màu sắc (Hue/Saturation)",
-          "valueType": "STRING",
+          "key": "color",
+          "name": "Màu sắc (HSV)",
+          "valueType": "JSON",
           "readOnly": false,
-          "commandKey": "color_hs"
-        },
-        {
-          "key": "color_rgb",
-          "name": "Màu sắc (RGB)",
-          "valueType": "STRING",
-          "readOnly": false,
-          "commandKey": "color_rgb"
+          "commandKey": "color"
         },
         {
           "key": "effect",

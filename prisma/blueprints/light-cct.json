@@ -13,6 +13,18 @@
       "sortOrder": 0,
       "attributes": [
         {
+          "key": "power_on_behavior",
+          "name": "Trạng thái khởi động",
+          "valueType": "ENUM",
+          "enumValues": [
+            "off",
+            "on",
+            "previous"
+          ],
+          "readOnly": false,
+          "commandKey": "power_on_behavior"
+        },
+        {
           "key": "brightness",
           "name": "Độ sáng",
           "valueType": "INTEGER",

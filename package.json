@@ -70,6 +70,7 @@
     "date-fns": "^4.1.0",
     "dotenv": "^17.2.3",
     "expo-server-sdk": "^6.1.0",
+    "figma-context-mcp": "^1.5.0",
     "handlebars": "^4.7.8",
     "helmet": "^8.1.0",
     "ioredis": "^5.9.2",

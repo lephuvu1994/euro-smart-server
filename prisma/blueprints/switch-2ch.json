@@ -11,7 +11,42 @@
       "commandSuffix": "/set",
       "readOnly": false,
       "sortOrder": 0,
-      "attributes": []
+      "attributes": [
+        {
+          "key": "power_on_behavior",
+          "name": "Trạng thái khởi động",
+          "valueType": "ENUM",
+          "enumValues": ["off", "on", "previous"],
+          "readOnly": false,
+          "commandKey": "power_on_behavior_l1"
+        },
+        {
+          "key": "indicator_mode",
+          "name": "Đèn nền",
+          "valueType": "ENUM",
+          "enumValues": ["none", "relay", "pos"],
+          "readOnly": false,
+          "commandKey": "indicator_mode_l1"
+        },
+        {
+          "key": "child_lock",
+          "name": "Khóa trẻ em",
+          "valueType": "ENUM",
+          "enumValues": ["LOCK", "UNLOCK"],
+          "readOnly": false,
+          "commandKey": "child_lock"
+        },
+        {
+          "key": "inching_mode",
+          "name": "Tự động tắt (Inching)",
+          "valueType": "INTEGER",
+          "min": 0,
+          "max": 86400,
+          "unit": "s",
+          "readOnly": false,
+          "commandKey": "inching_l1"
+        }
+      ]
     },
     {
       "code": "channel_2",
@@ -21,7 +56,34 @@
       "commandSuffix": "/set",
       "readOnly": false,
       "sortOrder": 1,
-      "attributes": []
+      "attributes": [
+        {
+          "key": "power_on_behavior",
+          "name": "Trạng thái khởi động",
+          "valueType": "ENUM",
+          "enumValues": ["off", "on", "previous"],
+          "readOnly": false,
+          "commandKey": "power_on_behavior_l2"
+        },
+        {
+          "key": "indicator_mode",
+          "name": "Đèn nền",
+          "valueType": "ENUM",
+          "enumValues": ["none", "relay", "pos"],
+          "readOnly": false,
+          "commandKey": "indicator_mode_l2"
+        },
+        {
+          "key": "inching_mode",
+          "name": "Tự động tắt (Inching)",
+          "valueType": "INTEGER",
+          "min": 0,
+          "max": 86400,
+          "unit": "s",
+          "readOnly": false,
+          "commandKey": "inching_l2"
+        }
+      ]
     }
   ]
 }

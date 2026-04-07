@@ -1,6 +1,14 @@
-import { Controller, Post, Body } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Res,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
+import { Response } from 'express';
 import { EmqxAuthService } from '../services/emqx-auth.service';
 import { EmqxAuthDto } from '../dto/emqx-auth.dto';
 import { EmqxAclDto } from '../dto/emqx-acl.dto';
@@ -18,9 +26,11 @@ export class EmqxAuthController {
    */
   @Post('auth')
   @PublicRoute()
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'EMQX HTTP Auth — Verify MQTT credentials' })
-  authenticate(@Body() dto: EmqxAuthDto) {
-    return this.emqxAuthService.authenticate(dto);
+  async authenticate(@Body() dto: EmqxAuthDto, @Res() res: Response) {
+    const result = await this.emqxAuthService.authenticate(dto);
+    return res.status(HttpStatus.OK).json(result);
   }
 
   /**
@@ -29,8 +39,10 @@ export class EmqxAuthController {
    */
   @Post('acl')
   @PublicRoute()
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'EMQX HTTP ACL — Check topic permission' })
-  authorize(@Body() dto: EmqxAclDto) {
-    return this.emqxAuthService.authorize(dto);
+  async authorize(@Body() dto: EmqxAclDto, @Res() res: Response) {
+    const result = await this.emqxAuthService.authorize(dto);
+    return res.status(HttpStatus.OK).json(result);
   }
 }

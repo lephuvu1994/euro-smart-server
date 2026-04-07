@@ -44,3 +44,14 @@ Phía phần cứng thực thi việc khóa (Locking) thông minh dựa theo Sta
    - Nếu thỏa mãn thời gian hết hạn, thiết bị tự kích hoạt mode `EXPIRED`. Còi Beep 2 tiếng cảnh báo, ghim LED báo lỗi chớp tắt báo hiệu liên tục 3 lần / 3 giây.
    - Hệ thống thẳng tay `Reject` mọi thao tác ngắt mạch Relay từ công tắc bấm nút vật lý, lệnh nội bộ, BLE, RF và cả lệnh Mqtt bật rèm bình thường. Đóng băng các thiết bị.
    - Tuy nhiên chip vẫn duy trì kết nối mạng MQTT để chờ 1 kịch bản duy nhất là Server trả về lệnh JSON update `license_days` nhằm tái thiết vòng lặp và vượt chế độ này đưa máy trở lại `NORMAL`.
+
+## 7. Cấu trúc Payload & Trạng thái Hoạt động (Telemetry Payload)
+
+Thiết bị định kỳ (hoặc khi có sự kiện trigger từ nút vật lý, hệ thống, MQTT) sẽ gửi bản tin trạng thái (JSON) lên Server thông qua Topic MQTT, được mô hình hóa theo chuẩn giao tiếp chung:
+
+- **State (Trạng thái chi tiết)**: Cung cấp chính xác trạng thái vật lý của công tắc rèm: `opened` (cửa đã mở hết cỡ), `opening` (cửa đang chạy lên), `closed` (cửa đã đóng kín), `closing` (cửa đang chạy xuống), và `stoped` (cửa được dừng ở lưng chừng).
+- **Position (%)**: Độ mở của rèm từ `0` đến `100`, được chip tuyến tính hóa và nội suy theo thời gian đã chạy so với tổng thời gian hành trình kéo rèm (Travel time) đã học được ở chế độ `LEARNING_TRAVEL`.
+- **RSSI**: Thông số đo đạc cường độ tín hiệu sóng Wi-Fi (dBm) ngay tại thời điểm bản tin được bắn đi, hỗ trợ cực tốt cho Admin chẩn đoán hệ thống mạng từ xa.
+- **Child Lock**: Khóa trẻ em (`LOCKED` | `UNLOCKED`), vô hiệu hóa nút bấm cứng tại module.
+- **Nguồn kích hoạt (Source)**: Báo cáo rõ hành động cuối cùng được sinh ra từ đâu: `physical` (nút cứng bấm trên tường), `rf` (remotes), `app` (lệnh từ di động), hay `system` (do cảm biến auto-stop).
+- **Cơ chế Pull Request**: Nếu App cần đồng bộ gấp, thay vì gửi lệnh điều khiển, App có thể gửi payload `"cmd": "get_status"`. Chip sẽ ngay lập tức parse lệnh và ép bắn `notify_status_change` trả về trạng thái JSON hiện tại ngay lập tức.

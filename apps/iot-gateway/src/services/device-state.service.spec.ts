@@ -6,6 +6,19 @@ import { getQueueToken } from '@nestjs/bullmq';
 import { APP_BULLMQ_QUEUES } from '@app/common/enums/app.enum';
 import { DEVICE_JOBS } from '@app/common/enums/device-job.enum';
 
+jest.mock('expo-server-sdk', () => ({ __esModule: true, default: jest.fn(), Expo: jest.fn() }));
+jest.mock('@faker-js/faker', () => ({
+  faker: {
+    string: { alphanumeric: () => 'abc', uuid: () => 'uuid' },
+    internet: { email: () => 'test@test.com' },
+    person: { firstName: () => 'First', lastName: () => 'Last' },
+    number: { int: () => 1 },
+    phone: { number: () => '123' },
+    date: { past: () => new Date(), future: () => new Date() },
+    datatype: { boolean: () => true },
+  },
+}));
+
 const mockDeviceToken = 'token-123';
 
 const mockDevice = {
@@ -44,9 +57,9 @@ const mockDbService = {
 };
 
 const mockRedisService = {
-  hmset: jest.fn(),
   get: jest.fn(),
   set: jest.fn(),
+  hmset: jest.fn(),
   sadd: jest.fn(),
   smembers: jest.fn(),
   del: jest.fn(),
@@ -103,7 +116,10 @@ describe('DeviceStateService', () => {
       const payloadObj = { state: 1, brightness: 80, ct: 4000 };
 
       db.device.findUnique.mockResolvedValue(mockDevice);
-      redis.get.mockResolvedValue(null);
+      redis.get.mockImplementation(async (key: string) => {
+        if (key.startsWith('device:meta:')) return null;
+        return null;
+      });
       redis.setnxWithTtl.mockResolvedValue(1);
       redis.smembers.mockResolvedValue([]);
 
@@ -136,7 +152,10 @@ describe('DeviceStateService', () => {
       const payloadObj = { state: 1 };
 
       db.device.findUnique.mockResolvedValue(mockDevice);
-      redis.get.mockResolvedValue(JSON.stringify({ state: 0 }));
+      redis.get.mockImplementation(async (key: string) => {
+        if (key.startsWith('device:meta:')) return null;
+        return JSON.stringify({ state: 0 });
+      });
       redis.setnxWithTtl.mockResolvedValue(0); // Lock already held
 
       await service.processState(mockDeviceToken, payloadObj);
@@ -153,7 +172,10 @@ describe('DeviceStateService', () => {
       const payloadObj = { state: 1 };
 
       db.device.findUnique.mockResolvedValue(mockDevice);
-      redis.get.mockResolvedValue(JSON.stringify({ state: 0 }));
+      redis.get.mockImplementation(async (key: string) => {
+        if (key.startsWith('device:meta:')) return null;
+        return JSON.stringify({ state: 0 });
+      });
       redis.setnxWithTtl.mockResolvedValue(1);
       redis.smembers.mockResolvedValue(['user-123']);
       db.user.findUnique.mockResolvedValue({
@@ -191,7 +213,10 @@ describe('DeviceStateService', () => {
       const payloadObj = { state: 1 };
 
       db.device.findUnique.mockResolvedValue(mockDevice);
-      redis.get.mockResolvedValue(JSON.stringify({ state: 0 }));
+      redis.get.mockImplementation(async (key: string) => {
+        if (key.startsWith('device:meta:')) return null;
+        return JSON.stringify({ state: 0 });
+      });
       redis.setnxWithTtl.mockResolvedValue(1);
       redis.smembers.mockResolvedValue([]);
       db.session.findFirst.mockResolvedValue(null); // No one has a token
@@ -215,7 +240,7 @@ describe('DeviceStateService', () => {
 
     it('should log error if processing fails', async () => {
       db.device.findUnique.mockRejectedValue(new Error('DB Error'));
-      const loggerSpy = jest.spyOn((service as any).logger, 'error');
+      const loggerSpy = jest.spyOn(service['logger'] as unknown as { error: jest.Mock }, 'error');
 
       await service.processState(mockDeviceToken, { state: 1 });
 

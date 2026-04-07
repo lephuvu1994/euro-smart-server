@@ -23,16 +23,37 @@ export class DeviceControlService {
   ) {}
 
   /**
-   * Kiểm tra quyền sở hữu device
+   * Kiểm tra quyền sở hữu hoặc chia sẻ device.
+   * Owner luôn có full quyền. DeviceShare kiểm tra role:
+   * - ADMIN/EDITOR: điều khiển được
+   * - VIEWER: chỉ xem (trả về false cho control operations)
    */
   async checkUserPermission(
     deviceToken: string,
     userId: string,
+    requireControl = false,
   ): Promise<boolean> {
     const device = await this.databaseService.device.findFirst({
-      where: { token: deviceToken, ownerId: userId },
+      where: { token: deviceToken },
+      include: {
+        sharedUsers: {
+          where: { userId },
+        },
+      },
     });
-    return !!device;
+    if (!device) return false;
+
+    // Owner always has full access
+    if (device.ownerId === userId) return true;
+
+    // Check shared access
+    const share = device.sharedUsers?.[0];
+    if (!share) return false;
+
+    // VIEWER can only read, not control
+    if (requireControl && share.permission === 'VIEWER') return false;
+
+    return true;
   }
 
   /**
@@ -70,12 +91,10 @@ export class DeviceControlService {
     // Validate value theo entity domain
     this.validateEntityValue(entity.domain, value);
 
-    const isOnline = await this.redisService.hget(
-      `device:shadow:${device.token}`,
-      'online',
-    );
+    // Check online status via dedicated status key (set by iot-gateway on connect/disconnect)
+    const statusValue = await this.redisService.get(`status:${device.token}`);
 
-    if (!isOnline) {
+    if (statusValue !== 'online') {
       throw new HttpException(
         'Thiết bị đang ngoại tuyến',
         HttpStatus.SERVICE_UNAVAILABLE,
@@ -131,12 +150,10 @@ export class DeviceControlService {
       );
     }
 
-    const isOnline = await this.redisService.hget(
-      `device:shadow:${device.token}`,
-      'online',
-    );
+    // Check online status via dedicated status key (set by iot-gateway on connect/disconnect)
+    const statusValue = await this.redisService.get(`status:${device.token}`);
 
-    if (!isOnline) {
+    if (statusValue !== 'online') {
       throw new HttpException(
         'Thiết bị đang ngoại tuyến',
         HttpStatus.SERVICE_UNAVAILABLE,
@@ -267,6 +284,6 @@ export class DeviceControlService {
   }
 
   async getShadowState(token: string) {
-    return await this.redisService.hgetall(`shadow:${token}`);
+    return await this.redisService.hgetall(`device:shadow:${token}`);
   }
 }

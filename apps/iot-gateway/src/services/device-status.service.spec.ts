@@ -11,6 +11,19 @@ import { DEVICE_JOBS } from '@app/common/enums/device-job.enum';
 import { MqttService } from '@app/common/mqtt/mqtt.service';
 import { DeviceStateService } from './device-state.service';
 
+jest.mock('expo-server-sdk', () => ({ __esModule: true, default: jest.fn(), Expo: jest.fn() }));
+jest.mock('@faker-js/faker', () => ({
+  faker: {
+    string: { alphanumeric: () => 'abc', uuid: () => 'uuid' },
+    internet: { email: () => 'test@test.com' },
+    person: { firstName: () => 'First', lastName: () => 'Last' },
+    number: { int: () => 1 },
+    phone: { number: () => '123' },
+    date: { past: () => new Date(), future: () => new Date() },
+    datatype: { boolean: () => true },
+  },
+}));
+
 const mockDeviceToken = 'token-123';
 
 const mockDbService = {
@@ -247,7 +260,7 @@ describe('DeviceStatusService', () => {
 
     it('should log error if processing fails', async () => {
       db.device.findFirst.mockRejectedValue(new Error('DB Error'));
-      const loggerSpy = jest.spyOn(service['logger'] as any, 'error');
+      const loggerSpy = jest.spyOn(service['logger'] as unknown as { error: jest.Mock }, 'error');
 
       await service.processStatus(mockDeviceToken, { online: true });
 

@@ -32,4 +32,8 @@ export class GetDeviceTimelineDto {
   @IsOptional()
   @IsString()
   to?: string;
+
+  @ApiPropertyOptional({ enum: ['connection', 'state'], description: 'Filter timeline by event type' })
+  @IsOptional()
+  type?: 'connection' | 'state';
 }

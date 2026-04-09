@@ -23,4 +23,11 @@ export class EmqxAclDto {
   @IsString()
   @IsIn(['publish', 'subscribe'])
   action: 'publish' | 'subscribe';
+
+  @ApiProperty({
+    description: 'MQTT client ID (sent by EMQX webhook)',
+    required: false,
+  })
+  @IsString()
+  clientid?: string;
 }

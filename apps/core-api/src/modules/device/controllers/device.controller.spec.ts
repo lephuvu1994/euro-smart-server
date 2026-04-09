@@ -22,6 +22,9 @@ describe('DeviceController', () => {
     updateDeviceName: jest.fn(),
     updateNotifyConfig: jest.fn(),
     getNotifyConfig: jest.fn(),
+    getDeviceShares: jest.fn(),
+    addDeviceShare: jest.fn(),
+    removeDeviceShare: jest.fn(),
   };
 
   const mockProvisioningService = {};
@@ -139,6 +142,45 @@ describe('DeviceController', () => {
 
       expect(service.getNotifyConfig).toHaveBeenCalledWith(deviceId, mockUser.userId);
       expect((result as any).offline).toBe(true);
+    });
+  });
+
+  describe('Device Sharing', () => {
+    describe('getDeviceShares', () => {
+      it('should call deviceService.getDeviceShares with correct parameters', async () => {
+        const deviceId = 'a15cb911-f4f8-40a2-ad9e-45e63ad093f5';
+        mockDeviceService.getDeviceShares.mockResolvedValue([{ userId: 'user-2', permission: 'EDITOR' }]);
+
+        const result = await controller.getDeviceShares(deviceId, mockUser);
+
+        expect(service.getDeviceShares).toHaveBeenCalledWith(deviceId, mockUser.userId);
+        expect(result).toHaveLength(1);
+      });
+    });
+
+    describe('addDeviceShare', () => {
+      it('should call deviceService.addDeviceShare with correct parameters', async () => {
+        const deviceId = 'a15cb911-f4f8-40a2-ad9e-45e63ad093f5';
+        const dto = { targetUser: 'test@example.com', permission: 'EDITOR' } as any;
+        mockDeviceService.addDeviceShare.mockResolvedValue({ id: 'share-1', userId: 'user-2' });
+
+        const result = await controller.addDeviceShare(deviceId, dto, mockUser);
+
+        expect(service.addDeviceShare).toHaveBeenCalledWith(deviceId, mockUser.userId, dto.targetUser, dto.permission);
+        expect(result.id).toBe('share-1');
+      });
+    });
+
+    describe('removeDeviceShare', () => {
+      it('should call deviceService.removeDeviceShare with correct parameters', async () => {
+        const deviceId = 'a15cb911-f4f8-40a2-ad9e-45e63ad093f5';
+        const targetUserId = 'user-2';
+        mockDeviceService.removeDeviceShare.mockResolvedValue(undefined);
+
+        await controller.removeDeviceShare(deviceId, targetUserId, mockUser);
+
+        expect(service.removeDeviceShare).toHaveBeenCalledWith(deviceId, mockUser.userId, targetUserId);
+      });
     });
   });
 });

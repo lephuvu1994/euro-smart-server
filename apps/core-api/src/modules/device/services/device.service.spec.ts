@@ -51,6 +51,17 @@ const makeDb = () => ({
   },
   user: {
     findMany: jest.fn().mockResolvedValue([]),
+    findFirst: jest.fn(),
+  },
+  deviceShare: {
+    findMany: jest.fn(),
+    upsert: jest.fn(),
+    delete: jest.fn(),
+  },
+  deviceShareToken: {
+    findFirst: jest.fn(),
+    create: jest.fn(),
+    delete: jest.fn(),
   },
 });
 
@@ -861,6 +872,130 @@ describe('DeviceService', () => {
 
       // Should still try to delete the tracking key itself
       expect(redis.del).toHaveBeenCalledWith('device:dev-1:_ekeys');
+    });
+  });
+
+  describe('Device Sharing', () => {
+    describe('getDeviceShares', () => {
+      it('should return shares for a target device owned by the user', async () => {
+        const deviceId = 'a15cb911-f4f8-40a2-ad9e-45e63ad093f5';
+        db.device.findUnique.mockResolvedValue({ id: deviceId, ownerId: 'user-1' });
+        db.deviceShare.findMany.mockResolvedValue([{ userId: 'user-2', permission: 'EDITOR', user: { email: 'test@example.com' } }]);
+
+        const result = await service.getDeviceShares(deviceId, 'user-1');
+
+        expect(db.deviceShare.findMany).toHaveBeenCalledWith({
+          where: { deviceId },
+          include: {
+            user: {
+              select: { id: true, firstName: true, lastName: true, email: true, phone: true, avatar: true },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        });
+        expect(result).toHaveLength(1);
+      });
+    });
+
+    describe('addDeviceShare', () => {
+      it('should add a device share when target user exists and not self', async () => {
+        const deviceId = 'a15cb911-f4f8-40a2-ad9e-45e63ad093f5';
+        db.device.findUnique.mockResolvedValue({ id: deviceId, ownerId: 'user-1' });
+        db.user.findFirst.mockResolvedValue({ id: 'user-2' });
+        db.deviceShare.upsert.mockResolvedValue({ id: 'share-1', userId: 'user-2' });
+
+        const result = await service.addDeviceShare(deviceId, 'user-1', 'test@example.com', 'EDITOR');
+
+        expect(result.id).toEqual('share-1');
+        expect(db.deviceShare.upsert).toHaveBeenCalled();
+      });
+
+      it('should throw Error if target user does not exist', async () => {
+        const deviceId = 'a15cb911-f4f8-40a2-ad9e-45e63ad093f5';
+        db.device.findUnique.mockResolvedValue({ id: deviceId, ownerId: 'user-1' });
+        db.user.findFirst.mockResolvedValue(null);
+
+        await expect(service.addDeviceShare(deviceId, 'user-1', 'unknown', 'EDITOR')).rejects.toThrow();
+      });
+    });
+
+    describe('removeDeviceShare', () => {
+      it('should delete a device share', async () => {
+        const deviceId = 'a15cb911-f4f8-40a2-ad9e-45e63ad093f5';
+        db.device.findUnique.mockResolvedValue({ id: deviceId, ownerId: 'user-1' });
+        db.deviceShare.delete.mockResolvedValue({});
+
+        await service.removeDeviceShare(deviceId, 'user-1', 'user-2');
+
+        expect(db.deviceShare.delete).toHaveBeenCalledWith({
+          where: { deviceId_userId: { deviceId, userId: 'user-2' } },
+        });
+      });
+    });
+  });
+
+  describe('Device Share Token (Deep Link)', () => {
+    describe('createShareToken', () => {
+      it('should create a token if the user is the owner', async () => {
+        const deviceId = 'dev-token-test';
+        db.device.findUnique.mockResolvedValue({ id: deviceId, ownerId: 'user-1' });
+        db.deviceShareToken.create.mockResolvedValue({ id: 'token-123', deviceId, ownerId: 'user-1', permission: 'EDITOR' });
+
+        const result = await service.createShareToken(deviceId, 'user-1', 'EDITOR');
+        expect(db.deviceShareToken.create).toHaveBeenCalled();
+        expect(result).toHaveProperty('token', 'token-123');
+      });
+
+      it('should throw ForbiddenException if user is not the owner', async () => {
+        const deviceId = 'dev-token-test';
+        db.device.findUnique.mockResolvedValue({ id: deviceId, ownerId: 'user-owner' });
+
+        await expect(service.createShareToken(deviceId, 'user-not-owner', 'EDITOR')).rejects.toThrow();
+      });
+    });
+
+    describe('getShareTokenPreview', () => {
+      it('should return preview string', async () => {
+        db.deviceShareToken.findFirst.mockResolvedValue({
+          id: 'token-123',
+          expiresAt: new Date(Date.now() + 100000),
+          permission: 'EDITOR',
+          device: { name: 'Living Room Light' },
+          owner: { firstName: 'John', lastName: 'Doe', email: 'john@example.com' },
+        });
+
+        const result = await service.getShareTokenPreview('token-123');
+        expect(result.deviceName).toBe('Living Room Light');
+        expect(result.ownerName).toBe('John Doe');
+      });
+
+      it('should throw NotFoundException if token expired', async () => {
+        db.deviceShareToken.findFirst.mockResolvedValue({
+          id: 'token-expired',
+          expiresAt: new Date(Date.now() - 100000),
+        });
+
+        await expect(service.getShareTokenPreview('token-expired')).rejects.toThrow(NotFoundException);
+      });
+    });
+
+    describe('acceptShareToken', () => {
+      it('should accept the token, upsert share, and delete the token', async () => {
+        const deviceId = 'dev-1';
+        db.deviceShareToken.findFirst.mockResolvedValue({
+          id: 'token-123',
+          deviceId,
+          expiresAt: new Date(Date.now() + 100000),
+          permission: 'EDITOR',
+        });
+        db.deviceShare.upsert.mockResolvedValue({});
+        db.deviceShareToken.delete.mockResolvedValue({});
+
+        await service.acceptShareToken('token-123', 'new-user-id');
+
+        expect(db.deviceShare.upsert).toHaveBeenCalled();
+        expect(db.deviceShareToken.delete).toHaveBeenCalledWith({ where: { id: 'token-123' } });
+      });
     });
   });
 });

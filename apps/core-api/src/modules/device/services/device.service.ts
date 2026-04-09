@@ -7,6 +7,7 @@ import {
 import { DatabaseService } from '@app/database';
 import { RedisService } from '@app/redis-cache';
 import { EHomeRole } from '@app/common';
+import { SharePermission } from '@prisma/client';
 import { GetDevicesDto } from '../dto/get-devices.dto';
 import {
   DEFAULT_DEVICE_UI_CONFIGS,
@@ -774,4 +775,162 @@ export class DeviceService {
 
     await Promise.all(cleanupTasks);
   }
+
+  // ═══════════════════════════════════════════════════
+  // DEVICE SHARING
+  // ═══════════════════════════════════════════════════
+
+  async getDeviceShares(deviceId: string, ownerId: string) {
+    const device = await this.db.device.findUnique({ where: { id: deviceId } });
+    if (!device || device.ownerId !== ownerId) {
+      throw new NotFoundException('Device not found or unauthorized');
+    }
+
+    return this.db.deviceShare.findMany({
+      where: { deviceId },
+      include: {
+        user: {
+          select: { id: true, firstName: true, lastName: true, email: true, phone: true, avatar: true },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  async addDeviceShare(deviceId: string, ownerId: string, targetUserInput: string, permission: SharePermission = SharePermission.EDITOR) {
+    const device = await this.db.device.findUnique({ where: { id: deviceId } });
+    if (!device || device.ownerId !== ownerId) {
+      throw new NotFoundException('Device not found or unauthorized');
+    }
+
+    const trimmedInput = targetUserInput.trim();
+    if (!trimmedInput) throw new HttpException('user.invalidTarget', 400);
+
+    const targetUser = await this.db.user.findFirst({
+      where: {
+        OR: [
+          { id: trimmedInput.length === 36 ? trimmedInput : undefined },
+          { email: trimmedInput },
+          { phone: trimmedInput },
+        ],
+      },
+    });
+
+    if (!targetUser) {
+      throw new NotFoundException('shared_user_not_found');
+    }
+    if (targetUser.id === ownerId) {
+      throw new HttpException('cannot_share_with_self', 400);
+    }
+
+    return this.db.deviceShare.upsert({
+      where: {
+        deviceId_userId: {
+          deviceId,
+          userId: targetUser.id,
+        },
+      },
+      update: {
+        permission,
+      },
+      create: {
+        deviceId,
+        userId: targetUser.id,
+        permission,
+      },
+    });
+  }
+
+  async removeDeviceShare(deviceId: string, ownerId: string, targetUserId: string) {
+    const device = await this.db.device.findUnique({ where: { id: deviceId } });
+    if (!device || device.ownerId !== ownerId) {
+      throw new NotFoundException('Device not found or unauthorized');
+    }
+
+    await this.db.deviceShare.delete({
+      where: {
+        deviceId_userId: {
+          deviceId,
+          userId: targetUserId,
+        },
+      },
+    });
+  }
+
+  // --- DEVICE SHARE TOKEN (DEEP LINK) ---
+
+  async createShareToken(deviceId: string, ownerId: string, permission: SharePermission) {
+    const device = await this.db.device.findUnique({ where: { id: deviceId } });
+    if (!device || device.ownerId !== ownerId) {
+      throw new HttpException('Forbidden', HttpStatus.FORBIDDEN);
+    }
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
+    const tokenRecord = await this.db.deviceShareToken.create({
+      data: {
+        deviceId,
+        ownerId,
+        permission,
+        expiresAt,
+      },
+    });
+    return { token: tokenRecord.id, expiresAt: tokenRecord.expiresAt };
+  }
+
+  async getShareTokenPreview(token: string) {
+    const record = await this.db.deviceShareToken.findFirst({
+      where: { id: token },
+      include: {
+        device: { select: { name: true } },
+        owner: { select: { firstName: true, lastName: true, email: true } },
+      },
+    });
+
+    if (!record || record.expiresAt < new Date()) {
+      throw new NotFoundException('Token invalid or expired');
+    }
+
+    const ownerName = [record.owner.firstName, record.owner.lastName]
+      .filter(Boolean)
+      .join(' ') || record.owner.email || 'Someone';
+
+    return {
+      deviceName: record.device?.name || 'Unknown Device',
+      ownerName,
+      permission: record.permission,
+    };
+  }
+
+  async acceptShareToken(token: string, userId: string) {
+    const record = await this.db.deviceShareToken.findFirst({
+      where: { id: token },
+    });
+
+    if (!record || record.expiresAt < new Date()) {
+      throw new NotFoundException('Token invalid or expired');
+    }
+
+    // Upsert into DeviceShare
+    await this.db.deviceShare.upsert({
+      where: {
+        deviceId_userId: {
+          deviceId: record.deviceId,
+          userId,
+        },
+      },
+      update: { permission: record.permission },
+      create: {
+        deviceId: record.deviceId,
+        userId,
+        permission: record.permission,
+      },
+    });
+
+    // Destroy the one-time token
+    await this.db.deviceShareToken.delete({
+      where: { id: token },
+    });
+
+    return { success: true };
+  }
 }
+

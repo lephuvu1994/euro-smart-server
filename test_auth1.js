@@ -3,7 +3,7 @@ const { Client } = require('ssh2');
 const conn = new Client();
 conn.on('ready', () => {
   console.log('Client :: ready');
-  conn.exec('. ~/.bashrc && export PATH=$PATH:/var/lib/docker/rootfs/overlayfs/ebe47324590e724d76317b57eb89caf7660fec4a8a96340fdaee28b7f7c4a03b/usr/local/bin && docker logs --tail 300 aurathink-core-api-prod | grep "/v1/internal/emqx"', (err, stream) => {
+  conn.exec('. ~/.bashrc && export PATH=$PATH:/var/lib/docker/rootfs/overlayfs/ebe47324590e724d76317b57eb89caf7660fec4a8a96340fdaee28b7f7c4a03b/usr/local/bin && sleep 5 && docker logs --tail 500 aurathink-core-api-prod | grep "RECEIVED_ACL:"', (err, stream) => {
     if (err) throw err;
     stream.on('close', (code, signal) => {
       console.log('Stream :: close :: code: ' + code + ', signal: ' + signal);

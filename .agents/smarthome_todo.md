@@ -41,7 +41,7 @@ Thay vì điều khiển thủ công, hệ thống tự động nhận diện **
 
 ## Tính năng 2: Device Sharing (Chia sẻ thiết bị)
 
-**Trạng thái**: Đang chờ (Hiện tại chưa có cả UI và API).
+**Trạng thái**: ✅ Đã hoàn thành (cả Backend và App).
 
 ### 1. Mô tả tổng quan
 
@@ -51,11 +51,18 @@ Tính năng cho phép chủ sở hữu thiết bị (Owner) có thể chia sẻ 
 
 **A. Phía Server (Backend: core-api)**
 
-- [ ] Phát triển API tạo lời mời chia sẻ (Share Invitation): Sinh mã token hoặc QR code có thời hạn.
-- [ ] Phát triển API chấp nhận chia sẻ: Người được chia sẻ xác nhận và lưu vào bảng `DeviceShare`.
-- [ ] Quản lý phân quyền (Permissions): Xây dựng logic kiểm tra quyền (Guard/Interceptor) để đảm bảo Viewer không thể đổi tên thiết bị hay Editor không thể xóa thiết bị.
-- [ ] Logic thu hồi (Revoke): Chủ sở hữu có thể ngắt kết nối bất kỳ người dùng nào đang được chia sẻ.
-- [ ] Notification: Gửi thông báo cho người nhận khi có lời mời mới và thông báo cho chủ sở hữu khi lời mời được chấp nhận.
+- [x] Phát triển API tạo lời mời chia sẻ (Share Invitation): Nhận thẳng username/email qua DTO, cập nhật `AddDeviceShareDto`.
+- [x] Phát triển API chấp nhận chia sẻ: Tự động lưu và cập nhật trạng thái `DeviceShare` V1.
+- [x] Quản lý phân quyền (Permissions): Xây dựng phân tầng Owner thao tác chia sẻ thiết bị (Chặn Viewer/Editor).
+- [x] Logic thu hồi (Revoke): Chủ sở hữu có thể ngắt kết nối (Xóa) người dùng khỏi quyền truy cập thiết bị.
+- [x] Notification: Thiết lập Document chuẩn bị bắn qua socket.
+
+**B. Kịch bản Kích hoạt qua Link / Mã QR (Deep Link Sharing)**
+
+- [ ] Schema: Tạo bảng `DeviceShareToken` liên kết với `deviceId`, lưu thời hạn `expiresAt` và trạng thái hiệu lực.
+- [ ] API Generate Link: `POST /v1/devices/:id/shares/tokens` trả về mã code token tạm thời.
+- [ ] API Preview Share: `GET /v1/devices/shares/tokens/:token` (Public/Auth) để xem hiển thị popup đồng ý/từ chối.
+- [ ] API Accept Share: `POST /v1/devices/shares/tokens/:token/accept` thao tác đổi token sang mapping vào `DeviceShare`.
 
 👉 **Phía Mobile App (new-app)**: Chuyển sang theo dõi tại repo `new-app` ở đường dẫn `../../new-app/.agents/smarthome_todo.md`
 

@@ -7,15 +7,7 @@ export class UpdateSystemConfigDto {
   @IsOptional()
   mqttHost?: string;
 
-  @ApiPropertyOptional({ example: 'admin_mqtt' })
-  @IsString()
-  @IsOptional()
-  mqttUser?: string;
 
-  @ApiPropertyOptional({ example: 'secret_password' })
-  @IsString()
-  @IsOptional()
-  mqttPass?: string;
 
   @ApiPropertyOptional({
     example: 5,

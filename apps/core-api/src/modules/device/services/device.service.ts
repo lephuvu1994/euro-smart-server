@@ -434,24 +434,26 @@ export class DeviceService {
     // 2. Query state changes (EntityStateHistory) (kiểm tra type)
     let stateHistory: any[] = [];
     if (!query.type || query.type === 'state') {
-      const entityFilter: Record<string, unknown> = { device: { id: deviceId } };
-    if (query.entityCode) entityFilter.code = query.entityCode;
+      const entityFilter: Record<string, unknown> = {
+        device: { id: deviceId },
+      };
+      if (query.entityCode) entityFilter.code = query.entityCode;
 
-    const stateHistoryWhere: Record<string, unknown> = {
-      entity: entityFilter,
-    };
-    if (Object.keys(dateFilter).length > 0) {
-      stateHistoryWhere.createdAt = dateFilter;
-    }
+      const stateHistoryWhere: Record<string, unknown> = {
+        entity: entityFilter,
+      };
+      if (Object.keys(dateFilter).length > 0) {
+        stateHistoryWhere.createdAt = dateFilter;
+      }
 
-    const stateHistory = await this.db.entityStateHistory.findMany({
-      where: stateHistoryWhere,
-      include: {
-        entity: { select: { code: true, name: true, domain: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: limit * page + limit,
-    });
+      stateHistory = await this.db.entityStateHistory.findMany({
+        where: stateHistoryWhere,
+        include: {
+          entity: { select: { code: true, name: true, domain: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: limit * page + limit,
+      });
     }
 
     // ★ Batch-lookup user info for action authors
@@ -475,7 +477,14 @@ export class DeviceService {
     if (actionUserIds.length > 0) {
       const users = await this.db.user.findMany({
         where: { id: { in: actionUserIds } },
-        select: { id: true, firstName: true, lastName: true, avatar: true, email: true, phone: true },
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          avatar: true,
+          email: true,
+          phone: true,
+        },
       });
       for (const u of users) {
         actionUsersMap.set(u.id, {
@@ -492,15 +501,15 @@ export class DeviceService {
     let connectionLogs: any[] = [];
     if (!query.type || query.type === 'connection') {
       const connectionWhere: Record<string, unknown> = { deviceId };
-    if (Object.keys(dateFilter).length > 0) {
-      connectionWhere.createdAt = dateFilter;
-    }
+      if (Object.keys(dateFilter).length > 0) {
+        connectionWhere.createdAt = dateFilter;
+      }
 
-    const connectionLogs = await this.db.deviceConnectionLog.findMany({
-      where: connectionWhere,
-      orderBy: { createdAt: 'desc' },
-      take: limit * page + limit,
-    });
+      connectionLogs = await this.db.deviceConnectionLog.findMany({
+        where: connectionWhere,
+        orderBy: { createdAt: 'desc' },
+        take: limit * page + limit,
+      });
     }
 
     // 4. Merge into unified timeline
@@ -510,7 +519,12 @@ export class DeviceService {
       entityCode: string | null;
       entityName: string | null;
       source: string | null;
-      actionBy: { userName: string | null; userAvatar: string | null, userEmail: string | null, userPhone: string | null } | null;
+      actionBy: {
+        userName: string | null;
+        userAvatar: string | null;
+        userEmail: string | null;
+        userPhone: string | null;
+      } | null;
       createdAt: Date;
     };
 

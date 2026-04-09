@@ -10,8 +10,14 @@ import * as mqtt from 'mqtt'; // npm install mqtt
 @Injectable()
 export class MqttService implements OnModuleInit, OnModuleDestroy {
   private client: mqtt.MqttClient;
-  private subscriptions: { pattern: string; callback: (topic: string, payload: Buffer) => void }[] = [];
+  private subscriptions: {
+    pattern: string;
+    callback: (topic: string, payload: Buffer) => void;
+    options?: mqtt.IClientSubscribeOptions;
+  }[] = [];
   private readonly logger = new Logger(MqttService.name);
+  /** Flag để không schedule reconnect sau khi module bị destroy */
+  private isDestroyed = false;
 
   constructor(private configService: ConfigService) {}
 
@@ -20,11 +26,12 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
   }
 
   onModuleDestroy() {
+    this.isDestroyed = true;
     this.disconnect();
   }
 
   private connect() {
-    const host = this.configService.get<string>('MQTT_HOST'); // mqtt://broker.emqx.io
+    const host = this.configService.get<string>('MQTT_HOST');
     const port = this.configService.get<number>('MQTT_PORT');
     const username = this.configService.get<string>('MQTT_USER');
     const password = this.configService.get<string>('MQTT_PASS');
@@ -36,21 +43,68 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
       username,
       password,
       reconnectPeriod: 5000, // Tự động reconnect sau 5s nếu mất mạng
+      connectTimeout: 10_000,
     });
 
+    // ── Khi kết nối thành công (bao gồm cả re-connect) ─────────────────
+    // QUAN TRỌNG: mqtt.js dùng clean_start=true nên server xoá session cũ
+    // sau mỗi lần disconnect. Phải subscribe lại tất cả topics sau mỗi lần
+    // connect thành công để tránh subscriptions=0 bug.
     this.client.on('connect', () => {
       this.logger.log('✅ MQTT Connected Successfully');
+
+      for (const sub of this.subscriptions) {
+        this.client.subscribe(sub.pattern, sub.options || { qos: 0 }, (err) => {
+          if (err) {
+            this.logger.error(
+              `Re-subscribe error on "${sub.pattern}": ${err.message}`,
+            );
+          } else {
+            this.logger.log(`✅ Re-subscribed to: ${sub.pattern}`);
+          }
+        });
+      }
     });
 
     this.client.on('error', (err) => {
       this.logger.error(`MQTT Error: ${err.message}`);
+
+      // BUG FIX: mqtt.js v4+ dừng reconnect hoàn toàn khi nhận CONNACK rc=5
+      // (Not Authorized). Điều này xảy ra khi core-api chưa sẵn sàng lúc deploy
+      // (đang chạy Prisma migrations). Force reconnect sau 10s để tự hồi phục.
+      if (
+        !this.isDestroyed &&
+        (err.message.includes('Not authorized') ||
+          err.message.includes('Connection refused') ||
+          err.message.includes('Bad username'))
+      ) {
+        this.logger.warn(
+          'Auth/Connection error detected — forcing reconnect in 10s...',
+        );
+        setTimeout(() => {
+          if (!this.isDestroyed && !this.client.connected) {
+            this.logger.log('Executing forced MQTT reconnect...');
+            try {
+              this.client.reconnect();
+            } catch (reconnectErr) {
+              this.logger.error(
+                `Force reconnect failed: ${reconnectErr.message}`,
+              );
+            }
+          }
+        }, 10_000);
+      }
     });
 
     this.client.on('offline', () => {
       this.logger.warn('MQTT Client is offline');
     });
 
-    // Handle all incoming messages and route them based on active subscriptions
+    this.client.on('reconnect', () => {
+      this.logger.log('MQTT attempting reconnect...');
+    });
+
+    // Handle all incoming messages and route based on active subscriptions
     this.client.on('message', (receivedTopic, payload) => {
       for (const sub of this.subscriptions) {
         if (this.matches(sub.pattern, receivedTopic)) {
@@ -60,7 +114,7 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  // Hàm public để các module khác gọi
+  // Hàm public để các module khác publish message
   async publish(
     topic: string,
     message: string | object,
@@ -70,9 +124,17 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
       const payload =
         typeof message === 'object' ? JSON.stringify(message) : message;
 
-      this.client.publish(topic, payload, options, (err) => {
+      if (!this.client || !this.client.connected) {
+        const err = new Error(
+          `MQTT not connected — cannot publish to "${topic}"`,
+        );
+        this.logger.error(err.message);
+        return reject(err);
+      }
+
+      this.client.publish(topic, payload, options ?? {}, (err) => {
         if (err) {
-          this.logger.error(`Publish failed to ${topic}: ${err.message}`);
+          this.logger.error(`Publish failed to "${topic}": ${err.message}`);
           reject(err);
         } else {
           resolve();
@@ -86,22 +148,28 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     callback: (topic: string, payload: Buffer) => void,
     options?: mqtt.IClientSubscribeOptions,
   ) {
-    // THÊM ĐOẠN CHECK NÀY
     if (!this.client) {
       this.logger.error(
-        `Cannot subscribe to ${topic}: MQTT Client is not initialized yet.`,
+        `Cannot subscribe to "${topic}": MQTT Client not initialized.`,
       );
       return;
     }
 
-    // Register callback logic to our routing table
-    this.subscriptions.push({ pattern: topic, callback });
+    // Lưu vào routing table — sẽ được replay trong 'connect' handler sau reconnect
+    this.subscriptions.push({ pattern: topic, callback, options });
 
-    this.client.subscribe(topic, options || {}, (err) => {
-      if (err) this.logger.error(`Subscribe error: ${err.message}`);
-      else
-        this.logger.log(`Subscribed to: ${topic} (QoS ${options?.qos ?? 0})`);
-    });
+    if (this.client.connected) {
+      // Connected ngay → subscribe luôn
+      this.client.subscribe(topic, options || {}, (err) => {
+        if (err) this.logger.error(`Subscribe error on "${topic}": ${err.message}`);
+        else this.logger.log(`Subscribed to: ${topic} (QoS ${options?.qos ?? 0})`);
+      });
+    } else {
+      // Offline → topic đã lưu vào list, sẽ được subscribe khi 'connect' fire
+      this.logger.warn(
+        `MQTT offline — queued subscribe for "${topic}", will activate on next connect.`,
+      );
+    }
   }
 
   private matches(pattern: string, topic: string): boolean {
@@ -113,18 +181,12 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
       const p = patternSegments[i];
       const t = topicSegments[i];
 
-      if (p === '#') {
-        return true; // '#' matches all remaining levels
-      }
-      
-      if (p !== '+' && p !== t) {
-        return false; // Mismatch on specific level
-      }
+      if (p === '#') return true; // '#' matches all remaining levels
+      if (p !== '+' && p !== t) return false; // Mismatch on specific level
 
       i++;
     }
 
-    // Must match exact length unless ending in '#'
     return i === patternSegments.length && i === topicSegments.length;
   }
 

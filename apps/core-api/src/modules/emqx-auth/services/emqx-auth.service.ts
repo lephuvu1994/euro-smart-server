@@ -21,6 +21,7 @@ export class EmqxAuthService {
   // AUTH: Verify credentials
   // ═══════════════════════════════════════════
   async authenticate(dto: EmqxAuthDto): Promise<{ result: 'allow' | 'deny' }> {
+    this.logger.log(`Received auth request: ${JSON.stringify(dto)}`);
     if (!dto.username) {
       return { result: 'deny' };
     }
@@ -74,14 +75,14 @@ export class EmqxAuthService {
   // ACL: Ownership + Shared check
   // ═══════════════════════════════════════════
   async authorize(dto: EmqxAclDto): Promise<{ result: 'allow' | 'deny' }> {
-    if (!dto.username || !dto.topic || !dto.action) {
-      return { result: 'deny' };
-    }
-
     // Server services → allow all
     const globalUser = process.env.MQTT_USER;
     if (dto.username === globalUser) {
       return { result: 'allow' };
+    }
+
+    if (!dto.username || !dto.topic || !dto.action) {
+      return { result: 'deny' };
     }
 
     // Embedded device — username format "device_{token}"

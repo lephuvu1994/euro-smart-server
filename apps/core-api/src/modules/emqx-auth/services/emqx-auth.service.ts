@@ -21,6 +21,10 @@ export class EmqxAuthService {
   // AUTH: Verify credentials
   // ═══════════════════════════════════════════
   async authenticate(dto: EmqxAuthDto): Promise<{ result: 'allow' | 'deny' }> {
+    if (!dto.username) {
+      return { result: 'deny' };
+    }
+
     // Case 1: Server services (iot-gateway, worker-service) — global superuser
     const globalUser = process.env.MQTT_USER;
     const globalPass = process.env.MQTT_PASS;
@@ -70,6 +74,10 @@ export class EmqxAuthService {
   // ACL: Ownership + Shared check
   // ═══════════════════════════════════════════
   async authorize(dto: EmqxAclDto): Promise<{ result: 'allow' | 'deny' }> {
+    if (!dto.username || !dto.topic || !dto.action) {
+      return { result: 'deny' };
+    }
+
     // Server services → allow all
     const globalUser = process.env.MQTT_USER;
     if (dto.username === globalUser) {

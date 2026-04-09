@@ -309,9 +309,9 @@ describe('AdminService', () => {
     it('should upsert all MQTT config entries', async () => {
       db.systemConfig.upsert.mockResolvedValue({});
 
-      await service.setMqttConfig({ host: 'localhost', user: 'u', pass: 'p' });
+      await service.setMqttConfig({ host: 'localhost' });
 
-      expect(db.systemConfig.upsert).toHaveBeenCalledTimes(3);
+      expect(db.systemConfig.upsert).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -319,8 +319,6 @@ describe('AdminService', () => {
     it('should return configs map from DB', async () => {
       db.systemConfig.findMany.mockResolvedValue([
         { key: 'MQTT_HOST', value: 'mqtt://localhost' },
-        { key: 'MQTT_USER', value: 'user' },
-        { key: 'MQTT_PASS', value: 'pass' },
         { key: 'OTP_EXPIRE', value: '5' },
       ]);
 

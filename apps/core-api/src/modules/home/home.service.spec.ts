@@ -122,6 +122,12 @@ const createMockDatabaseService = () => ({
     findUnique: jest.fn(),
     findMany: jest.fn(),
   },
+  entityStateHistory: {
+    findMany: jest.fn(),
+  },
+  deviceConnectionLog: {
+    findMany: jest.fn(),
+  },
   $transaction: jest.fn(),
 });
 
@@ -691,6 +697,144 @@ describe('HomeService', () => {
       await expect(
         service.getRoomsByFloor(MOCK_FLOOR_ID_1, MOCK_OTHER_USER_ID),
       ).rejects.toThrow(HttpException);
+    });
+  });
+
+  // ============================================================
+  // ACTIVITY TIMELINE
+  // ============================================================
+  describe('getHomeActivity', () => {
+    const defaultQuery = { page: 1, limit: 10 };
+
+    beforeEach(() => {
+      // Mock ensureUserCanAccessHome internals
+      db.home.findFirst.mockResolvedValue(mockHome);
+
+      // Default empty returns
+      db.entityStateHistory.findMany.mockResolvedValue([]);
+      db.deviceConnectionLog.findMany.mockResolvedValue([]);
+      db.user.findMany.mockResolvedValue([]);
+    });
+
+    it('should throw FORBIDDEN when user has no access', async () => {
+      db.home.findFirst.mockResolvedValue(null);
+      await expect(
+        service.getHomeActivity(MOCK_HOME_ID, MOCK_OTHER_USER_ID, defaultQuery),
+      ).rejects.toThrow(
+        new HttpException(
+          'home.error.notFoundOrNoAccess',
+          HttpStatus.FORBIDDEN,
+        ),
+      );
+    });
+
+    it('should query BOTH databases when type is not specified', async () => {
+      await service.getHomeActivity(MOCK_HOME_ID, MOCK_USER_ID, defaultQuery);
+
+      expect(db.entityStateHistory.findMany).toHaveBeenCalled();
+      expect(db.deviceConnectionLog.findMany).toHaveBeenCalled();
+    });
+
+    it('should query ONLY entityStateHistory when type is state', async () => {
+      await service.getHomeActivity(MOCK_HOME_ID, MOCK_USER_ID, {
+        ...defaultQuery,
+        type: 'state',
+      });
+
+      expect(db.entityStateHistory.findMany).toHaveBeenCalled();
+      expect(db.deviceConnectionLog.findMany).not.toHaveBeenCalled();
+    });
+
+    it('should query ONLY deviceConnectionLog when type is connection', async () => {
+      await service.getHomeActivity(MOCK_HOME_ID, MOCK_USER_ID, {
+        ...defaultQuery,
+        type: 'connection',
+      });
+
+      expect(db.entityStateHistory.findMany).not.toHaveBeenCalled();
+      expect(db.deviceConnectionLog.findMany).toHaveBeenCalled();
+    });
+
+    it('should correctly merge and sort items from both tables descending by createdAt', async () => {
+      // Create some fake data
+      const mockStateChange = {
+        createdAt: new Date('2023-01-05T10:00:00Z'),
+        value: 1,
+        valueText: 'on',
+        source: 'app',
+        actionByUserId: MOCK_USER_ID,
+        entity: {
+          code: 'e1',
+          name: 'Entity 1',
+          device: { id: 'd1', name: 'Device 1', room: { name: 'Room 1' } },
+        },
+      };
+
+      const mockConnLog = {
+        createdAt: new Date('2023-01-05T11:00:00Z'), // Later
+        event: 'online',
+        device: { id: 'd2', name: 'Device 2', room: { name: 'Room 1' } },
+      };
+
+      db.entityStateHistory.findMany.mockResolvedValue([mockStateChange]);
+      db.deviceConnectionLog.findMany.mockResolvedValue([mockConnLog]);
+      db.user.findMany.mockResolvedValue([
+        { id: MOCK_USER_ID, firstName: 'Test', lastName: 'User', avatar: null },
+      ]);
+
+      const result = await service.getHomeActivity(
+        MOCK_HOME_ID,
+        MOCK_USER_ID,
+        defaultQuery,
+      );
+
+      expect(result.data).toHaveLength(2);
+      expect(result.meta.total).toBe(2);
+
+      // Verify sorting (newest first, so connLog should be first)
+      const firstItem = result.data[0];
+      const secondItem = result.data[1];
+
+      expect(firstItem.type).toBe('connection');
+      expect(firstItem.deviceId).toBe('d2');
+
+      expect(secondItem.type).toBe('state');
+      expect(secondItem.deviceId).toBe('d1');
+      expect(secondItem.actionBy).toBeDefined();
+      expect(secondItem.actionBy?.userName).toBe('User Test');
+    });
+
+    it('should properly apply date limits if provided', async () => {
+      const fromDate = '2023-01-01T00:00:00.000Z';
+      const toDate = '2023-01-31T23:59:59.000Z';
+
+      await service.getHomeActivity(MOCK_HOME_ID, MOCK_USER_ID, {
+        ...defaultQuery,
+        from: fromDate,
+        to: toDate,
+      });
+
+      // Verify Prisma call contained date filter matching Date objects
+      const expectedFilter = {
+        gte: new Date(fromDate),
+        lte: new Date(toDate),
+      };
+
+      expect(db.entityStateHistory.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            createdAt: expectedFilter,
+          }),
+        }),
+      );
+
+      expect(db.deviceConnectionLog.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            createdAt: expectedFilter,
+          }),
+        }),
+      );
     });
   });
 });

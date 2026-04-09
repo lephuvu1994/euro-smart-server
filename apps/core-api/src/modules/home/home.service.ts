@@ -525,7 +525,13 @@ export class HomeService {
   async getHomeActivity(
     homeId: string,
     userId: string,
-    query: { page?: number; limit?: number; from?: string; to?: string },
+    query: {
+      page?: number;
+      limit?: number;
+      from?: string;
+      to?: string;
+      type?: 'state' | 'connection';
+    },
   ) {
     await this.ensureUserCanAccessHome(userId, homeId);
 
@@ -537,42 +543,54 @@ export class HomeService {
 
     const fetchLimit = limit * page + limit;
 
-    // 1. State changes của tất cả entities thuộc devices trong home
-    const stateWhere: Record<string, unknown> = {
-      entity: { device: { homeId } },
-    };
-    if (Object.keys(dateFilter).length > 0) stateWhere.createdAt = dateFilter;
+    let stateHistory: any[] = [];
+    if (!query.type || query.type === 'state') {
+      const stateWhere: Record<string, unknown> = {
+        entity: { device: { homeId } },
+      };
+      if (Object.keys(dateFilter).length > 0) stateWhere.createdAt = dateFilter;
 
-    const stateHistory = await this.databaseService.entityStateHistory.findMany({
-      where: stateWhere,
-      include: {
-        entity: {
-          select: {
-            code: true,
-            name: true,
-            domain: true,
-            device: { select: { id: true, name: true, room: { select: { name: true } } } },
+      stateHistory = await this.databaseService.entityStateHistory.findMany({
+        where: stateWhere,
+        include: {
+          entity: {
+            select: {
+              code: true,
+              name: true,
+              domain: true,
+              device: {
+                select: {
+                  id: true,
+                  name: true,
+                  room: { select: { name: true } },
+                },
+              },
+            },
           },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: fetchLimit,
-    });
+        orderBy: { createdAt: 'desc' },
+        take: fetchLimit,
+      });
+    }
 
-    // 2. Connection logs cho tất cả devices trong home
-    const connWhere: Record<string, unknown> = {
-      device: { homeId },
-    };
-    if (Object.keys(dateFilter).length > 0) connWhere.createdAt = dateFilter;
+    let connectionLogs: any[] = [];
+    if (!query.type || query.type === 'connection') {
+      const connWhere: Record<string, unknown> = {
+        device: { homeId },
+      };
+      if (Object.keys(dateFilter).length > 0) connWhere.createdAt = dateFilter;
 
-    const connectionLogs = await this.databaseService.deviceConnectionLog.findMany({
-      where: connWhere,
-      include: {
-        device: { select: { id: true, name: true, room: { select: { name: true } } } },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: fetchLimit,
-    });
+      connectionLogs = await this.databaseService.deviceConnectionLog.findMany({
+        where: connWhere,
+        include: {
+          device: {
+            select: { id: true, name: true, room: { select: { name: true } } },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: fetchLimit,
+      });
+    }
 
     // 3. Batch-lookup user info for action authors
     const actionUserIds = [
@@ -582,14 +600,25 @@ export class HomeService {
           .filter((uid): uid is string => uid !== null),
       ),
     ];
-    const actionUsersMap = new Map<string, { firstName: string | null; lastName: string | null; avatar: string | null }>();
+    const actionUsersMap = new Map<
+      string,
+      {
+        firstName: string | null;
+        lastName: string | null;
+        avatar: string | null;
+      }
+    >();
     if (actionUserIds.length > 0) {
       const users = await this.databaseService.user.findMany({
         where: { id: { in: actionUserIds } },
         select: { id: true, firstName: true, lastName: true, avatar: true },
       });
       for (const u of users) {
-        actionUsersMap.set(u.id, { firstName: u.firstName, lastName: u.lastName, avatar: u.avatar });
+        actionUsersMap.set(u.id, {
+          firstName: u.firstName,
+          lastName: u.lastName,
+          avatar: u.avatar,
+        });
       }
     }
 
@@ -610,9 +639,13 @@ export class HomeService {
     const timeline: TimelineItem[] = [];
 
     for (const s of stateHistory) {
-      const actionUser = s.actionByUserId ? actionUsersMap.get(s.actionByUserId) : null;
+      const actionUser = s.actionByUserId
+        ? actionUsersMap.get(s.actionByUserId)
+        : null;
       const userName = actionUser
-        ? [actionUser.lastName, actionUser.firstName].filter(Boolean).join(' ') || null
+        ? [actionUser.lastName, actionUser.firstName]
+            .filter(Boolean)
+            .join(' ') || null
         : null;
 
       timeline.push({

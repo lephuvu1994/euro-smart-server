@@ -28,6 +28,7 @@ import { DeviceService } from '../services/device.service';
 import { GetDevicesDto } from '../dto/get-devices.dto';
 import { UpdateNotifyConfigDto } from '../dto/update-notify-config.dto';
 import { EmqxAuthService } from '../../emqx-auth/services/emqx-auth.service';
+import { AddDeviceShareDto, CreateDeviceShareTokenDto } from '../dto/device-share.dto';
 
 import { GetDeviceTimelineDto } from '../dto/get-device-timeline.dto';
 
@@ -315,5 +316,85 @@ export class DeviceController {
     @AuthUser() user: IAuthUser,
   ): Promise<void> {
     return await this.deviceService.deleteDevice(id, user.userId);
+  }
+
+  // ═══════════════════════════════════════════════════
+  // DEVICE SHARING
+  // ═══════════════════════════════════════════════════
+
+  @Get(':id/shares')
+  @ApiOperation({
+    summary: 'Lấy danh sách người dùng được chia sẻ thiết bị',
+  })
+  @DocResponse({ messageKey: 'device.share.get.success', httpStatus: HttpStatus.OK })
+  async getDeviceShares(
+    @Param('id') deviceId: string,
+    @AuthUser() user: IAuthUser,
+  ) {
+    return this.deviceService.getDeviceShares(deviceId, user.userId);
+  }
+
+  @Post(':id/shares')
+  @ApiOperation({
+    summary: 'Thêm quyền chia sẻ thiết bị cho một người dùng',
+  })
+  @DocResponse({ messageKey: 'device.share.add.success', httpStatus: HttpStatus.OK })
+  async addDeviceShare(
+    @Param('id') deviceId: string,
+    @Body() dto: AddDeviceShareDto,
+    @AuthUser() user: IAuthUser,
+  ) {
+    return this.deviceService.addDeviceShare(deviceId, user.userId, dto.targetUser, dto.permission);
+  }
+
+  @Delete(':id/shares/:userId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: 'Xóa quyền chia sẻ thiết bị đối với một user',
+  })
+  @DocResponse({ messageKey: 'device.share.delete.success', httpStatus: HttpStatus.NO_CONTENT })
+  async removeDeviceShare(
+    @Param('id') deviceId: string,
+    @Param('userId') targetUserId: string,
+    @AuthUser() user: IAuthUser,
+  ) {
+    return this.deviceService.removeDeviceShare(deviceId, user.userId, targetUserId);
+  }
+
+  // --- TOKEN-BASED SHARING (DEEP LINK / QR) ---
+
+  @Post(':id/shares/tokens')
+  @ApiOperation({
+    summary: 'Tạo mã mời (token) chia sẻ thiết bị (dành cho Deep Link/mã QR)',
+  })
+  @DocResponse({ messageKey: 'device.share.token.create', httpStatus: HttpStatus.CREATED })
+  async createShareToken(
+    @Param('id') deviceId: string,
+    @Body() dto: CreateDeviceShareTokenDto,
+    @AuthUser() user: IAuthUser,
+  ) {
+    return this.deviceService.createShareToken(deviceId, user.userId, dto.permission || 'EDITOR');
+  }
+
+  @Get('shares/tokens/:token')
+  @ApiOperation({
+    summary: 'Xem trước thông tin thư mời chia sẻ',
+  })
+  @DocResponse({ messageKey: 'device.share.token.preview', httpStatus: HttpStatus.OK })
+  async getShareTokenPreview(@Param('token') token: string) {
+    return this.deviceService.getShareTokenPreview(token);
+  }
+
+  @Post('shares/tokens/:token/accept')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Chấp nhận lời mời chia sẻ thiết bị từ một token',
+  })
+  @DocResponse({ messageKey: 'device.share.token.accept', httpStatus: HttpStatus.OK })
+  async acceptShareToken(
+    @Param('token') token: string,
+    @AuthUser() user: IAuthUser,
+  ) {
+    return this.deviceService.acceptShareToken(token, user.userId);
   }
 }

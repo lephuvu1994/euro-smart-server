@@ -7,13 +7,5 @@ export class SetMqttConfigDto {
   @IsNotEmpty()
   host: string;
 
-  @ApiProperty({ example: 'admin_mqtt' })
-  @IsString()
-  @IsNotEmpty()
-  user: string;
 
-  @ApiProperty({ example: 'secret_password' })
-  @IsString()
-  @IsNotEmpty()
-  pass: string;
 }

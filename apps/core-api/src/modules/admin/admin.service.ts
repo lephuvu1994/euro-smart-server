@@ -215,16 +215,6 @@ export class AdminService {
   async setMqttConfig(data: SetMqttConfigDto) {
     const entries = [
       { key: 'MQTT_HOST', value: data.host, description: 'MQTT Broker Host' },
-      {
-        key: 'MQTT_USER',
-        value: data.user,
-        description: 'MQTT Broker Username',
-      },
-      {
-        key: 'MQTT_PASS',
-        value: data.pass,
-        description: 'MQTT Broker Password',
-      },
     ];
 
     await Promise.all(
@@ -246,8 +236,6 @@ export class AdminService {
 
     return {
       mqttHost: map['MQTT_HOST'] || '',
-      mqttUser: map['MQTT_USER'] || '',
-      mqttPass: map['MQTT_PASS'] || '',
       otpExpire: parseInt(map['OTP_EXPIRE'] || '5', 10),
     };
   }
@@ -261,18 +249,7 @@ export class AdminService {
         value: data.mqttHost,
         description: 'MQTT Broker Host',
       });
-    if (data.mqttUser !== undefined)
-      updates.push({
-        key: 'MQTT_USER',
-        value: data.mqttUser,
-        description: 'MQTT Broker Username',
-      });
-    if (data.mqttPass !== undefined)
-      updates.push({
-        key: 'MQTT_PASS',
-        value: data.mqttPass,
-        description: 'MQTT Broker Password',
-      });
+
     if (data.otpExpire !== undefined)
       updates.push({
         key: 'OTP_EXPIRE',

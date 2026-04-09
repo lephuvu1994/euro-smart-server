@@ -216,11 +216,11 @@ export class DeviceControlService {
         entityPayloads,
         userId,
         source: 'app',
+        issuedAt: Date.now(),
       },
       {
         priority: 1,
-        attempts: 3,
-        backoff: 5000,
+        attempts: 1,       // No retry for real-time control — stale commands are harmful
         removeOnComplete: true,
       },
     );

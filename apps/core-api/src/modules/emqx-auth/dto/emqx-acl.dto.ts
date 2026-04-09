@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsIn } from 'class-validator';
+import { IsString, IsNotEmpty, IsIn, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class EmqxAclDto {
@@ -27,6 +27,7 @@ export class EmqxAclDto {
     description: 'MQTT client ID (sent by EMQX webhook)',
     required: false,
   })
+  @IsOptional()
   @IsString()
   clientid?: string;
 }

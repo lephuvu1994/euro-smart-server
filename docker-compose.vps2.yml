@@ -36,3 +36,9 @@ services:
   # ── Bật HAProxy (override profile) ──
   haproxy:
     profiles: ['default']
+
+  # ── nginx phụ thuộc core-api trên VPS2 ──
+  nginx:
+    depends_on:
+      core-api:
+        condition: service_healthy

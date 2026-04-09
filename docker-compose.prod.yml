@@ -244,9 +244,9 @@ services:
       MQTT_WSS_URL: ${MQTT_WSS_URL}
     command: ['node', 'dist/apps/iot-gateway/main.js']
     depends_on:
-      core-api:
-        condition: service_healthy
       emqx:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - euro-internal
@@ -276,7 +276,7 @@ services:
       REDIS_PORT: '6379'
     command: ['node', 'dist/apps/worker-service/main.js']
     depends_on:
-      core-api:
+      redis:
         condition: service_healthy
     networks:
       - euro-internal
@@ -337,7 +337,7 @@ services:
       # ACME challenge cho certbot
       - certbot_webroot:/var/www/certbot:ro
     depends_on:
-      core-api:
+      emqx:
         condition: service_healthy
     networks:
       - euro-internal

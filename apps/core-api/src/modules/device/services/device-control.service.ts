@@ -101,6 +101,20 @@ export class DeviceControlService {
       );
     }
 
+    // Validate position limit: block redundant OPEN/CLOSE when curtain already at limit
+    if (value === 'OPEN' || value === 'CLOSE') {
+      const shadow = await this.redisService.hgetall(`device:shadow:${device.token}`);
+      const pos = shadow?.position !== undefined ? Number(shadow.position) : null;
+      if (pos !== null && !Number.isNaN(pos)) {
+        if (value === 'CLOSE' && pos <= 0) {
+          throw new BadRequestException('device.error.alreadyClosed');
+        }
+        if (value === 'OPEN' && pos >= 100) {
+          throw new BadRequestException('device.error.alreadyOpen');
+        }
+      }
+    }
+
     // Đẩy job vào Queue — entity mang đầy đủ config (commandKey, commandSuffix)
     await this.deviceQueue.add(
       DEVICE_JOBS.CONTROL_CMD,
@@ -110,11 +124,11 @@ export class DeviceControlService {
         value,
         userId,
         source: 'app',
+        issuedAt: Date.now(),
       },
       {
         priority: 1,
-        attempts: 3,
-        backoff: 5000,
+        attempts: 1,       // No retry for real-time control — stale commands are harmful
         removeOnComplete: true,
       },
     );
@@ -158,6 +172,23 @@ export class DeviceControlService {
         'Thiết bị đang ngoại tuyến',
         HttpStatus.SERVICE_UNAVAILABLE,
       );
+    }
+
+    // Validate position limit for bulk curtain commands
+    const curtainCmds = values.filter(v => v.value === 'OPEN' || v.value === 'CLOSE');
+    if (curtainCmds.length > 0) {
+      const shadow = await this.redisService.hgetall(`device:shadow:${device.token}`);
+      const pos = shadow?.position !== undefined ? Number(shadow.position) : null;
+      if (pos !== null && !Number.isNaN(pos)) {
+        for (const v of curtainCmds) {
+          if (v.value === 'CLOSE' && pos <= 0) {
+            throw new BadRequestException('device.error.alreadyClosed');
+          }
+          if (v.value === 'OPEN' && pos >= 100) {
+            throw new BadRequestException('device.error.alreadyOpen');
+          }
+        }
+      }
     }
 
     // Build entity MQTT payloads

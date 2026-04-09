@@ -21,6 +21,7 @@ interface ControlCmdPayload {
   value: string | number | boolean;
   userId?: string;
   source?: string;
+  issuedAt?: number;  // Unix ms timestamp — used for TTL expiry check
 }
 
 interface EntityPayload {
@@ -32,6 +33,7 @@ interface ControlDeviceValueCmdPayload {
   token: string;
   entityPayloads: EntityPayload[];
   userId?: string;
+  issuedAt?: number;  // Unix ms timestamp — used for TTL expiry check
 }
 
 interface SceneAction {
@@ -126,8 +128,17 @@ export class DeviceControlProcessor extends WorkerHost {
    * Điều khiển 1 entity của device
    */
   private async handleControlCommand(job: Job): Promise<unknown> {
-    const { token, entityCode, value, userId } =
+    const { token, entityCode, value, userId, issuedAt } =
       job.data as ControlCmdPayload;
+
+    // ★ TTL Guard: discard commands older than 10s to prevent stale replays
+    const COMMAND_TTL_MS = 10_000;
+    if (issuedAt && Date.now() - issuedAt > COMMAND_TTL_MS) {
+      this.logger.warn(
+        `[TTL] Skipped expired command: ${token} -> ${entityCode}:${String(value)} (age: ${Date.now() - issuedAt}ms)`,
+      );
+      return { skipped: true, reason: 'expired' };
+    }
 
     this.logger.log(
       `🚀 Executing control command: ${token} -> ${entityCode}:${String(value)}`,
@@ -197,8 +208,17 @@ export class DeviceControlProcessor extends WorkerHost {
    * Điều khiển bulk nhiều entities cùng 1 device
    */
   private async handleControlDeviceValueCommand(job: Job): Promise<unknown> {
-    const { token, entityPayloads, userId } =
+    const { token, entityPayloads, userId, issuedAt } =
       job.data as ControlDeviceValueCmdPayload;
+
+    // ★ TTL Guard: discard commands older than 10s to prevent stale replays
+    const COMMAND_TTL_MS = 10_000;
+    if (issuedAt && Date.now() - issuedAt > COMMAND_TTL_MS) {
+      this.logger.warn(
+        `[TTL] Skipped expired bulk command: ${token} (age: ${Date.now() - issuedAt}ms)`,
+      );
+      return { skipped: true, reason: 'expired' };
+    }
 
     this.logger.log(
       `🚀 Executing control device value command: ${JSON.stringify(job.data)}`,

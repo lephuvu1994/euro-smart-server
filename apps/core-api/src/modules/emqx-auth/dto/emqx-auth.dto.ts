@@ -1,22 +1,22 @@
-import { IsString, IsNotEmpty } from 'class-validator';
+import { IsString, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class EmqxAuthDto {
   @ApiProperty({ description: 'MQTT username', example: 'user_abc123' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  username: string;
+  username?: string;
 
   @ApiProperty({ description: 'MQTT password (HMAC or plain)' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  password: string;
+  password?: string;
 
   @ApiProperty({
     description: 'MQTT client ID',
     example: 'app_abc123_1711411200000',
   })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  clientid: string;
+  clientid?: string;
 }

@@ -1,6 +1,6 @@
 const mqtt = require('mqtt');
 
-const brokerUrl = 'mqtt://100.117.220.15:1883';
+const brokerUrl = 'mqtt://aurathink.ddns.net:1883';
 const options = {
   username: 'leephusvux1994',
   password: 'Vu31101994@',

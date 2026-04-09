@@ -444,7 +444,7 @@ export class DeviceService {
       stateHistoryWhere.createdAt = dateFilter;
     }
 
-    const stateHistory = await this.db.entityStateHistory.findMany({
+    stateHistory = await this.db.entityStateHistory.findMany({
       where: stateHistoryWhere,
       include: {
         entity: { select: { code: true, name: true, domain: true } },
@@ -496,7 +496,7 @@ export class DeviceService {
       connectionWhere.createdAt = dateFilter;
     }
 
-    const connectionLogs = await this.db.deviceConnectionLog.findMany({
+    connectionLogs = await this.db.deviceConnectionLog.findMany({
       where: connectionWhere,
       orderBy: { createdAt: 'desc' },
       take: limit * page + limit,

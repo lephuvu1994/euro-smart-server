@@ -32,3 +32,23 @@ services:
 
   haproxy:
     profiles: ['disabled']
+
+  # ── FIX: Override depends_on ──
+  # core-api bị disabled → Docker Compose báo lỗi "depends on undefined service" → không start
+  # Solution: override depends_on để iot-gateway & worker-service phụ thuộc trực tiếp
+  # vào các service thực sự chạy trên VPS1 (postgres, redis, emqx)
+  iot-gateway:
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      emqx:
+        condition: service_healthy
+
+  worker-service:
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy

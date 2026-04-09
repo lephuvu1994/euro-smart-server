@@ -409,6 +409,7 @@ export class DeviceService {
       entityCode?: string;
       from?: string;
       to?: string;
+      type?: 'connection' | 'state';
     },
   ) {
     // 1. Verify ownership
@@ -430,8 +431,10 @@ export class DeviceService {
     if (query.from) dateFilter.gte = new Date(query.from);
     if (query.to) dateFilter.lte = new Date(query.to);
 
-    // 2. Query state changes (EntityStateHistory)
-    const entityFilter: Record<string, unknown> = { device: { id: deviceId } };
+    // 2. Query state changes (EntityStateHistory) (kiểm tra type)
+    let stateHistory: any[] = [];
+    if (!query.type || query.type === 'state') {
+      const entityFilter: Record<string, unknown> = { device: { id: deviceId } };
     if (query.entityCode) entityFilter.code = query.entityCode;
 
     const stateHistoryWhere: Record<string, unknown> = {
@@ -447,9 +450,9 @@ export class DeviceService {
         entity: { select: { code: true, name: true, domain: true } },
       },
       orderBy: { createdAt: 'desc' },
-      // Fetch more than needed so we can merge+paginate in memory
       take: limit * page + limit,
     });
+    }
 
     // ★ Batch-lookup user info for action authors
     const actionUserIds = [
@@ -486,7 +489,9 @@ export class DeviceService {
     }
 
     // 3. Query connection logs (DeviceConnectionLog)
-    const connectionWhere: Record<string, unknown> = { deviceId };
+    let connectionLogs: any[] = [];
+    if (!query.type || query.type === 'connection') {
+      const connectionWhere: Record<string, unknown> = { deviceId };
     if (Object.keys(dateFilter).length > 0) {
       connectionWhere.createdAt = dateFilter;
     }
@@ -496,6 +501,7 @@ export class DeviceService {
       orderBy: { createdAt: 'desc' },
       take: limit * page + limit,
     });
+    }
 
     // 4. Merge into unified timeline
     type TimelineItem = {

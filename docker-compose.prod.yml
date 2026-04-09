@@ -210,7 +210,9 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      # Prisma migrations có thể mất ~3 phút. start_period phải đủ lớn
+      # để gateway/worker không start trước khi core-api HTTP sẵn sàng.
+      start_period: 180s
     deploy:
       resources:
         limits:

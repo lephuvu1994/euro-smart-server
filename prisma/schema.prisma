@@ -33,17 +33,17 @@ enum DeviceProtocol {
 
 // Domain của entity (tương đương HA entity domain)
 enum EntityDomain {
-  light    // Đèn: on/off + brightness + color + color_temp
-  switch_  // Công tắc: on/off (legacy)
-  switch   // Công tắc: on/off / "on"/"off"
-  sensor   // Cảm biến: read-only values
-  camera   // Camera: stream
-  lock     // Khoá: child_lock (0/1)
-  curtain  // Rèm/cửa cuốn: OPEN/CLOSE/STOP + position
-  climate  // Điều hoà: on/off + temp + mode + fan
-  button   // Nút bấm / trigger action (RF learn, scene trigger...)
-  config   // JSON config pass-through → chip xử lý nội dung
-  update   // OTA firmware update (HA standard: update domain)
+  light // Đèn: on/off + brightness + color + color_temp
+  switch_ // Công tắc: on/off (legacy)
+  switch // Công tắc: on/off / "on"/"off"
+  sensor // Cảm biến: read-only values
+  camera // Camera: stream
+  lock // Khoá: child_lock (0/1)
+  curtain // Rèm/cửa cuốn: OPEN/CLOSE/STOP + position
+  climate // Điều hoà: on/off + temp + mode + fan
+  button // Nút bấm / trigger action (RF learn, scene trigger...)
+  config // JSON config pass-through → chip xử lý nội dung
+  update // OTA firmware update (HA standard: update domain)
 }
 
 // Loại giá trị attribute
@@ -89,13 +89,14 @@ model User {
 
   // Quan hệ
   locations       Location[]
-  ownedDevices    Device[]         @relation("UserInventory")
-  sharedDevices   DeviceShare[]    @relation("SharedToUser")
-  ownedHomes      Home[]           @relation("UserHomes")
+  ownedDevices    Device[]           @relation("UserInventory")
+  sharedDevices   DeviceShare[]      @relation("SharedToUser")
+  ownedHomes      Home[]             @relation("UserHomes")
   homeMemberships HomeMember[]
   sessions        Session[]
   calendars       Calendar[]
   provisionTokens ProvisionToken[]
+  shareTokens     DeviceShareToken[] @relation("TokenOwner")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -249,9 +250,10 @@ model Device {
   hardware   HardwareRegistry? @relation(fields: [hardwareId], references: [id])
 
   // Sở hữu
-  ownerId     String        @map("owner_id") @db.Uuid
-  owner       User          @relation("UserInventory", fields: [ownerId], references: [id])
+  ownerId     String             @map("owner_id") @db.Uuid
+  owner       User               @relation("UserInventory", fields: [ownerId], references: [id])
   sharedUsers DeviceShare[]
+  shareTokens DeviceShareToken[]
 
   // Vị trí
   homeId String? @map("home_id") @db.Uuid
@@ -363,7 +365,7 @@ model EntityStateHistory {
   valueText String? @map("value_text")
 
   // Nguồn gốc thay đổi: ai gây ra sự kiện này?
-  source    String  @default("mqtt") // "app" | "mqtt" | "scene" | "siri"
+  source String @default("mqtt") // "app" | "mqtt" | "scene" | "siri"
 
   // Ai thực hiện lệnh? (null = physical/mqtt/unknown, không dùng FK vì hypertable)
   actionByUserId String? @map("action_by_user_id") @db.Uuid
@@ -380,7 +382,7 @@ model EntityStateHistory {
 
 // Lịch sử kết nối thiết bị (online/offline)
 model DeviceConnectionLog {
-  id    String @default(uuid()) @db.Uuid
+  id String @default(uuid()) @db.Uuid
 
   event String // "online" | "offline"
 
@@ -407,6 +409,20 @@ model DeviceShare {
 
   @@unique([deviceId, userId])
   @@map("t_device_share")
+}
+
+model DeviceShareToken {
+  id         String          @id @default(uuid()) @db.Uuid
+  deviceId   String          @map("device_id") @db.Uuid
+  device     Device          @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  ownerId    String          @map("owner_id") @db.Uuid
+  owner      User            @relation("TokenOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  permission SharePermission @default(VIEWER)
+  expiresAt  DateTime        @map("expires_at")
+  createdAt  DateTime        @default(now()) @map("created_at")
+
+  @@index([expiresAt])
+  @@map("t_device_share_token")
 }
 
 // ==========================================
@@ -493,15 +509,15 @@ model Service {
 }
 
 model Scene {
-  id        String   @id @default(uuid()) @db.Uuid
-  name      String
-  active    Boolean  @default(true)
-  triggers  Json     @default("[]")
-  actions   Json     @default("[]")
-  
+  id       String  @id @default(uuid()) @db.Uuid
+  name     String
+  active   Boolean @default(true)
+  triggers Json    @default("[]")
+  actions  Json    @default("[]")
+
   minIntervalSeconds Int?      @default(60)
   lastFiredAt        DateTime?
-  
+
   homeId    String   @map("home_id") @db.Uuid
   home      Home     @relation(fields: [homeId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now()) @map("created_at")
@@ -599,7 +615,7 @@ model ProvisionToken {
 
 enum AutomationTargetType {
   DEVICE_ENTITY // Tác động lên 1 Công tắc, 1 Đèn, 1 Cảm biến
-  SCENE         // Tác động lên 1 Kịch bản
+  SCENE // Tác động lên 1 Kịch bản
 }
 
 enum TimerStatus {
@@ -612,50 +628,50 @@ enum TimerStatus {
 // TIMER: Chạy một lần rồi bỏ (Ephemeral)
 // BullMQ chạy xong sẽ xóa luôn record này, không lưu rác.
 model DeviceTimer {
-  id           String               @id @default(uuid()) @db.Uuid
-  userId       String               @map("user_id") @db.Uuid
-  name         String?
-  
-  targetType   AutomationTargetType @map("target_type")
-  targetId     String               @map("target_id") @db.Uuid
-  
-  service      String
-  actions      Json                 @default("[]") // Hỗ trợ mảng Chained Actions
-  
-  executeAt    DateTime             @map("execute_at")
-  jobId        String?              @unique @map("job_id") // ID để hủy BullMQ Job
+  id     String  @id @default(uuid()) @db.Uuid
+  userId String  @map("user_id") @db.Uuid
+  name   String?
 
-  createdAt    DateTime             @default(now()) @map("created_at")
+  targetType AutomationTargetType @map("target_type")
+  targetId   String               @map("target_id") @db.Uuid
 
-  @@index([executeAt]) 
+  service String
+  actions Json   @default("[]") // Hỗ trợ mảng Chained Actions
+
+  executeAt DateTime @map("execute_at")
+  jobId     String?  @unique @map("job_id") // ID để hủy BullMQ Job
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([executeAt])
   @@map("t_device_timer")
 }
 
 // SCHEDULE: Chạy lặp lại
 model DeviceSchedule {
-  id           String               @id @default(uuid()) @db.Uuid
-  userId       String               @map("user_id") @db.Uuid
-  name         String
-  
-  targetType   AutomationTargetType @map("target_type")
-  targetId     String               @map("target_id") @db.Uuid
-  
-  service      String
-  actions      Json                 @default("[]") // Hỗ trợ mảng Chained Actions
-  
-  cronExpression String?            @map("cron_expression")
-  daysOfWeek     Int[]              @default([]) @map("days_of_week")
-  timeOfDay      String?            @map("time_of_day")
-  timezone       String             @default("Asia/Ho_Chi_Minh")
-  
-  jitterSeconds  Int                @default(0) @map("jitter_seconds")
-  
-  isActive       Boolean            @default(true) @map("is_active")
-  nextExecuteAt  DateTime?          @map("next_execute_at") 
-  lastExecutedAt DateTime?          @map("last_executed_at") // Track missed jobs
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  name   String
 
-  createdAt      DateTime           @default(now()) @map("created_at")
-  updatedAt      DateTime           @updatedAt @map("updated_at")
+  targetType AutomationTargetType @map("target_type")
+  targetId   String               @map("target_id") @db.Uuid
+
+  service String
+  actions Json   @default("[]") // Hỗ trợ mảng Chained Actions
+
+  cronExpression String? @map("cron_expression")
+  daysOfWeek     Int[]   @default([]) @map("days_of_week")
+  timeOfDay      String? @map("time_of_day")
+  timezone       String  @default("Asia/Ho_Chi_Minh")
+
+  jitterSeconds Int @default(0) @map("jitter_seconds")
+
+  isActive       Boolean   @default(true) @map("is_active")
+  nextExecuteAt  DateTime? @map("next_execute_at")
+  lastExecutedAt DateTime? @map("last_executed_at") // Track missed jobs
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([isActive, nextExecuteAt])
   @@map("t_device_schedule")
@@ -663,16 +679,16 @@ model DeviceSchedule {
 
 // THE AUDIT LOG: Lưu mọi kết quả chạy của Timer & Schedule (TimescaleDB Hypertable)
 model ScheduleExecutionLog {
-  id           String               @default(uuid()) @db.Uuid
-  
-  sourceType   String               // 'TIMER' hoặc 'SCHEDULE'
-  sourceId     String               @map("source_id") @db.Uuid
-  userId       String               @map("user_id") @db.Uuid
+  id String @default(uuid()) @db.Uuid
 
-  status       String               // 'SUCCESS' hoặc 'FAILED'
-  errorReason  String?              @map("error_reason")
-  
-  executedAt   DateTime             @default(now()) @map("executed_at")
+  sourceType String // 'TIMER' hoặc 'SCHEDULE'
+  sourceId   String @map("source_id") @db.Uuid
+  userId     String @map("user_id") @db.Uuid
+
+  status      String // 'SUCCESS' hoặc 'FAILED'
+  errorReason String? @map("error_reason")
+
+  executedAt DateTime @default(now()) @map("executed_at")
 
   // TimescaleDB yêu cầu primary key hoặc unique index phải bao gồm partition key (executedAt)
   @@id([id, executedAt])

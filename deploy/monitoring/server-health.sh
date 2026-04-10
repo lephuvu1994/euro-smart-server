@@ -70,8 +70,8 @@ CONTAINERS=(
     "euro-nginx-prod"
 )
 
-# Health endpoint (API liveness check)
-HEALTH_URL="http://localhost:3000/health"
+# Health endpoint (API liveness check — gọi qua Nginx vì core-api không expose port ra host)
+HEALTH_URL="http://localhost/health"
 
 # Hostname để phân biệt máy chủ trong alert
 HOSTNAME=$(hostname)

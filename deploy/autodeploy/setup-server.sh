@@ -191,12 +191,31 @@ cp "$PWD/deploy/monitoring/logrotate-monitor.conf" /etc/logrotate.d/aurathink-mo
 success "Hệ thống Monitoring đã được cài đặt! Cảnh báo sẽ chạy mỗi 3 phút."
 warn "Nhớ cấu hình TELEGRAM_BOT_TOKEN và TELEGRAM_CHAT_IDS trong file .env để nhận cảnh báo!"
 
+# ────────────────────────────────────────────────────────
+# BƯỚC 8: Cài đặt Daily Automated Backup
+# ────────────────────────────────────────────────────────
+log "8. Cài đặt hệ thống tự động Sao lưu (Backup) CSDL hằng đêm..."
+
+# Cấp quyền chạy cho script backup
+chmod +x "$PWD/deploy/monitoring/daily-backup.sh"
+
+# Cài đặt Crontab tự động (chạy vào 03:00 sáng mỗi ngày)
+BACKUP_SCRIPT="$PWD/deploy/monitoring/daily-backup.sh"
+BACKUP_CRON="0 3 * * * /bin/bash $BACKUP_SCRIPT >> /var/log/aurathink-backup-cron.log 2>&1"
+
+# Kiểm tra nếu crontab chưa có dòng này thì mới thêm
+(crontab -l 2>/dev/null | grep -qF "daily-backup.sh") || \
+    (crontab -l 2>/dev/null; echo "$BACKUP_CRON") | crontab -
+
+success "Hệ thống Backup đã được cài đặt! Sẽ tự động chạy vào 3:00 AM hàng ngày."
+
 success "Hệ thống Aurathink Server đã sẵn sàng phục vụ!"
 log "------------------------------------------------------"
 log "✅ Nginx HTTPS: https://$APP_DOMAIN"
 log "✅ EMQX Dashboard: http://[Server_IP]:18083 (Tài khoản: $DASH_USER / $DASH_PASS)"
 log "✅ EMQX Mqtt: mqtts (Port 8883) & wss (Port 443 -> /mqtt)"
 log "✅ Monitoring: Crontab */3 * * * * (Telegram + Email)"
+log "✅ Backup: Crontab 0 3 * * * (S3 / Telegram)"
 log "✅ Kiểm tra trạng thái: docker ps"
 log "------------------------------------------------------"
 

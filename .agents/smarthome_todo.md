@@ -143,7 +143,7 @@ PATCH  /v1/automation/schedules/:id/toggle   { "isActive": true/false }
 
 ## Tính năng 5: Update User Profile (Cập nhật thông tin cá nhân)
 
-**Trạng thái**: Đang triển khai (BE đã có API cơ bản).
+**Trạng thái**: ✅ Đã hoàn thành (Cả Server và Mobile).
 
 ### 1. Mô tả tổng quan
 
@@ -155,8 +155,8 @@ Cho phép người dùng thay đổi thông tin định danh cá nhân như Tên
 
 - [x] Phát triển API Endpoint `PUT /v1/user`: Cập nhật thông tin `firstName`, `lastName`, `avatar`.
 - [x] Tích hợp xử lý Upload ảnh Avatar: Chuyển sang upload qua Cloudinary trên App, BE chỉ nhận link.
-- [ ] Validation nâng cao: Kiểm tra độ dài, ký tự đặc biệt cho tên người dùng.
-- [ ] Thực hiện Manual Verify (Kiểm tra thực tế luồng upload avatar, update state, UI phản hồi) trên thiết bị thật / simulator.
+- [x] Validation nâng cao: Kiểm tra độ dài, ký tự đặc biệt cho tên người dùng.
+- [x] Thực hiện Manual Verify (Kiểm tra thực tế luồng upload avatar, update state, UI phản hồi) trên thiết bị thật / simulator.
 
 👉 **Phía Mobile App (new-app)**: Chuyển sang theo dõi tại repo `new-app` ở đường dẫn `../../new-app/.agents/smarthome_todo.md`
 
@@ -244,3 +244,54 @@ APP_BULLMQ_QUEUES.PUSH_NOTIFICATION  = "push-notification"
 
 **Score hiện tại: 41/50 (8.2/10) | Mục tiêu: 47.5/50 (9.5/10)**
 P0 → +2.0 điểm | P1 → +1.5 điểm | P2 → +1.0 điểm | P3 → +2.0 điểm
+
+---
+
+## Tính năng 6: System Monitoring & Alert (Hệ thống Cảnh báo Sức khoẻ Server)
+
+**Trạng thái**: ⏳ Lên Kế Hoạch (Planning)
+
+### 1. Mô tả tổng quan
+Xây dựng lớp giám sát liên tục tình trạng tài nguyên (CPU, RAM, Disk) của Server vật lý và trạng thái các Docker container. Khi mức sử dụng vượt quá ngưỡng nguy hiểm (85 - 90%) hoặc một service lõi (core-api, mqtt) bị sập/thoát đột ngột, hệ thống ngay lập tức sẽ gửi Email (hoặc bắn Telegram/Slack) về cho Admin để kịp cứu nét.
+
+### 2. Checklist (To-Do)
+- [ ] Lựa chọn giải pháp đo tài nguyên: Script bash chạy OS-level Crontab hay gắn Node.js module thẳng vào `worker-service`.
+- [ ] Thiết lập logic ngưỡng: Trigger email khi `%CPU > 90` hoặc `%RAM > 85` kéo dài trên 3 phút (tránh nhiễu do spike tạm thời).
+- [ ] Xây dựng Mail Template "🚨 Chớp Đỏ" cho cảnh báo máy chủ.
+- [ ] Theo dõi Healthcheck của Docker để báo cáo container down.
+
+---
+
+## Tính năng 7: Daily Automated Backup (Cronjob sao lưu dữ liệu)
+
+**Trạng thái**: ⏳ Lên Kế Hoạch (Planning)
+
+### 1. Mô tả tổng quan
+Mỗi 3 giờ sáng hàng ngày, hệ thống sẽ tự động trích xuất toàn bộ dữ liệu từ PostgreSQL (TimescaleDB) và Redis, nén lại thành file zip an toàn và gửi lên một bên thứ ba (Third-party Storage) như AWS S3, Google Drive, hoặc Backblaze B2. Điều này đảm bảo an toàn tuyệt đối khi Server vật lý hỏng ổ cứng hoặc nhà cung cấp VPS bị chập cháy rớt mạng vĩnh viễn.
+
+### 2. Checklist (To-Do)
+- [ ] Viết `backup.sh`: Dùng lệnh `docker exec pg_dumpall` và `redis-cli save` để lấy DB dump.
+- [ ] Nén toàn bộ file `.sql` kèm timestamp.
+- [ ] Tích hợp công cụ `rclone` (hoặc CLI S3/Google/B2) để đẩy file backup đã nén lên Cloud.
+- [ ] Gắn `backup.sh` vào Crontab của Ubuntu tại khung giờ `0 3 * * *`.
+- [ ] (Tùy chọn) Viết script tự động xóa file backup cũ quá 30 ngày trên Cloud để tránh tràn dung lượng.
+
+---
+
+## Tính năng 8: MCP Server (AI Context Assistant)
+
+**Trạng thái**: ⏳ Lên Kế Hoạch (Planning)
+
+### 1. Mô tả tổng quan
+Setup một MCP (Model Context Protocol) Server theo đúng chuẩn của Anthropic. 
+MCP Server này sẽ hoạt động như một "Bách khoa toàn thư" kết nối trực tiếp vào CSDL của Euro Smart Server. Từ đó, bất kỳ AI Client nào (như Cursor, Claude Desktop) khi trỏ vào MCP này đều có thể "hỏi đáp tự nhiên" về dữ liệu người dùng: *"Tra giúp tôi hôm nay có bao nhiêu User mới? Partner X còn bao nhiêu quota? Thiết bị của nhà ông A đang offline mấy cái?"*.
+
+### 2. Checklist (To-Do)
+- [ ] Khởi tạo thư mục mới `apps/mcp-server` trong Monorepo.
+- [ ] Cài đặt `@modelcontextprotocol/sdk` và kết nối thư viện Prisma (chung schema với `core-api`).
+- [ ] Xây dựng các Tool / Resource API phục vụ AI:
+   - Thống kê Devices (User, State, Connectivity).
+   - Truy xuất thông tin và Quota của Partner.
+   - Truy xuất mô hình (Type/Model) thiết bị do Partner phân phối.
+- [ ] Lên phương án expose MCP ra ngoài (SSE HTTPS Transport cho client ngoại) hay thiết lập Studio MCP cục bộ bằng lệnh trỏ trực tiếp.
+

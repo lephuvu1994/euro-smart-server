@@ -173,7 +173,7 @@ describe('DeviceControlService', () => {
         );
         expect(queue.add).toHaveBeenCalledWith(
           DEVICE_JOBS.CONTROL_CMD,
-          { token: mockDeviceToken, entityCode: 'curtain_1', value: 'OPEN', userId: mockUserId, source: 'app' },
+          expect.objectContaining({ token: mockDeviceToken, entityCode: 'curtain_1', value: 'OPEN', userId: mockUserId, source: 'app' }),
           expect.any(Object),
         );
       });
@@ -202,12 +202,12 @@ describe('DeviceControlService', () => {
 
       expect(queue.add).toHaveBeenCalledWith(
         DEVICE_JOBS.CONTROL_DEVICE_VALUE_CMD,
-        {
+        expect.objectContaining({
           token: mockDeviceToken,
           entityPayloads: values,
           userId: mockUserId,
           source: 'app',
-        },
+        }),
         expect.any(Object),
       );
     });

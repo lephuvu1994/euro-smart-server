@@ -52,6 +52,7 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     // connect thành công để tránh subscriptions=0 bug.
     this.client.on('connect', () => {
       this.logger.log('✅ MQTT Connected Successfully');
+      this.reconnectDelay = 10_000; // reset backoff on successful connect
 
       for (const sub of this.subscriptions) {
         this.client.subscribe(sub.pattern, sub.options || { qos: 0 }, (err) => {
@@ -71,28 +72,14 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
 
       // BUG FIX: mqtt.js v4+ dừng reconnect hoàn toàn khi nhận CONNACK rc=5
       // (Not Authorized). Điều này xảy ra khi core-api chưa sẵn sàng lúc deploy
-      // (đang chạy Prisma migrations). Force reconnect sau 10s để tự hồi phục.
+      // (đang chạy Prisma migrations). Force reconnect với exponential backoff.
       if (
         !this.isDestroyed &&
         (err.message.includes('Not authorized') ||
           err.message.includes('Connection refused') ||
           err.message.includes('Bad username'))
       ) {
-        this.logger.warn(
-          'Auth/Connection error detected — forcing reconnect in 10s...',
-        );
-        setTimeout(() => {
-          if (!this.isDestroyed && !this.client.connected) {
-            this.logger.log('Executing forced MQTT reconnect...');
-            try {
-              this.client.reconnect();
-            } catch (reconnectErr) {
-              this.logger.error(
-                `Force reconnect failed: ${reconnectErr.message}`,
-              );
-            }
-          }
-        }, 10_000);
+        this.scheduleReconnect(10_000);
       }
     });
 
@@ -170,6 +157,28 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
         `MQTT offline — queued subscribe for "${topic}", will activate on next connect.`,
       );
     }
+  }
+
+  private reconnectDelay = 10_000;
+
+  private scheduleReconnect(delay: number) {
+    if (this.isDestroyed) return;
+    this.reconnectDelay = Math.min(delay * 1.5, 60_000); // cap at 60s
+    this.logger.warn(
+      `Auth/Connection error detected — forcing reconnect in ${Math.round(delay / 1000)}s...`,
+    );
+    setTimeout(() => {
+      if (!this.isDestroyed && !this.client.connected) {
+        this.logger.log('Executing forced MQTT reconnect...');
+        try {
+          this.client.reconnect();
+        } catch (reconnectErr) {
+          this.logger.error(`Force reconnect failed: ${reconnectErr.message}`);
+          // If reconnect() threw, schedule another attempt
+          this.scheduleReconnect(this.reconnectDelay);
+        }
+      }
+    }, delay);
   }
 
   private matches(pattern: string, topic: string): boolean {

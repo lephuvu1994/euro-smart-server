@@ -333,7 +333,12 @@ process_metric() {
         if [ "$strikes" -ge "$STRIKE_THRESHOLD" ]; then
             if ! is_cooldown_active "$metric_name"; then
                 send_alert "CRITICAL" "${metric_name} = ${value}% (ngưỡng CRITICAL: ${crit_threshold}%)" \
-                    "Metric: ${metric_name}\nGiá trị hiện tại: ${value}%\nNgưỡng WARNING: ${warn_threshold}%\nNgưỡng CRITICAL: ${crit_threshold}%\nStrike: ${strikes}/${STRIKE_THRESHOLD}\nServer: ${HOSTNAME}"
+                    "Metric: ${metric_name}
+Giá trị hiện tại: ${value}%
+Ngưỡng WARNING: ${warn_threshold}%
+Ngưỡng CRITICAL: ${crit_threshold}%
+Strike: ${strikes}/${STRIKE_THRESHOLD}
+Server: ${HOSTNAME}"
                 set_cooldown "$metric_name"
                 mark_alerted "$metric_name"
             fi
@@ -344,7 +349,12 @@ process_metric() {
         if [ "$strikes" -ge "$STRIKE_THRESHOLD" ]; then
             if ! is_cooldown_active "$metric_name"; then
                 send_alert "WARNING" "${metric_name} = ${value}% (ngưỡng WARNING: ${warn_threshold}%)" \
-                    "Metric: ${metric_name}\nGiá trị hiện tại: ${value}%\nNgưỡng WARNING: ${warn_threshold}%\nNgưỡng CRITICAL: ${crit_threshold}%\nStrike: ${strikes}/${STRIKE_THRESHOLD}\nServer: ${HOSTNAME}"
+                    "Metric: ${metric_name}
+Giá trị hiện tại: ${value}%
+Ngưỡng WARNING: ${warn_threshold}%
+Ngưỡng CRITICAL: ${crit_threshold}%
+Strike: ${strikes}/${STRIKE_THRESHOLD}
+Server: ${HOSTNAME}"
                 set_cooldown "$metric_name"
                 mark_alerted "$metric_name"
             fi
@@ -356,7 +366,10 @@ process_metric() {
         # Gửi Recovery nếu trước đó đã từng alert
         if was_alerted "$metric_name"; then
             send_recovery "${metric_name} đã hồi phục (${value}%)" \
-                "Metric: ${metric_name}\nGiá trị hiện tại: ${value}%\nNgưỡng an toàn: < ${warn_threshold}%\nServer: ${HOSTNAME}"
+                "Metric: ${metric_name}
+Giá trị hiện tại: ${value}%
+Ngưỡng an toàn: < ${warn_threshold}%
+Server: ${HOSTNAME}"
             clear_alerted "$metric_name"
         fi
     fi
@@ -423,7 +436,10 @@ main() {
 
         if [ "$strikes" -ge "$STRIKE_THRESHOLD" ] && ! is_cooldown_active "CONTAINER"; then
             send_alert "CRITICAL" "Container(s) bị sập: ${down_containers}" \
-                "Containers DOWN: ${down_containers}\nRunning: ${running_count}/${container_count}\nAuto-restart:${restart_report}\nServer: ${HOSTNAME}"
+                "Containers DOWN: ${down_containers}
+Running: ${running_count}/${container_count}
+Auto-restart:${restart_report}
+Server: ${HOSTNAME}"
             set_cooldown "CONTAINER"
             mark_alerted "CONTAINER"
         fi
@@ -431,7 +447,8 @@ main() {
         reset_strike "CONTAINER"
         if was_alerted "CONTAINER"; then
             send_recovery "Tất cả containers đã hoạt động trở lại" \
-                "Running: ${container_count}/${container_count}\nServer: ${HOSTNAME}"
+                "Running: ${container_count}/${container_count}
+Server: ${HOSTNAME}"
             clear_alerted "CONTAINER"
         fi
     fi
@@ -442,7 +459,9 @@ main() {
         strikes=$(increment_strike "HEALTH")
         if [ "$strikes" -ge "$STRIKE_THRESHOLD" ] && ! is_cooldown_active "HEALTH"; then
             send_alert "CRITICAL" "API Health endpoint không phản hồi (HTTP ${health_code})" \
-                "Health URL: ${HEALTH_URL}\nHTTP Code: ${health_code}\nServer: ${HOSTNAME}"
+                "Health URL: ${HEALTH_URL}
+HTTP Code: ${health_code}
+Server: ${HOSTNAME}"
             set_cooldown "HEALTH"
             mark_alerted "HEALTH"
         fi
@@ -450,7 +469,8 @@ main() {
         reset_strike "HEALTH"
         if was_alerted "HEALTH"; then
             send_recovery "API Health endpoint đã hồi phục (HTTP 200)" \
-                "Health URL: ${HEALTH_URL}\nServer: ${HOSTNAME}"
+                "Health URL: ${HEALTH_URL}
+Server: ${HOSTNAME}"
             clear_alerted "HEALTH"
         fi
     fi

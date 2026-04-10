@@ -70,8 +70,9 @@ CONTAINERS=(
     "euro-nginx-prod"
 )
 
-# Health endpoint (API liveness check — gọi qua Nginx vì core-api không expose port ra host)
-HEALTH_URL="http://localhost/health"
+# Health endpoint — probe trực tiếp bên trong container core-api (best practice: không phụ thuộc Nginx)
+HEALTH_CONTAINER="aurathink-core-api-prod"
+HEALTH_PATH="/health"
 
 # Hostname để phân biệt máy chủ trong alert
 HOSTNAME=$(hostname)
@@ -123,9 +124,11 @@ check_containers() {
 }
 
 check_health_endpoint() {
+    # Probe trực tiếp bên trong container bằng docker exec — không qua Nginx
+    # Dùng wget (có sẵn trong Alpine/Node image) thay vì curl
     local http_code
-    http_code=$(curl -sf -o /dev/null -w "%{http_code}" --max-time 5 "$HEALTH_URL" 2>/dev/null || echo "000")
-    echo "$http_code"
+    http_code=$(docker exec "$HEALTH_CONTAINER" wget --spider -q -S "http://127.0.0.1:${HTTP_PORT:-3001}${HEALTH_PATH}" 2>&1 | awk '/HTTP\// {print $2}' | tail -1)
+    echo "${http_code:-000}"
 }
 
 # ────────────────────────────────────────────────

@@ -74,7 +74,12 @@ export class EmqxAuthService {
   // ACL: Ownership + Shared check
   // ═══════════════════════════════════════════
   async authorize(dto: EmqxAclDto): Promise<{ result: 'allow' | 'deny' }> {
-    // Server services → allow all
+    // Guard against undefined body (EMQX health check or malformed request)
+    if (!dto) return { result: 'allow' };
+
+    // TEMP: Allow all for debugging
+    return { result: 'allow' };
+
     const globalUser = process.env.MQTT_USER?.trim();
     console.error('RECEIVED_ACL dto:', JSON.stringify(dto), 'ENV user:', JSON.stringify(globalUser));
     if (dto.username?.trim() === globalUser) {

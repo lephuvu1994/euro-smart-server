@@ -28,8 +28,7 @@ export class EmqxAuthController {
   @PublicRoute()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'EMQX HTTP Auth — Verify MQTT credentials' })
-  async authenticate(@Body() dto: any, @Res() res: Response) {
-    console.error('RECEIVED_AUTH:', dto);
+  async authenticate(@Body() dto: EmqxAuthDto, @Res() res: Response) {
     const result = await this.emqxAuthService.authenticate(dto);
     return res.status(HttpStatus.OK).json(result);
   }
@@ -42,8 +41,7 @@ export class EmqxAuthController {
   @PublicRoute()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'EMQX HTTP ACL — Check topic permission' })
-  async authorize(@Body() dto: any, @Res() res: Response) {
-    console.error('RECEIVED_ACL:', dto);
+  async authorize(@Body() dto: EmqxAclDto, @Res() res: Response) {
     const result = await this.emqxAuthService.authorize(dto);
     return res.status(HttpStatus.OK).json(result);
   }

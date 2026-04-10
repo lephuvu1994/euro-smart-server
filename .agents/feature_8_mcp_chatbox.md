@@ -19,8 +19,32 @@ Trợ lý này có khả năng hiểu ngôn ngữ tự nhiên tiếng Việt và
 - *"Cập nhật firmware v2.1 cho mã thiết bị WIFI_SWITCH_4"*
 - *"Partner X còn bao nhiêu quota?"*
 
-### Mục tiêu xa
-Nếu triển khai tốt, sẽ mở rộng tính năng AI Assistant cho **người dùng cuối** (end-user) trên mobile app.
+### Mục tiêu xa (Vision Roadmap)
+
+> ⚠️ **ĐÂY LÀ MỘT TRONG CÁC TÍNH NĂNG CỰC KỲ QUAN TRỌNG VÀ KHÓ.**
+> Kiến trúc ban đầu phải thật tốt vì tất cả các phase sau đều xây trên nền Phase 1.
+> Mỗi phase cần discuss kỹ trước khi triển khai.
+
+Nếu Phase 1-3 (Admin Chatbox) triển khai tốt, hệ thống sẽ mở rộng theo lộ trình sau:
+
+**Phase A — AI Assistant cho User (Mobile App)**
+- Mở rộng chatbot cho người dùng cuối trên ứng dụng di động.
+- Hỏi đáp thông tin cá nhân: *"Nhà tôi có bao nhiêu thiết bị?"*, *"Đèn phòng khách đang bật hay tắt?"*
+
+**Phase B — Điều khiển thiết bị bằng giọng nói / chat**
+- User ra lệnh tự nhiên: *"Tắt tất cả đèn tầng 2"*, *"Mở rèm phòng ngủ 50%"*, *"Bật điều hoà 24 độ mode cool"*
+- AI Agent map câu nói → gọi MCP Tool → gửi MQTT command → thiết bị thực thi.
+
+**Phase C — Tạo kịch bản (Scene) bằng AI**
+- User mô tả kịch bản bằng ngôn ngữ tự nhiên: *"Mỗi tối 10h tắt hết đèn, đóng rèm, bật đèn ngủ"*
+- AI Agent tự tạo Scene JSON (triggers + actions) phù hợp schema `t_scene`, lưu vào DB.
+- Đây là tính năng **khó nhất** vì đòi hỏi AI hiểu cấu trúc automation, entity mapping, và thời gian.
+
+**Phase D — Trợ lý thông tin chung (General Knowledge)**
+- Hỏi thông tin ngoài hệ thống: tin tức, thời tiết, lịch âm, ngày lễ, sự kiện.
+- Tích hợp calendar: *"Lịch của tôi tuần này có gì?"*, *"Thêm ghi chú: họp 3h chiều thứ 6"*
+- Tra cứu âm lịch: *"Hôm nay ngày bao nhiêu âm lịch?"*, *"Ngày nào là Rằm tháng 7?"*
+- Yêu cầu tích hợp external API (weather, news, lunar calendar) thông qua thêm MCP Tools mới.
 
 ### Tại sao dùng chuẩn MCP?
 Thay vì code functions/tools trực tiếp vào API, ta xây lớp MCP. Lợi ích:

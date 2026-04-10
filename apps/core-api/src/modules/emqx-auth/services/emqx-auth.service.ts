@@ -76,6 +76,8 @@ export class EmqxAuthService {
     // Guard against undefined body (EMQX health check or empty request)
     if (!dto) return { result: 'allow' };
 
+    this.logger.debug(`[ACL] Check for username=${dto.username}, topic=${dto.topic}, action=${dto.action}`);
+
     // Server services → allow all
     const globalUser = process.env.MQTT_USER?.trim();
     if (dto.username?.trim() === globalUser) {

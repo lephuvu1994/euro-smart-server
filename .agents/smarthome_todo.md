@@ -260,6 +260,8 @@ Xây dựng lớp giám sát liên tục tình trạng tài nguyên (CPU, RAM, D
 - [x] Theo dõi Healthcheck: Giám sát toàn bộ container thông qua `docker inspect` + `docker exec` test trực tiếp endpoint API `core-api/health`.
 - [x] Cơ chế phục hồi: Tự động restart container (tối đa 2 lần/giờ) và bắn thông báo Recovery khi tài nguyên cân bằng trở lại.
 - [x] Tích hợp Triển khai: Tự động crontab injection & logrotate qua Tool `setup-server.sh`.
+- [x] **Consolidated Alert**: Gom tất cả metrics vào 1 tin nhắn duy nhất (bảng Dashboard) thay vì spam riêng lẻ từng metric.
+- [x] **Safe .env parser**: Dùng `grep + eval` thay vì `source .env` để tránh crash khi `MAIL_FROM` có dấu `<>`.
 
 ---
 
@@ -273,9 +275,11 @@ Mỗi 3 giờ sáng hàng ngày, hệ thống sẽ tự động trích xuất to
 ### 2. Checklist (To-Do)
 - [x] Viết `daily-backup.sh`: Dùng lệnh `docker exec pg_dump` và `redis-cli save` để lấy DB dump + Cache RDB.
 - [x] Nén toàn bộ file `.sql` và `.rdb` kèm timestamp ra file `tar.gz`.
-- [x] Tích hợp Upload Đa hệ: Hỗ trợ đẩy file sang Telegram Bot (cho Database < 50MB) VÀ Cloudflare R2 / S3 (cho Database lớn). Không cần cài thư viện rác lên Server OS nhờ vào chạy Image Docker `amazon/aws-cli` xoá ngay.
-- [x] Gắn `daily-backup.sh` vào Crontab của Ubuntu tại khung giờ `0 3 * * *` thông qua công cụ `setup-server.sh`.
-- [x] Script tự động dọn dẹp các ổ Backup cũ trên SSD cục bộ quá 7 ngày để tránh tràn dung lượng VPS.
+- [x] Tích hợp Upload Đa hệ: Mặc định gửi **cả 2 kênh** (Telegram Bot + Cloudflare R2/S3). Nếu chưa có S3 key thì chỉ gửi Telegram. Thêm key vào GitHub Secret → redeploy → tự kích hoạt.
+- [x] Gắn `daily-backup.sh` vào Crontab tại khung giờ `0 3 * * *` qua `setup-server.sh`.
+- [x] Tự dọn dẹp backup cũ trên SSD cục bộ quá 7 ngày.
+- [x] **Telegram file-size guard**: Nếu file > 50MB, gửi tin nhắn cảnh báo thay vì gửi file. Caption hiển thị trạng thái R2.
+- [x] **Error resilience**: Kiểm tra file tồn tại trước khi nén, hỗ trợ Redis password, cảnh báo nếu không kênh nào upload thành công.
 
 ---
 

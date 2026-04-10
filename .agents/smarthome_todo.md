@@ -191,17 +191,16 @@ Cho phép người dùng thay đổi thông tin định danh cá nhân như Tên
 
 ---
 
-### P3 — Nice to have
+### P3 — Nice to have (Đã hoàn thành ✅)
 
 #### Task P3.1: API — Execution Logs
-
-`GET /v1/automation/stats` → timerCount, scheduleCount, recentLogs (10 gần nhất)
+- [x] `GET /v1/automation/stats` →  Đã trả về `successCount`, `failCount` sử dụng `ScheduleExecutionLog` model.
 
 #### Task P3.2: API — Queue Metrics (admin)
-
-`GET /v1/admin/metrics/queues` → job counts cho DEVICE_CONTROL và AUTOMATION queues
+- [x] `GET /v1/admin/metrics/queues` → Đã khai thác BullMQ `getJobCounts()`.
 
 ---
+
 
 ### Technical Context (không được quên khi làm tiếp)
 
@@ -242,7 +241,7 @@ APP_BULLMQ_QUEUES.AUTOMATION         = "automation"
 APP_BULLMQ_QUEUES.PUSH_NOTIFICATION  = "push-notification"
 ```
 
-**Score hiện tại: 41/50 (8.2/10) | Mục tiêu: 47.5/50 (9.5/10)**
+**Score hiện tại: 47.5/50 (9.5/10) 🏆 | Nhiệm vụ Scalability đã kết thúc!**
 P0 → +2.0 điểm | P1 → +1.5 điểm | P2 → +1.0 điểm | P3 → +2.0 điểm
 
 ---

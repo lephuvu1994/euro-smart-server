@@ -265,17 +265,17 @@ Xây dựng lớp giám sát liên tục tình trạng tài nguyên (CPU, RAM, D
 
 ## Tính năng 7: Daily Automated Backup (Cronjob sao lưu dữ liệu)
 
-**Trạng thái**: ⏳ Lên Kế Hoạch (Planning)
+**Trạng thái**: ✅ Đã hoàn thành.
 
 ### 1. Mô tả tổng quan
 Mỗi 3 giờ sáng hàng ngày, hệ thống sẽ tự động trích xuất toàn bộ dữ liệu từ PostgreSQL (TimescaleDB) và Redis, nén lại thành file zip an toàn và gửi lên một bên thứ ba (Third-party Storage) như AWS S3, Google Drive, hoặc Backblaze B2. Điều này đảm bảo an toàn tuyệt đối khi Server vật lý hỏng ổ cứng hoặc nhà cung cấp VPS bị chập cháy rớt mạng vĩnh viễn.
 
 ### 2. Checklist (To-Do)
-- [ ] Viết `backup.sh`: Dùng lệnh `docker exec pg_dumpall` và `redis-cli save` để lấy DB dump.
-- [ ] Nén toàn bộ file `.sql` kèm timestamp.
-- [ ] Tích hợp công cụ `rclone` (hoặc CLI S3/Google/B2) để đẩy file backup đã nén lên Cloud.
-- [ ] Gắn `backup.sh` vào Crontab của Ubuntu tại khung giờ `0 3 * * *`.
-- [ ] (Tùy chọn) Viết script tự động xóa file backup cũ quá 30 ngày trên Cloud để tránh tràn dung lượng.
+- [x] Viết `daily-backup.sh`: Dùng lệnh `docker exec pg_dump` và `redis-cli save` để lấy DB dump + Cache RDB.
+- [x] Nén toàn bộ file `.sql` và `.rdb` kèm timestamp ra file `tar.gz`.
+- [x] Tích hợp Upload Đa hệ: Hỗ trợ đẩy file sang Telegram Bot (cho Database < 50MB) VÀ Cloudflare R2 / S3 (cho Database lớn). Không cần cài thư viện rác lên Server OS nhờ vào chạy Image Docker `amazon/aws-cli` xoá ngay.
+- [x] Gắn `daily-backup.sh` vào Crontab của Ubuntu tại khung giờ `0 3 * * *` thông qua công cụ `setup-server.sh`.
+- [x] Script tự động dọn dẹp các ổ Backup cũ trên SSD cục bộ quá 7 ngày để tránh tràn dung lượng VPS.
 
 ---
 

@@ -54,12 +54,19 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
       this.logger.log('✅ MQTT Connected Successfully');
       this.reconnectDelay = 10_000; // reset backoff on successful connect
 
+      let subscribeErrors = 0;
       for (const sub of this.subscriptions) {
         this.client.subscribe(sub.pattern, sub.options || { qos: 0 }, (err) => {
           if (err) {
             this.logger.error(
               `Re-subscribe error on "${sub.pattern}": ${err.message}`,
             );
+            subscribeErrors++;
+            if (subscribeErrors === 1) {
+              // On first subscribe failure, force reconnect after delay
+              // so EMQX re-evaluates ACL (may have been cached as deny)
+              this.scheduleReconnect(this.reconnectDelay);
+            }
           } else {
             this.logger.log(`✅ Re-subscribed to: ${sub.pattern}`);
           }

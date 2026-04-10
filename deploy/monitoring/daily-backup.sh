@@ -39,7 +39,11 @@ fi
 
 # 3. Dump Redis Cache & BGSAVE state
 echo "  -> Đang lưu bộ nhớ tĩnh Redis xuống đĩa..."
-docker exec "$REDIS_CONTAINER" redis-cli SAVE
+if [ -n "$REDIS_PASSWORD" ]; then
+    docker exec "$REDIS_CONTAINER" redis-cli -a "$REDIS_PASSWORD" SAVE >/dev/null 2>&1
+else
+    docker exec "$REDIS_CONTAINER" redis-cli SAVE >/dev/null 2>&1
+fi
 RDB_FILE="${BACKUP_DIR}/redis-${TIMESTAMP}.rdb"
 echo "  -> Đang sao chép file dump.rdb ra Host OS..."
 docker cp "${REDIS_CONTAINER}:/data/dump.rdb" "$RDB_FILE"

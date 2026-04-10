@@ -283,20 +283,14 @@ Mỗi 3 giờ sáng hàng ngày, hệ thống sẽ tự động trích xuất to
 
 ---
 
-## Tính năng 8: MCP Server (AI Context Assistant)
+## Tính năng 8: MCP Server (Admin Chatbox & AI Context Assistant)
 
-**Trạng thái**: ⏳ Lên Kế Hoạch (Planning)
+**Trạng thái**: ⏳ Lên Kế Hoạch (Planning) - **Xem kế hoạch chi tiết + task tại: [feature_8_mcp_chatbox.md](./feature_8_mcp_chatbox.md)**
 
 ### 1. Mô tả tổng quan
-Setup một MCP (Model Context Protocol) Server theo đúng chuẩn của Anthropic. 
-MCP Server này sẽ hoạt động như một "Bách khoa toàn thư" kết nối trực tiếp vào CSDL của Euro Smart Server. Từ đó, bất kỳ AI Client nào (như Cursor, Claude Desktop) khi trỏ vào MCP này đều có thể "hỏi đáp tự nhiên" về dữ liệu người dùng: *"Tra giúp tôi hôm nay có bao nhiêu User mới? Partner X còn bao nhiêu quota? Thiết bị của nhà ông A đang offline mấy cái?"*.
+Xây dựng một MCP (Model Context Protocol) Server kết nối trực tiếp vào CSDL của Euro Smart Server để hỗ trợ xây dựng **Chatbox Quản trị viên** trên Admin Dashboard React mới.
+Hệ thống giúp quy tụ mọi thao tác quản lý phức tạp (Tra cứu user, cấp phép license cho model thiết bị, theo dõi trạng thái partner) về chung một cửa sổ giao tiếp tự nhiên. Tương lai sẽ mở rộng tính năng Assistant này cho cả người dùng cuối nếu phù hợp.
 
 ### 2. Checklist (To-Do)
-- [ ] Khởi tạo thư mục mới `apps/mcp-server` trong Monorepo.
-- [ ] Cài đặt `@modelcontextprotocol/sdk` và kết nối thư viện Prisma (chung schema với `core-api`).
-- [ ] Xây dựng các Tool / Resource API phục vụ AI:
-   - Thống kê Devices (User, State, Connectivity).
-   - Truy xuất thông tin và Quota của Partner.
-   - Truy xuất mô hình (Type/Model) thiết bị do Partner phân phối.
-- [ ] Lên phương án expose MCP ra ngoài (SSE HTTPS Transport cho client ngoại) hay thiết lập Studio MCP cục bộ bằng lệnh trỏ trực tiếp.
+*Toàn bộ task checklist chi tiết (bao gồm chia 3 Phase và các nhóm chức năng Tool) đã được lưu vào file [feature_8_mcp_chatbox.md](./feature_8_mcp_chatbox.md).*
 

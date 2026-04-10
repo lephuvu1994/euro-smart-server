@@ -1,70 +1,198 @@
 # Kế hoạch & Checklist: Admin Chatbox & MCP Server (Tính năng 8)
 
-Đây là tài liệu gốc định hướng cho các AI Agent hỗ trợ sếp phát triển tính năng Chatbox Quản trị viên sử dụng Model Context Protocol (MCP).
+> Tài liệu gốc định hướng cho các AI Agent hỗ trợ phát triển tính năng **Chatbox Quản trị viên** sử dụng Model Context Protocol (MCP).
+> Đọc file này + `smarthome_todo.md` + `prisma/schema.prisma` để có đủ context trước khi code.
+
+---
 
 ## 1. Ngữ cảnh & Tầm nhìn
-Mục tiêu là xây dựng một "Trợ lý AI Quản trị" (Admin Chatbox) trên một trang Admin Dashboard (React) hoàn toàn mới. Trợ lý này có khả năng hiểu ngôn ngữ tự nhiên và thực hiện các tác vụ quản lý hệ thống Euro Smart Home thông qua việc gọi các "Công cụ" (Tools).
-Ví dụ câu lệnh: *"Hôm nay có bao nhiêu User đăng ký?"*, *"Cấp 500 license 90 ngày cho công ty B model C"*.
 
-**Lợi ích của việc dùng chuẩn MCP**: Thay vì code các functions/tools trực tiếp vào api chung chung, ta xây dựng lớp MCP. Điều này tách biệt cực tốt giữa backend dữ liệu và LLM. Tương lai muốn đổi từ Claude (Anthropic) sang OpenAI (GPT-4) thì phần MCP Server backend **không cần thay đổi một dòng code nào**. Giao diện React chỉ cần thay đổi LLM provider bằng `Vercel AI SDK`.
+### Mục tiêu gần
+Xây dựng một **"Trợ lý AI Quản trị"** (Admin Chatbox) trên một trang Admin Dashboard (React) hoàn toàn mới, dự án biệt lập.
+Trợ lý này có khả năng hiểu ngôn ngữ tự nhiên tiếng Việt và thực hiện các tác vụ **quản lý cấp hệ thống** — KHÔNG phải cấp người dùng.
 
----
+**Ví dụ câu lệnh admin sẽ gõ:**
+- *"Hôm nay có bao nhiêu User đăng ký mới?"*
+- *"Thiết bị nào đang offline?"*
+- *"Cấp 500 license 90 ngày cho công ty COMPANY_A model WIFI_SWITCH_4"*
+- *"Thêm loại thiết bị mới mã CURTAIN_3 cho partner ABC"*
+- *"Cập nhật firmware v2.1 cho mã thiết bị WIFI_SWITCH_4"*
+- *"Partner X còn bao nhiêu quota?"*
 
-## 2. Kiến trúc Hệ thống
+### Mục tiêu xa
+Nếu triển khai tốt, sẽ mở rộng tính năng AI Assistant cho **người dùng cuối** (end-user) trên mobile app.
 
-Hệ thống được chia thành 3 cấu phần hoạt động chặt chẽ:
-
-1. **Giao diện (Frontend React Admin Dashboard)**:
-   - Một project web biệt lập mới.
-   - Quản lý UI Chatbox.
-   - Chứa logic gọi API lên LLM độc lập (ví dụ: `Vercel AI SDK` với OpenAI/Anthropic keys).
-
-2. **Cầu nối (AI Gateway / MCP Client)**:
-   - Backend web hoặc middleware giữ vai trò xác thực admin.
-   - Giao tiếp với LLM.
-   - Đóng vai trò là `MCP Client` kết nối qua giao thức SSE (Server-Sent Events) tới MCP Server.
-
-3. **Backend logic (MCP Server)**:
-   - Chạy trên node.js trong khối monorepo `euro-smart-server`.
-   - Kết nối trực tiếp vào Database PostgreSQL via Prisma.
-   - Cung cấp các "Tools" định nghĩa sẵn (kèm validate `zod` schema) cho MCP Client triệu gọi khi LLM cần.
+### Tại sao dùng chuẩn MCP?
+Thay vì code functions/tools trực tiếp vào API, ta xây lớp MCP. Lợi ích:
+- **Tách biệt hoàn toàn** giữa backend dữ liệu (MCP Server) và LLM (Claude/GPT).
+- **Đổi LLM provider = đổi 1 dòng import** — phần MCP Server backend không cần thay đổi một dòng code nào.
+- **Tái sử dụng**: Cùng bộ Tools có thể dùng cho Claude Desktop, Cursor IDE, Web Chatbox, hoặc Telegram Bot.
 
 ---
 
-## 3. Lộ trình Triển khai (Phases) & Checklist
+## 2. Quyết định Kỹ thuật (Đã xác nhận với Owner)
 
-### Phase 1: Xây dựng Core MCP Server (Stdio Transport)
-*Triển khai dưới dạng chạy cục bộ trước. Bất kỳ AI session nào cũng có thể tạo và test logic tool với Claude Desktop của DEV ngay trên Terminal cục bộ.*
-
-- [ ] Tạo module `apps/mcp-server` trong cấu trúc monorepo `euro-smart-server`.
-- [ ] Cài đặt core dependencies: `@modelcontextprotocol/sdk`, `zod`.
-- [ ] Tích hợp tái sử dụng `PrismaClient` từ monorepo để kết nối DB.
-- [ ] **Viết Tools Nhóm 1**: Quản lý Quản trị Đối tác (Partner) - `list_partners`, `get_partner`, `create_partner`, `update_partner`.
-- [ ] **Viết Tools Nhóm 2**: Quản lý Loại thiết bị (Device Model) - `list_device_models`, `create_device_model`, `update_device_model`.
-- [ ] **Viết Tools Nhóm 3**: Cấp phép & Hạn mức (License/Quota) - `list_quotas`, `set_license`, `get_quota_usage`.
-- [ ] **Viết Tools Nhóm 4**: System & User dashboard - `get_system_stats`, `count_users`.
-- [ ] Setup File config `claude_desktop_config.json` để dev có thể test tool bằng Claude app của máy tính thông qua Stdio.
-
-### Phase 2: Expose MCP Server qua mạng (SSE HTTP Transport)
-*Nâng cấp mcp-server để dashboard web lấy JSON tool và gọi từ xa.*
-
-- [ ] Setup `express` và middleware trong `mcp-server` (Hoặc cân nhắc gộp logic MCP Server thẳng vào module module Admin của `core-api` hiện tại để ăn ké luôn `JwtAccessGuard` có sẵn).
-- [ ] Import `SSEServerTransport` của MCP SDK.
-- [ ] Map các API `/mcp/sse` (để nhận kết nối luồng) và `/mcp/message` (để nhận webhook tool calls).
-- [ ] Test kết nối HTTP Postman / Curl mọc ra từ SSE transport. Cố định tính bảo mật (yêu cầu Admin Token).
-
-### Phase 3: Xây dựng Web Admin Dashboard & Tích hợp (React)
-*Sang repository / dự án frontend mới.*
-
-- [ ] Khởi tạo project React (Vite hoặc NextJS).
-- [ ] Cài đặt `@ai-sdk/react`, `@ai-sdk/anthropic` hoặc `@ai-sdk/openai`.
-- [ ] Viết UI container chatbox cơ bản.
-- [ ] Cấu hình Client để wrap các Tools lấy từ SSE của server Euro Smart API vào trong parameter `tools` của function Vercel AI SDK.
-- [ ] Chat thử nghiệm ngôn ngữ tự nhiên, quan sát quá trình Agent tự map câu "Tạo đối tác" -> gọi HTTP -> chọc DB.
+| Hạng mục | Quyết định | Ghi chú |
+|----------|-----------|---------|
+| **LLM Provider** | Anthropic Claude (đã có API key) | Có thể swap sang OpenAI bất kỳ lúc nào nhờ Vercel AI SDK |
+| **Frontend** | React project mới, riêng biệt | Không gộp vào `named_web_v2` (Next.js hiện tại) |
+| **Backend MCP** | Module `apps/mcp-server` trong monorepo `euro-smart-server` | Dùng chung Prisma schema, PrismaClient |
+| **AI SDK** | Vercel AI SDK (`ai`, `@ai-sdk/anthropic`) | Abstract hóa provider, hỗ trợ streaming, tool calling |
+| **Mutation Safety** | **Cần xác nhận trước khi thực thi** | LLM phải hỏi lại "Bạn có chắc?" trước create/update/delete |
+| **Transport** | Phase 1: Stdio → Phase 2: SSE HTTP | Triển khai tuần tự |
 
 ---
 
-## 4. Quy ước Code (Cho Lập trình viên AI)
-1. **Zod Validation**: Mọi MCP Tool phải miêu tả schema rõ ràng cực độ (`description` trong Zod object) để LLM đọc và hiểu trường nào yêu cầu gì.
-2. **Read-Only / Safety First**: Cố gắng try catch kỹ ở các hàm `Mutation` (tạo/sửa/xóa). 
-3. **Database Access**: Luôn dùng Prisma, không dùng Raw query nếu không phải xử lý TimescaleDB time-series đặc thù. 
+## 3. Kiến trúc Hệ thống
+
+### Sơ đồ luồng
+```
+┌──────────────────────────────────────────────────────┐
+│  Admin Dashboard (React - Project mới)               │
+│  ┌────────────────────────────────┐                  │
+│  │  Chatbox UI (useChat hook)     │                  │
+│  │  → Gửi tin nhắn tiếng Việt    │                  │
+│  └────────────┬───────────────────┘                  │
+└───────────────┼──────────────────────────────────────┘
+                │ HTTP POST /api/chat
+                ▼
+┌──────────────────────────────────────────────────────┐
+│  AI Gateway (API Route trong React app hoặc core-api)│
+│  ┌────────────────────────────────┐                  │
+│  │  Vercel AI SDK                 │                  │
+│  │  → Gọi Claude/GPT API         │                  │
+│  │  → Truyền MCP Tools vào LLM   │                  │
+│  │  → Xử lý tool_call results    │                  │
+│  └────────────┬───────────────────┘                  │
+└───────────────┼──────────────────────────────────────┘
+                │ MCP Protocol (SSE hoặc Stdio)
+                ▼
+┌──────────────────────────────────────────────────────┐
+│  MCP Server (apps/mcp-server trong euro-smart-server)│
+│  ┌────────────────────────────────┐                  │
+│  │  Tools: list_partners,         │                  │
+│  │    set_license, count_users... │                  │
+│  │  → PrismaClient               │                  │
+│  │  → PostgreSQL                  │                  │
+│  └────────────────────────────────┘                  │
+└──────────────────────────────────────────────────────┘
+```
+
+### Cấu trúc thư mục MCP Server (trong monorepo)
+```
+apps/mcp-server/
+├── src/
+│   ├── index.ts                 ← Entry point + McpServer init
+│   ├── prisma.ts                ← Shared PrismaClient instance
+│   ├── tools/
+│   │   ├── partner.tools.ts     ← Nhóm 1: Partner CRUD
+│   │   ├── device-model.tools.ts← Nhóm 2: DeviceModel + gán cho Partner
+│   │   ├── license.tools.ts     ← Nhóm 3: License & Quota
+│   │   ├── user.tools.ts        ← Nhóm 4: User & System overview
+│   │   └── device.tools.ts      ← Nhóm 5: Device & Hardware
+│   └── resources/
+│       └── schema.resource.ts   ← Expose DB schema cho AI context
+├── project.json                 ← Nx project config
+└── tsconfig.json
+```
+
+---
+
+## 4. Danh sách Tools Chi tiết
+
+> Tham chiếu schema: `prisma/schema.prisma`
+> Tham chiếu admin API hiện tại: `apps/core-api/src/modules/admin/admin.controller.ts`
+
+### Nhóm 1: Partner Management (`partner.tools.ts`)
+| Tool | Loại | Input | Output | Prisma Model |
+|------|------|-------|--------|-------------|
+| `list_partners` | Query | filter?: { isActive } | Danh sách partner kèm quota summary | `Partner` + `LicenseQuota` |
+| `get_partner` | Query | code: string | Chi tiết 1 partner (tên, code, quotas, số thiết bị) | `Partner` |
+| `create_partner` | **Mutation** | code, name | Partner mới | `Partner` |
+| `update_partner` | **Mutation** | code, name?, isActive? | Sửa tên hoặc vô hiệu hóa | `Partner` |
+
+### Nhóm 2: Device Model Blueprint (`device-model.tools.ts`)
+| Tool | Loại | Input | Output | Prisma Model |
+|------|------|-------|--------|-------------|
+| `list_device_models` | Query | — | Danh sách khuôn mẫu thiết bị | `DeviceModel` |
+| `create_device_model` | **Mutation** | code, name, config? | Tạo loại thiết bị mới | `DeviceModel` |
+| `update_device_model` | **Mutation** | code, name?, config? | Cập nhật config/name | `DeviceModel` |
+| `assign_model_to_partner` | **Mutation** | partnerCode, modelCode, maxQuantity, licenseDays | Gán loại thiết bị cho partner (tạo/update LicenseQuota) | `LicenseQuota` |
+
+### Nhóm 3: License & Quota (`license.tools.ts`)
+| Tool | Loại | Input | Output | Prisma Model |
+|------|------|-------|--------|-------------|
+| `list_quotas` | Query | filter?: { partnerCode, modelCode } | Toàn bộ quota (partner × model) | `LicenseQuota` |
+| `set_license` | **Mutation** | partnerCode, modelCode, maxQuantity, licenseDays | Thêm/cập nhật license cho partner + model | `LicenseQuota` |
+| `get_quota_usage` | Query | partnerCode | Tổng hợp: quota đã dùng bao nhiêu %, còn bao nhiêu | `LicenseQuota` |
+
+### Nhóm 4: User & System (`user.tools.ts`)
+| Tool | Loại | Input | Output | Prisma Model |
+|------|------|-------|--------|-------------|
+| `list_users` | Query | page?, search?, role? | Danh sách user (phân trang) | `User` |
+| `count_users` | Query | — | Tổng user, user mới hôm nay/tuần/tháng | `User` |
+| `get_system_stats` | Query | — | Dashboard: tổng user, device, partner, online/offline | Multiple |
+| `get_system_configs` | Query | — | Cấu hình hệ thống (MQTT, OTP...) | `SystemConfig` |
+| `update_system_config` | **Mutation** | key, value | Cập nhật 1 config | `SystemConfig` |
+
+### Nhóm 5: Device & Hardware (`device.tools.ts`)
+| Tool | Loại | Input | Output | Prisma Model |
+|------|------|-------|--------|-------------|
+| `list_devices` | Query | filter?: { partnerCode, modelCode } | Danh sách thiết bị đang hoạt động | `Device` |
+| `count_devices_by_partner` | Query | — | Thống kê số thiết bị theo từng partner | `Device` + `Partner` |
+| `list_hardware` | Query | filter?: { partnerId, modelId, isBanned } | Danh sách chip phần cứng | `HardwareRegistry` |
+| `update_firmware_version` | **Mutation** | modelCode, firmwareVersion | Cập nhật firmware cho tất cả hardware thuộc model | `HardwareRegistry` |
+
+> **Lưu ý cho AI Agent**: Mọi tool loại **Mutation** phải trả về message confirmation yêu cầu admin xác nhận trước khi thực thi. Implement bằng cách tool trả response dạng "Bạn có chắc muốn [hành động]? Gõ 'xác nhận' để tiếp tục." và tạo tool `confirm_action` với pending action ID.
+
+---
+
+## 5. Lộ trình Triển khai (Phases) & Checklist
+
+### Phase 1: Core MCP Server (Stdio Transport) — Ưu tiên cao
+*Kết quả: Dev có thể test tool bằng Claude Desktop / Cursor ngay trên máy.*
+
+- [ ] Tạo thư mục `apps/mcp-server` trong monorepo, cấu hình Nx project.
+- [ ] Cài đặt dependencies: `@modelcontextprotocol/sdk`, `zod`, `@prisma/client`.
+- [ ] Tạo `prisma.ts` — khởi tạo PrismaClient dùng chung `DATABASE_URL`.
+- [ ] Viết `index.ts` — khởi tạo `McpServer` + `StdioServerTransport`.
+- [ ] Implement **Nhóm 1**: `partner.tools.ts` (4 tools).
+- [ ] Implement **Nhóm 2**: `device-model.tools.ts` (4 tools).
+- [ ] Implement **Nhóm 3**: `license.tools.ts` (3 tools).
+- [ ] Implement **Nhóm 4**: `user.tools.ts` (5 tools).
+- [ ] Implement **Nhóm 5**: `device.tools.ts` (4 tools).
+- [ ] Tạo `resources/schema.resource.ts` — expose schema cho AI context.
+- [ ] Viết file config `claude_desktop_config.json` mẫu.
+- [ ] **Test end-to-end**: Gọi thử từ terminal / Claude Desktop, xác nhận tool trả đúng data.
+
+### Phase 2: SSE HTTP Transport — Deploy lên VPS
+*Kết quả: MCP Server chạy trên VPS, Admin Dashboard web gọi được từ xa.*
+
+- [ ] Thêm `express` + SSE transport vào `mcp-server`.
+- [ ] Hoặc: Gộp MCP endpoint vào `core-api` module Admin (ăn ké `JwtAccessGuard`).
+- [ ] Expose endpoint `/mcp/sse` (kết nối luồng) + `/mcp/message` (tool call).
+- [ ] Thêm authentication middleware (Admin token required).
+- [ ] Test kết nối từ bên ngoài (Postman/curl).
+- [ ] Tích hợp vào Docker Compose + CI/CD pipeline.
+
+### Phase 3: React Admin Dashboard + Chatbox UI
+*Kết quả: Admin mở web, gõ chat tiếng Việt, AI trả lời + thực thi command.*
+
+- [ ] Khởi tạo project React mới (Vite hoặc Next.js — cân nhắc kỹ).
+- [ ] Cài đặt `ai`, `@ai-sdk/react`, `@ai-sdk/anthropic`.
+- [ ] Thiết kế Chatbox UI (input, message list, loading states, tool call display).
+- [ ] Viết API route `/api/chat` — Vercel AI SDK gọi Claude + MCP tools.
+- [ ] Implement **Confirmation flow**: UI hiện popup xác nhận khi LLM gọi tool Mutation.
+- [ ] Test full flow: Admin gõ → LLM hiểu → gọi tool → trả kết quả → hiển thị.
+- [ ] Deploy Admin Dashboard (Vercel / Nginx).
+
+---
+
+## 6. Quy ước Code (Cho AI Agent viết code)
+
+1. **Zod Validation**: Mọi MCP Tool phải có `description` cực rõ ràng (tiếng Anh) để LLM hiểu chính xác tool dùng khi nào, input gì. 
+2. **Mutation Safety**: Tất cả tool create/update/delete phải có bước xác nhận. Không được tự động ghi DB khi chưa được admin confirm.
+3. **Database Access**: Luôn dùng Prisma ORM. Không raw query trừ khi xử lý TimescaleDB hypertable đặc thù.
+4. **Error Handling**: Try/catch mọi tool, trả message lỗi rõ ràng (tiếng Việt) cho admin đọc được.
+5. **Tiếng Việt**: Tool trả response bằng tiếng Việt (vì admin là người Việt). Nhưng tool name và zod field name giữ tiếng Anh.
+6. **Provider Swap**: KHÔNG import trực tiếp `@anthropic-ai/sdk`. Luôn dùng `@ai-sdk/anthropic` của Vercel AI SDK để đảm bảo đổi provider dễ dàng.

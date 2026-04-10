@@ -126,3 +126,74 @@ docker logs --tail 100 -f aurathink-iot-gateway-prod
 # Khởi động ép (Kẹt ram hụt bộ nhớ):
 docker restart aurathink-core-api-prod
 ```
+
+---
+
+## 🚨 Hệ thống Giám sát & Cảnh báo (System Monitoring)
+
+Hệ thống này chạy **độc lập hoàn toàn với Docker** — ngay cả khi toàn bộ Container sập, nó vẫn gửi cảnh báo tới Telegram + Email.
+
+### Cài đặt tự động (Nếu đã chạy `setup-server.sh`)
+Nếu bạn đã dùng **Cách 1: 1-Click Deploy**, hệ thống monitoring đã được cài tự động. Bạn chỉ cần cấu hình thêm Telegram Bot Token và Email trong file `.env`.
+
+### Cài đặt thủ công (Manual)
+
+#### Bước 1: Tạo Telegram Bot (Nhận cảnh báo tức thì)
+
+1. Mở Telegram, tìm **@BotFather** và gõ `/newbot`.
+2. Đặt tên Bot (VD: `AurathinkAlert`) → BotFather sẽ trả về **Token**.
+3. Copy Token đó vào `.env`:
+   ```
+   TELEGRAM_BOT_TOKEN="7012345678:AAHxxxxxxxxxxxxxxxxx"
+   ```
+4. Lấy Chat ID: Tìm **@userinfobot** trên Telegram, gõ `/start` → nó sẽ trả về Chat ID của bạn.
+5. Muốn nhiều người nhận: Mỗi Admin làm bước 4, sau đó gom tất cả Chat ID vào `.env` (ngăn bằng dấu phẩy):
+   ```
+   TELEGRAM_CHAT_IDS="123456789,987654321,555666777"
+   ```
+
+#### Bước 2: Cấu hình Gmail App Password (Nhận cảnh báo qua Email)
+
+1. Vào **Google Account** → **Security** → Bật **Xác minh 2 bước (2-Step Verification)**.
+2. Sau khi bật 2FA, quay lại **Security** → **App Passwords** → Chọn "Mail" + "Linux" → Nhấn **Generate**.
+3. Copy mật khẩu 16 ký tự (không có khoảng trắng) vào `.env`:
+   ```
+   MAIL_HOST=smtp.gmail.com
+   MAIL_PORT=587
+   MAIL_USER=your-email@gmail.com
+   MAIL_PASSWORD=abcdefghijklmnop
+   ```
+4. Danh sách email nhận cảnh báo (ngăn bằng dấu phẩy):
+   ```
+   ALERT_EMAILS="cto@company.com,devops@company.com,admin@company.com"
+   ```
+
+#### Bước 3: Kích hoạt Crontab
+
+```bash
+# Tạo thư mục state (giữ trạng thái qua reboot)
+sudo mkdir -p /var/lib/aurathink-monitor
+
+# Cấp quyền chạy
+chmod +x deploy/monitoring/server-health.sh
+
+# Gắn vào Crontab (chạy mỗi 3 phút)
+(crontab -l 2>/dev/null; echo "*/3 * * * * /bin/bash $(pwd)/deploy/monitoring/server-health.sh >> /var/log/aurathink-monitor-cron.log 2>&1") | crontab -
+
+# Cài logrotate (tự xoá log cũ sau 7 ngày)
+sudo cp deploy/monitoring/logrotate-monitor.conf /etc/logrotate.d/aurathink-monitor
+```
+
+### Kiểm tra hoạt động
+
+```bash
+# Xem log giám sát real-time:
+tail -f /var/log/aurathink-monitor.log
+
+# Test thủ công (chạy 1 lần ngay):
+bash deploy/monitoring/server-health.sh
+
+# Xem crontab đã gắn chưa:
+crontab -l | grep server-health
+```
+

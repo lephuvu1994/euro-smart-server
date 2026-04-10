@@ -248,16 +248,18 @@ P0 → +2.0 điểm | P1 → +1.5 điểm | P2 → +1.0 điểm | P3 → +2.0 đ
 
 ## Tính năng 6: System Monitoring & Alert (Hệ thống Cảnh báo Sức khoẻ Server)
 
-**Trạng thái**: ⏳ Lên Kế Hoạch (Planning)
+**Trạng thái**: ✅ Đã hoàn thành (SA Grade).
 
 ### 1. Mô tả tổng quan
-Xây dựng lớp giám sát liên tục tình trạng tài nguyên (CPU, RAM, Disk) của Server vật lý và trạng thái các Docker container. Khi mức sử dụng vượt quá ngưỡng nguy hiểm (85 - 90%) hoặc một service lõi (core-api, mqtt) bị sập/thoát đột ngột, hệ thống ngay lập tức sẽ gửi Email (hoặc bắn Telegram/Slack) về cho Admin để kịp cứu nét.
+Xây dựng lớp giám sát liên tục tình trạng tài nguyên (CPU, RAM, Disk, Swap) của Server vật lý và trạng thái các Docker container. Tách biệt hoàn toàn với Docker (chạy OS-level Crontab) để đảm bảo giám sát hoạt động ngay cả khi hệ sinh thái Docker sập. Hỗ trợ đa kênh (Email + Telegram) cho nhiều người nhận, tự động khởi động lại container bị chết, và chống nhiễu (Strike + Cooldown).
 
 ### 2. Checklist (To-Do)
-- [ ] Lựa chọn giải pháp đo tài nguyên: Script bash chạy OS-level Crontab hay gắn Node.js module thẳng vào `worker-service`.
-- [ ] Thiết lập logic ngưỡng: Trigger email khi `%CPU > 90` hoặc `%RAM > 85` kéo dài trên 3 phút (tránh nhiễu do spike tạm thời).
-- [ ] Xây dựng Mail Template "🚨 Chớp Đỏ" cho cảnh báo máy chủ.
-- [ ] Theo dõi Healthcheck của Docker để báo cáo container down.
+- [x] Giải pháp đo tài nguyên: Script Bash `server-health.sh` chạy OS-level Crontab hoàn toàn độc lập.
+- [x] Thiết lập logic ngưỡng: Threshold (CPU 85-95%, RAM 85-95%) với Strike counter (vượt ngưỡng 3 lần liên tiếp) & Cooldown (30 phút) để chống spam.
+- [x] Đa kênh cảnh báo: Gửi đồng thời Telegram Bot & Mail Template HTML chuyên nghiệp xử lý bằng Python `smtplib` (Zero pip dependency).
+- [x] Theo dõi Healthcheck: Giám sát toàn bộ container thông qua `docker inspect` + `docker exec` test trực tiếp endpoint API `core-api/health`.
+- [x] Cơ chế phục hồi: Tự động restart container (tối đa 2 lần/giờ) và bắn thông báo Recovery khi tài nguyên cân bằng trở lại.
+- [x] Tích hợp Triển khai: Tự động crontab injection & logrotate qua Tool `setup-server.sh`.
 
 ---
 

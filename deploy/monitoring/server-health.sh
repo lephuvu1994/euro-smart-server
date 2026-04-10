@@ -244,10 +244,9 @@ send_telegram() {
         return
     fi
 
-    # Loop qua từng Chat ID (phân tách bằng dấu phẩy)
     IFS=',' read -ra IDS <<< "$TELEGRAM_CHAT_IDS"
     for chat_id in "${IDS[@]}"; do
-        chat_id=$(echo "$chat_id" | xargs)  # Trim whitespace
+        chat_id=$(echo "$chat_id" | xargs)
         curl -sf -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -d "chat_id=${chat_id}" \
             -d "text=${message}" \
@@ -263,7 +262,6 @@ send_email() {
         return
     fi
 
-    # Gọi Python script gửi email
     python3 "$SCRIPT_DIR/send_alert.py" \
         --host "${MAIL_HOST}" \
         --port "${MAIL_PORT:-587}" \
@@ -276,7 +274,7 @@ send_email() {
 }
 
 send_alert() {
-    local level="$1"    # WARNING hoặc CRITICAL
+    local level="$1"
     local subject="$2"
     local details="$3"
 
@@ -293,7 +291,6 @@ ${details}
 
     local email_subject="[${level}] ${HOSTNAME} — ${subject}"
 
-    # Bắn đồng thời cả 2 kênh
     send_telegram "$tg_msg"
     send_email "$email_subject" "$details"
 }
@@ -317,11 +314,11 @@ ${details}
 }
 
 # ────────────────────────────────────────────────
-# HÀM XỬ LÝ METRIC (LOGIC TRUNG TÂM)
+# HÀM ĐÁNH GIÁ METRIC
 # ────────────────────────────────────────────────
 
-# Xử lý 1 metric: tăng strike nếu vượt ngưỡng, gửi alert nếu đủ strike, gửi recovery nếu hồi phục
-process_metric() {
+# Đánh giá 1 metric: trả về mức độ (OK / WARNING / CRITICAL / STRIKING)
+evaluate_metric() {
     local metric_name="$1"
     local value="$2"
     local warn_threshold="$3"
@@ -331,47 +328,41 @@ process_metric() {
         local strikes
         strikes=$(increment_strike "$metric_name")
         if [ "$strikes" -ge "$STRIKE_THRESHOLD" ]; then
-            if ! is_cooldown_active "$metric_name"; then
-                send_alert "CRITICAL" "${metric_name} = ${value}% (ngưỡng CRITICAL: ${crit_threshold}%)" \
-                    "Metric: ${metric_name}
-Giá trị hiện tại: ${value}%
-Ngưỡng WARNING: ${warn_threshold}%
-Ngưỡng CRITICAL: ${crit_threshold}%
-Strike: ${strikes}/${STRIKE_THRESHOLD}
-Server: ${HOSTNAME}"
-                set_cooldown "$metric_name"
-                mark_alerted "$metric_name"
-            fi
+            echo "CRITICAL"
+        else
+            echo "STRIKING"
         fi
     elif [ "$value" -ge "$warn_threshold" ]; then
         local strikes
         strikes=$(increment_strike "$metric_name")
         if [ "$strikes" -ge "$STRIKE_THRESHOLD" ]; then
-            if ! is_cooldown_active "$metric_name"; then
-                send_alert "WARNING" "${metric_name} = ${value}% (ngưỡng WARNING: ${warn_threshold}%)" \
-                    "Metric: ${metric_name}
-Giá trị hiện tại: ${value}%
-Ngưỡng WARNING: ${warn_threshold}%
-Ngưỡng CRITICAL: ${crit_threshold}%
-Strike: ${strikes}/${STRIKE_THRESHOLD}
-Server: ${HOSTNAME}"
-                set_cooldown "$metric_name"
-                mark_alerted "$metric_name"
-            fi
+            echo "WARNING"
+        else
+            echo "STRIKING"
         fi
     else
-        # Metric bình thường — reset strike
         reset_strike "$metric_name"
+        echo "OK"
+    fi
+}
 
-        # Gửi Recovery nếu trước đó đã từng alert
-        if was_alerted "$metric_name"; then
-            send_recovery "${metric_name} đã hồi phục (${value}%)" \
-                "Metric: ${metric_name}
-Giá trị hiện tại: ${value}%
-Ngưỡng an toàn: < ${warn_threshold}%
-Server: ${HOSTNAME}"
-            clear_alerted "$metric_name"
-        fi
+# Tạo dòng hiển thị cho 1 metric (icon + tên + giá trị)
+format_metric_line() {
+    local level="$1"
+    local name="$2"
+    local value="$3"
+    local warn="$4"
+    local crit="$5"
+
+    local icon="✅"
+    [ "$level" = "WARNING" ] && icon="⚠️"
+    [ "$level" = "CRITICAL" ] && icon="🚨"
+    [ "$level" = "STRIKING" ] && icon="🔶"
+
+    if [ "$level" = "OK" ]; then
+        echo "${icon} ${name}: ${value}%"
+    else
+        echo "${icon} ${name}: ${value}% (ngưỡng: ${warn}/${crit}%)"
     fi
 }
 
@@ -404,22 +395,85 @@ main() {
     local health_status="OK"
     [ "$health_code" != "200" ] && health_status="FAIL($health_code)"
 
-    local log_status="HEALTHY"
+    echo "[$TIMESTAMP] CPU=${cpu}% RAM=${ram}% DISK=${disk}% SWAP=${swap}% | CONTAINERS=${running_count}/${container_count} ${container_status} | HEALTH=${health_status}" >> "$LOG_FILE"
 
-    echo "[$TIMESTAMP] CPU=${cpu}% RAM=${ram}% DISK=${disk}% SWAP=${swap}% | CONTAINERS=${running_count}/${container_count} ${container_status} | HEALTH=${health_status} | STATUS=${log_status}" >> "$LOG_FILE"
+    # ────────────────────────────────────────────────
+    # 5. ĐÁNH GIÁ TẤT CẢ METRICS (không gửi alert riêng lẻ)
+    # ────────────────────────────────────────────────
+    local cpu_level ram_level disk_level swap_level
+    cpu_level=$(evaluate_metric "CPU" "$cpu" "$CPU_WARN" "$CPU_CRIT")
+    ram_level=$(evaluate_metric "RAM" "$ram" "$RAM_WARN" "$RAM_CRIT")
+    disk_level=$(evaluate_metric "DISK" "$disk" "$DISK_WARN" "$DISK_CRIT")
+    swap_level=$(evaluate_metric "SWAP" "$swap" "$SWAP_WARN" "$SWAP_CRIT")
 
-    # 5. Xử lý từng metric
-    process_metric "CPU" "$cpu" "$CPU_WARN" "$CPU_CRIT"
-    process_metric "RAM" "$ram" "$RAM_WARN" "$RAM_CRIT"
-    process_metric "DISK" "$disk" "$DISK_WARN" "$DISK_CRIT"
-    process_metric "SWAP" "$swap" "$SWAP_WARN" "$SWAP_CRIT"
+    # Xác định mức cao nhất trong 4 metric
+    local max_level="OK"
+    for lvl in "$cpu_level" "$ram_level" "$disk_level" "$swap_level"; do
+        if [ "$lvl" = "CRITICAL" ]; then
+            max_level="CRITICAL"
+            break
+        elif [ "$lvl" = "WARNING" ] && [ "$max_level" != "CRITICAL" ]; then
+            max_level="WARNING"
+        fi
+    done
 
-    # 6. Xử lý Docker container down
+    # ────────────────────────────────────────────────
+    # 6. GỬI 1 TIN NHẮN TỔNG HỢP (nếu bất kỳ metric nào vượt ngưỡng)
+    # ────────────────────────────────────────────────
+    if [ "$max_level" != "OK" ]; then
+        if ! is_cooldown_active "RESOURCE"; then
+            local cpu_line ram_line disk_line swap_line
+            cpu_line=$(format_metric_line "$cpu_level" "CPU" "$cpu" "$CPU_WARN" "$CPU_CRIT")
+            ram_line=$(format_metric_line "$ram_level" "RAM" "$ram" "$RAM_WARN" "$RAM_CRIT")
+            disk_line=$(format_metric_line "$disk_level" "DISK" "$disk" "$DISK_WARN" "$DISK_CRIT")
+            swap_line=$(format_metric_line "$swap_level" "SWAP" "$swap" "$SWAP_WARN" "$SWAP_CRIT")
+
+            local infra_line="✅ Containers: ${running_count}/${container_count}"
+            [ -n "$down_containers" ] && infra_line="🚨 Containers: ${running_count}/${container_count} — DOWN: ${down_containers}"
+
+            local health_line="✅ API Health: HTTP ${health_code}"
+            [ "$health_code" != "200" ] && health_line="🚨 API Health: HTTP ${health_code}"
+
+            local summary="Tài nguyên máy chủ vượt ngưỡng ${max_level}"
+            local details="${cpu_line}
+${ram_line}
+${disk_line}
+${swap_line}
+─────────────────
+${infra_line}
+${health_line}"
+
+            send_alert "$max_level" "$summary" "$details"
+            set_cooldown "RESOURCE"
+            mark_alerted "RESOURCE"
+        fi
+    else
+        # Tất cả metric bình thường → gửi Recovery nếu trước đó đã alert
+        if was_alerted "RESOURCE"; then
+            local cpu_line ram_line disk_line swap_line
+            cpu_line=$(format_metric_line "OK" "CPU" "$cpu" "$CPU_WARN" "$CPU_CRIT")
+            ram_line=$(format_metric_line "OK" "RAM" "$ram" "$RAM_WARN" "$RAM_CRIT")
+            disk_line=$(format_metric_line "OK" "DISK" "$disk" "$DISK_WARN" "$DISK_CRIT")
+            swap_line=$(format_metric_line "OK" "SWAP" "$swap" "$SWAP_WARN" "$SWAP_CRIT")
+
+            send_recovery "Tất cả tài nguyên đã hồi phục" \
+                "${cpu_line}
+${ram_line}
+${disk_line}
+${swap_line}
+─────────────────
+✅ Trạng thái: Hệ thống hoạt động bình thường"
+            clear_alerted "RESOURCE"
+        fi
+    fi
+
+    # ────────────────────────────────────────────────
+    # 7. XỬ LÝ DOCKER CONTAINER DOWN (alert riêng vì cần auto-restart)
+    # ────────────────────────────────────────────────
     if [ -n "$down_containers" ]; then
         local strikes
         strikes=$(increment_strike "CONTAINER")
 
-        # Auto-restart từng container bị sập
         local restart_report=""
         IFS=',' read -ra DOWN_LIST <<< "$down_containers"
         for entry in "${DOWN_LIST[@]}"; do
@@ -428,9 +482,11 @@ main() {
             local result
             result=$(try_restart_container "$cname")
             if [ "$result" = "OK" ]; then
-                restart_report="${restart_report}\n  ✅ ${cname}: Đã tự động restart"
+                restart_report="${restart_report}
+  ✅ ${cname}: Đã tự động restart"
             elif [ "$result" = "EXCEEDED" ]; then
-                restart_report="${restart_report}\n  ❌ ${cname}: Đã vượt giới hạn restart (${MAX_RESTARTS_PER_HOUR} lần/giờ)"
+                restart_report="${restart_report}
+  ❌ ${cname}: Vượt giới hạn restart (${MAX_RESTARTS_PER_HOUR}/giờ)"
             fi
         done
 
@@ -453,13 +509,13 @@ Server: ${HOSTNAME}"
         fi
     fi
 
-    # 7. Xử lý Health endpoint fail
+    # 8. Xử lý Health endpoint fail (alert riêng)
     if [ "$health_code" != "200" ]; then
         local strikes
         strikes=$(increment_strike "HEALTH")
         if [ "$strikes" -ge "$STRIKE_THRESHOLD" ] && ! is_cooldown_active "HEALTH"; then
-            send_alert "CRITICAL" "API Health endpoint không phản hồi (HTTP ${health_code})" \
-                "Health URL: ${HEALTH_URL}
+            send_alert "CRITICAL" "API Health không phản hồi (HTTP ${health_code})" \
+                "Health Probe: docker exec ${HEALTH_CONTAINER}
 HTTP Code: ${health_code}
 Server: ${HOSTNAME}"
             set_cooldown "HEALTH"
@@ -468,8 +524,8 @@ Server: ${HOSTNAME}"
     else
         reset_strike "HEALTH"
         if was_alerted "HEALTH"; then
-            send_recovery "API Health endpoint đã hồi phục (HTTP 200)" \
-                "Health URL: ${HEALTH_URL}
+            send_recovery "API Health đã hồi phục (HTTP 200)" \
+                "Health Probe: docker exec ${HEALTH_CONTAINER}
 Server: ${HOSTNAME}"
             clear_alerted "HEALTH"
         fi
@@ -480,3 +536,4 @@ Server: ${HOSTNAME}"
 }
 
 main "$@"
+

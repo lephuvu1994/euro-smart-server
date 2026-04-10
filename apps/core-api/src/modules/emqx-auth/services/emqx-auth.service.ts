@@ -29,7 +29,7 @@ export class EmqxAuthService {
 
     // Case 1: Server services (iot-gateway, worker-service) — global superuser
     if (dto.username?.trim() === globalUser) {
-      return { result: 'allow' };
+      return { result: dto.password === globalPass ? 'allow' : 'deny' };
     }
 
     // Case 2: App user — username format "user_{userId}"

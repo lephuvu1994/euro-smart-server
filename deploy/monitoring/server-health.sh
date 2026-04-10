@@ -25,11 +25,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-# Nạp biến môi trường từ .env
+# Nạp biến môi trường từ .env (parse an toàn — bỏ qua dòng lỗi cú pháp như MAIL_FROM)
 if [ -f "$PROJECT_DIR/.env" ]; then
     set -a
-    # shellcheck disable=SC1091
-    source "$PROJECT_DIR/.env"
+    eval "$(grep -E '^[A-Za-z_][A-Za-z0-9_]*=' "$PROJECT_DIR/.env" | sed 's/\r$//')" 2>/dev/null || true
     set +a
 fi
 

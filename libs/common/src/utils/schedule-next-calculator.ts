@@ -37,22 +37,17 @@ export function calculateNextExecution(
     const [hour, minute] = input.timeOfDay.split(':').map(Number);
     if (isNaN(hour) || isNaN(minute)) return null;
 
-    const candidate = new Date(
-      from.getFullYear(),
-      from.getMonth(),
-      from.getDate(),
-      hour,
-      minute,
-      0,
-      0,
-    );
+    const daysStr = input.daysOfWeek.join(',');
+    const cronStr = `${minute} ${hour} * * ${daysStr}`;
 
-    // Tìm ngày hợp lệ trong 7 ngày tới khớp với daysOfWeek
-    for (let i = 1; i <= 7; i++) {
-      const testDate = new Date(candidate.getTime() + i * 24 * 60 * 60 * 1000);
-      if (input.daysOfWeek.includes(testDate.getDay()) && testDate > from) {
-        return testDate;
-      }
+    try {
+      const interval = CronExpressionParser.parse(
+        cronStr,
+        { tz, currentDate: from },
+      );
+      return interval.next().toDate();
+    } catch {
+      return null;
     }
   }
 

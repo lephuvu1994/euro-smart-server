@@ -63,6 +63,9 @@ export class SceneResponseDto {
   @ApiProperty()
   active: boolean;
 
+  @ApiPropertyOptional({ description: 'Khoảng cách tối thiểu (giây) giữa 2 lần chạy scene', example: 60 })
+  minIntervalSeconds?: number;
+
   @ApiPropertyOptional({ description: 'Icon name từ MaterialCommunityIcons', example: 'home-outline' })
   icon?: string | null;
 

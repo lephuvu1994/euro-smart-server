@@ -65,6 +65,7 @@ export class SceneService {
     id: string;
     name: string;
     active: boolean;
+    minIntervalSeconds: number;
     icon: string | null;
     color: string | null;
     roomId: string | null;
@@ -78,6 +79,7 @@ export class SceneService {
       id: scene.id,
       name: scene.name,
       active: scene.active,
+      minIntervalSeconds: scene.minIntervalSeconds,
       icon: scene.icon,
       color: scene.color,
       roomId: scene.roomId,

@@ -63,7 +63,7 @@ interface SceneDeviceActionsPayload {
 
 interface CheckDeviceStateTriggersPayload {
   deviceToken: string;
-  chainDepth?: number;  // Anti-loop Layer 4: cross-scene chain depth counter
+  chainDepth?: number;  // Anti-loop Layer 3: cross-scene chain depth counter
   updates?: { entityCode: string; state: string | number | boolean; attributes?: Record<string, unknown>[] }[];
 }
 
@@ -71,8 +71,10 @@ interface CheckDeviceStateTriggersPayload {
 // Anti-loop & performance constants
 // ---------------------------------------------------------------------------
 
-/** Scene execution mutex TTL — prevents double-fire. Let it expire naturally. */
-const SCENE_LOCK_TTL_S = 30;
+/** Scene execution mutex TTL — prevents double-fire. Let it expire naturally.
+ *  Kept short (10s) because its only purpose is preventing concurrent trigger
+ *  evaluations from double-queuing. Rate-limiting is handled by minIntervalSeconds. */
+const SCENE_LOCK_TTL_S = 10;
 
 /**
  * Chain depth marker TTL — communicated to iot-gateway via Redis so it can
@@ -334,21 +336,21 @@ export class DeviceControlProcessor extends WorkerHost {
    * Performance strategy (all I/O is O(1) regardless of device count):
    *  1. One DB query  — load scene
    *  2. One DB query  — batch pre-fetch ALL target devices
-   *  3. One Redis pipeline — set ALL scene:origin markers
+   *  3. One Redis pipeline — write ALL scene:chain depth markers
    *  4. One BullMQ addBulk — enqueue ALL sub-jobs
    *
    * Anti-loop:
    *  Layer 2 — setnx mutex `scene:lock:{sceneId}` with TTL.
    *            Do NOT manually release — let TTL expire to close the race window
    *            between enqueue and sub-job execution.
-   *  Layer 4 — chainDepth counter from trigger evaluator (reject at depth ≥ 3).
+   *  Layer 3 — chainDepth counter from trigger evaluator (reject at depth ≥ 5).
    */
   private async handleRunScene(
     job: Job,
   ): Promise<{ success: boolean; sceneId?: string; deviceCount?: number; actionCount?: number; error?: string }> {
     const { sceneId, chainDepth } = job.data as { sceneId: string; chainDepth?: number };
 
-    // ── Layer 4: Cross-scene chain depth guard ─────────────────────────────
+    // ── Layer 3: Cross-scene chain depth guard ─────────────────────────────
     if ((chainDepth ?? 0) >= MAX_SCENE_CHAIN_DEPTH) {
       this.logger.warn(
         `[ANTI-LOOP] Scene ${sceneId}: chain depth ${chainDepth} exceeds max ${MAX_SCENE_CHAIN_DEPTH}, rejecting`,
@@ -441,9 +443,9 @@ export class DeviceControlProcessor extends WorkerHost {
       await this.deviceQueue.addBulk(jobs);
     }
 
-    // ── NOTE: Do NOT release lockKey — let TTL expire ─────────────────────
-    // Releasing early creates a ~10-50ms race window where trigger evaluation
-    // could re-queue this scene before sub-jobs set scene:origin markers.
+    // ── NOTE: Do NOT release lockKey — let TTL (10s) expire naturally ──────
+    // Releasing early creates a race window where concurrent trigger evaluation
+    // could re-queue this scene before scene:chain markers propagate.
 
     this.logger.log(
       `✅ Scene ${scene.name}: queued ${jobs.length} device job(s) for ${actions.length} action(s)`,
@@ -498,9 +500,9 @@ export class DeviceControlProcessor extends WorkerHost {
     }
 
     try {
-      // scene:origin marker is already set by handleRunScene's pipeline — no SET needed here.
+      // scene:chain depth marker is written by handleRunScene's pipeline — no Redis write needed here.
 
-      const driver = this.integrationManager.getDriver(device.protocol);
+      const driver = this.integrationManager.getDriver(protocol);
       await driver.setValueBulk(device, newEntities);
       this.logger.log(
         `✅ Scene device ${deviceToken}: ${newEntities.length} entity(ies)`,
@@ -538,7 +540,7 @@ export class DeviceControlProcessor extends WorkerHost {
 
   /**
    * CHECK_DEVICE_STATE_TRIGGERS: Evaluate scene triggers when device state changes.
-   * Passes chainDepth to RUN_SCENE to prevent cross-scene loops (Layer 4).
+   * Passes chainDepth to RUN_SCENE to prevent cross-scene loops (Layer 3).
    */
   private async handleCheckDeviceStateTriggers(job: Job): Promise<{ ok: boolean }> {
     const { deviceToken, chainDepth } = job.data as CheckDeviceStateTriggersPayload;

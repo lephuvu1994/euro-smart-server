@@ -74,11 +74,16 @@ interface CheckDeviceStateTriggersPayload {
 /** Scene execution mutex TTL — prevents double-fire. Let it expire naturally. */
 const SCENE_LOCK_TTL_S = 30;
 
-/** Origin marker TTL — tells iot-gateway to skip trigger check for scene-caused state changes. */
-const SCENE_ORIGIN_TTL_S = 15;
+/**
+ * Chain depth marker TTL — communicated to iot-gateway via Redis so it can
+ * pass chainDepth to CHECK_DEVICE_STATE_TRIGGERS jobs. Longer than v1's
+ * scene:origin because chain markers must survive slow device round-trips.
+ */
+const SCENE_CHAIN_TTL_S = 30;
 
-/** Max scene→trigger→scene hops before rejecting. Prevents A→B→C→A cross-loops. */
-const MAX_SCENE_CHAIN_DEPTH = 3;
+/** Max scene→trigger→scene hops. 5 allows complex legitimate cascades (A→B→C→D→E)
+ * while capping infinite loops (A→B→A→B→...). */
+const MAX_SCENE_CHAIN_DEPTH = 5;
 
 type CompareOperator = 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte';
 
@@ -398,13 +403,16 @@ export class DeviceControlProcessor extends WorkerHost {
     });
     const deviceMap = new Map(devices.map((d) => [d.token, d]));
 
-    // ── Step 4: Set ALL scene:origin markers in 1 Redis pipeline ──────────
-    // Pre-set BEFORE enqueueing sub-jobs so the markers are already in place
-    // when iot-gateway receives the MQTT feedback from the hardware.
+    // ── Step 4: Write chain depth markers in 1 Redis pipeline ───────────────
+    // scene:chain:{token} = nextDepth is read by iot-gateway's processState.
+    // When the device confirms the state change via MQTT, iot-gateway picks up
+    // this depth and forwards it as chainDepth in the CHECK_DEVICE_STATE_TRIGGERS
+    // job payload — enabling cross-scene loop detection without hard-blocking.
+    const nextDepth = (chainDepth ?? 0) + 1;
     const redis = this.redisService.getClient();
     const pipeline = redis.pipeline();
     for (const token of deviceTokens) {
-      pipeline.set(`scene:origin:${token}`, sceneId, 'EX', SCENE_ORIGIN_TTL_S);
+      pipeline.set(`scene:chain:${token}`, String(nextDepth), 'EX', SCENE_CHAIN_TTL_S);
     }
     await pipeline.exec();
 
@@ -450,14 +458,11 @@ export class DeviceControlProcessor extends WorkerHost {
 
   /**
    * ═══════════════════════════════════════════════════════════════════════════
-   * SCENE_DEVICE_ACTIONS: Lean executor — zero DB queries.
+   * SCENE_DEVICE_ACTIONS: Lean executor — zero extra Redis writes.
    * ═══════════════════════════════════════════════════════════════════════════
    *
-   * Receives ALL metadata from handleRunScene via job payload:
-   *  - deviceToken, deviceId, protocol — no findUnique needed
-   *  - scene:origin marker already set by handleRunScene pipeline — no Redis SET needed
-   *
-   * Only I/O: 1 MQTT publish + 1 Socket emit (both unavoidable).
+   * scene:chain markers were written by handleRunScene's pipeline, so this
+   * handler has zero Redis writes. Only I/O: 1 DB query + 1 MQTT + 1 Socket.
    */
   private async handleSceneDeviceActions(
     job: Job,

@@ -121,6 +121,11 @@ export class DeviceStateService {
       // ★ PARALLEL: persist all entity states + history + notifications concurrently
       const writePromises: Promise<unknown>[] = [];
 
+      // Collect only entities with ACTUAL state transitions for scene trigger evaluation.
+      // Entities whose value didn't change are excluded — prevents scene origin loops
+      // (HA State Transition Filter pattern).
+      const triggerUpdates: typeof updates = [];
+
       for (let i = 0; i < entityKeys.length; i++) {
         const entityRedisKey = entityKeys[i];
         const mapEntry = entityKeyMap.get(entityRedisKey);
@@ -266,38 +271,51 @@ export class DeviceStateService {
           }
         }
 
+        // ── HA Pattern: State Transition Filter ───────────────────────────────
+        // Only add to triggerUpdates when the entity value ACTUALLY changed.
+        // If a scene sets device X to 60% and it was already 60%, this check
+        // ensures no trigger is queued → loop dies at the source with zero cost.
+        const stateActuallyChanged =
+          entityUpdate.state !== undefined &&
+          !isEqual(entityUpdate.state, oldState.state);
+        const attrsActuallyChanged =
+          entityUpdate.attributes?.some(
+            (a) => !isEqual(a.value, (oldState as Record<string, unknown>)[a.key]),
+          ) ?? false;
+
+        if (stateActuallyChanged || attrsActuallyChanged) {
+          triggerUpdates.push(entityUpdate);
+        }
+
         updates.push(entityUpdate);
       }
 
-      // 5. Trigger scene evaluation — skip if this state update was caused by a scene action
-      // (Anti-loop Layer 1b: if scene:origin marker exists, queuing CHECK_DEVICE_STATE_TRIGGERS
-      // would re-evaluate the same scene that just ran → infinite loop).
-      if (updates.length > 0) {
-        const sceneOriginKey = `scene:origin:${token}`;
-        const isSceneOrigin = await this.redisService.get(sceneOriginKey);
+      // 5. Trigger scene evaluation — only for entities with ACTUAL state transitions.
+      // (v2 Anti-loop Layer 1: HA State Transition Filter + Tuya chain depth guard)
+      // Replacing the v1 scene:origin hard-block which prevented valid cascade chains.
+      if (triggerUpdates.length > 0) {
+        // Read chain depth written by handleRunScene when it dispatched
+        // SCENE_DEVICE_ACTIONS for this token. 0 = user/physical action.
+        const chainKey = `scene:chain:${token}`;
+        const depthStr = await this.redisService.get(chainKey);
+        const currentDepth = depthStr ? parseInt(depthStr, 10) : 0;
 
-        if (isSceneOrigin) {
-          this.logger.debug(
-            `[ANTI-LOOP] Skipping scene trigger check for ${token} (originated from scene ${isSceneOrigin})`,
-          );
-        } else {
-          writePromises.push(
-            this.deviceControlQueue.add(
-              DEVICE_JOBS.CHECK_DEVICE_STATE_TRIGGERS,
-              {
-                deviceToken: token,
-                updates: updates.map((u) => ({
-                  entityCode: u.entityCode,
-                  state: u.state,
-                  attributes: u.attributes,
-                })),
-              },
-              { priority: 3, attempts: 1, removeOnComplete: true },
-            ),
-          );
-        }
+        writePromises.push(
+          this.deviceControlQueue.add(
+            DEVICE_JOBS.CHECK_DEVICE_STATE_TRIGGERS,
+            {
+              deviceToken: token,
+              chainDepth: currentDepth,
+              updates: triggerUpdates.map((u) => ({
+                entityCode: u.entityCode,
+                state: u.state,
+                attributes: u.attributes,
+              })),
+            },
+            { priority: 3, attempts: 1, removeOnComplete: true },
+          ),
+        );
       }
-
 
       await Promise.all(writePromises);
     } catch (e) {

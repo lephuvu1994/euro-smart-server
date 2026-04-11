@@ -510,12 +510,12 @@ model Service {
 }
 
 model Scene {
-  id       String  @id @default(uuid()) @db.Uuid
-  name     String
-  active   Boolean @default(true)
-  triggers Json    @default("[]")
-  actions  Json    @default("[]")
-
+  id        String  @id @default(uuid()) @db.Uuid
+  name      String
+  active    Boolean @default(true)
+  sortOrder Int     @default(0) @map("sort_order")
+  triggers  Json    @default("[]")
+  actions   Json    @default("[]")
   icon  String? // MaterialCommunityIcons name e.g. "home-outline", "weather-night"
   color String? // Hex color for card background e.g. "#ECFDF5"
 

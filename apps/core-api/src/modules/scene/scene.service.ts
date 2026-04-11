@@ -65,6 +65,7 @@ export class SceneService {
     id: string;
     name: string;
     active: boolean;
+    sortOrder: number;
     minIntervalSeconds: number;
     icon: string | null;
     color: string | null;
@@ -79,6 +80,7 @@ export class SceneService {
       id: scene.id,
       name: scene.name,
       active: scene.active,
+      sortOrder: scene.sortOrder,
       minIntervalSeconds: scene.minIntervalSeconds,
       icon: scene.icon,
       color: scene.color,
@@ -99,7 +101,7 @@ export class SceneService {
     await this.ensureUserCanAccessHome(userId, homeId);
     const scenes = await this.databaseService.scene.findMany({
       where: { homeId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
     });
     return scenes.map((s) => this.toResponseDto(s));
   }
@@ -133,6 +135,7 @@ export class SceneService {
         homeId,
         name: dto.name,
         active: dto.active ?? true,
+        sortOrder: sceneCount, // Append cuối danh sách
         icon: dto.icon ?? null,
         color: dto.color ?? null,
         roomId: dto.roomId ?? null,
@@ -194,6 +197,24 @@ export class SceneService {
     await this.databaseService.scene.delete({ where: { id: sceneId } });
     // Remove Redis index entries for this scene
     await this.sceneTriggerIndexService.removeIndex(sceneId).catch(() => undefined);
+  }
+
+  /**
+   * Sắp xếp lại thứ tự hiển thị scenes trong một home.
+   * Mảng sceneIds chứa UUID theo thứ tự mong muốn: index 0 = sortOrder 0, v.v.
+   */
+  async reorderScenes(homeId: string, userId: string, sceneIds: string[]): Promise<void> {
+    await this.ensureUserCanAccessHome(userId, homeId);
+
+    // Batch update sortOrder bằng transaction
+    await this.databaseService.$transaction(
+      sceneIds.map((id, index) =>
+        this.databaseService.scene.update({
+          where: { id },
+          data: { sortOrder: index },
+        }),
+      ),
+    );
   }
 
   /**

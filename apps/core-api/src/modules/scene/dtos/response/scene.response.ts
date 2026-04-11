@@ -78,6 +78,10 @@ export class SceneResponseDto {
   @Expose()
   active: boolean;
 
+  @ApiProperty({ description: 'Thứ tự sắp xếp', example: 0 })
+  @Expose()
+  sortOrder: number;
+
   @ApiPropertyOptional({
     description: 'Khoảng cách tối thiểu (giây) giữa 2 lần chạy scene',
     example: 60,

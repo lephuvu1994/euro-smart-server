@@ -40,6 +40,7 @@ interface SceneAction {
   deviceToken: string;
   entityCode: string;
   value: string | number | boolean;
+  delayMs?: number;
 }
 
 interface SceneDeviceAction {
@@ -47,15 +48,44 @@ interface SceneDeviceAction {
   value: string | number | boolean;
 }
 
+/**
+ * Payload for SCENE_DEVICE_ACTIONS job.
+ * Contains ALL metadata needed for execution — NO DB lookup required in the handler.
+ * Pre-fetched by handleRunScene for O(1) batched I/O.
+ */
 interface SceneDeviceActionsPayload {
   deviceToken: string;
+  deviceId: string;     // Pre-resolved — eliminates findUnique in handler
+  protocol: string;     // Pre-resolved — driver lookup without DB
   actions: SceneDeviceAction[];
+  sceneId: string;
 }
 
 interface CheckDeviceStateTriggersPayload {
   deviceToken: string;
+  chainDepth?: number;  // Anti-loop Layer 3: cross-scene chain depth counter
   updates?: { entityCode: string; state: string | number | boolean; attributes?: Record<string, unknown>[] }[];
 }
+
+// ---------------------------------------------------------------------------
+// Anti-loop & performance constants
+// ---------------------------------------------------------------------------
+
+/** Scene execution mutex TTL — prevents double-fire. Let it expire naturally.
+ *  Kept short (10s) because its only purpose is preventing concurrent trigger
+ *  evaluations from double-queuing. Rate-limiting is handled by minIntervalSeconds. */
+const SCENE_LOCK_TTL_S = 10;
+
+/**
+ * Chain depth marker TTL — communicated to iot-gateway via Redis so it can
+ * pass chainDepth to CHECK_DEVICE_STATE_TRIGGERS jobs. Longer than v1's
+ * scene:origin because chain markers must survive slow device round-trips.
+ */
+const SCENE_CHAIN_TTL_S = 30;
+
+/** Max scene→trigger→scene hops. 5 allows complex legitimate cascades (A→B→C→D→E)
+ * while capping infinite loops (A→B→A→B→...). */
+const MAX_SCENE_CHAIN_DEPTH = 5;
 
 type CompareOperator = 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte';
 
@@ -299,14 +329,46 @@ export class DeviceControlProcessor extends WorkerHost {
   }
 
   /**
-   * RUN_SCENE: Load scene, gộp actions theo deviceToken, đẩy job/device.
+   * ═══════════════════════════════════════════════════════════════════════════
+   * RUN_SCENE: Orchestrator — single source of I/O for scene execution.
+   * ═══════════════════════════════════════════════════════════════════════════
+   *
+   * Performance strategy (all I/O is O(1) regardless of device count):
+   *  1. One DB query  — load scene
+   *  2. One DB query  — batch pre-fetch ALL target devices
+   *  3. One Redis pipeline — write ALL scene:chain depth markers
+   *  4. One BullMQ addBulk — enqueue ALL sub-jobs
+   *
+   * Anti-loop:
+   *  Layer 2 — setnx mutex `scene:lock:{sceneId}` with TTL.
+   *            Do NOT manually release — let TTL expire to close the race window
+   *            between enqueue and sub-job execution.
+   *  Layer 3 — chainDepth counter from trigger evaluator (reject at depth ≥ 5).
    */
   private async handleRunScene(
     job: Job,
   ): Promise<{ success: boolean; sceneId?: string; deviceCount?: number; actionCount?: number; error?: string }> {
-    const { sceneId } = job.data as { sceneId: string };
-    this.logger.log(`🎬 Scene ${sceneId}: grouping actions by device...`);
+    const { sceneId, chainDepth } = job.data as { sceneId: string; chainDepth?: number };
 
+    // ── Layer 3: Cross-scene chain depth guard ─────────────────────────────
+    if ((chainDepth ?? 0) >= MAX_SCENE_CHAIN_DEPTH) {
+      this.logger.warn(
+        `[ANTI-LOOP] Scene ${sceneId}: chain depth ${chainDepth} exceeds max ${MAX_SCENE_CHAIN_DEPTH}, rejecting`,
+      );
+      return { success: false, sceneId, error: 'chain_depth_exceeded' };
+    }
+
+    // ── Layer 2: Execution mutex ──────────────────────────────────────────
+    // setnx returns true only if the key did NOT exist → first caller wins.
+    // TTL expires naturally — do NOT del() early to close the race window.
+    const lockKey = `scene:lock:${sceneId}`;
+    const acquired = await this.redisService.setnxWithTtl(lockKey, '1', SCENE_LOCK_TTL_S * 1000);
+    if (!acquired) {
+      this.logger.warn(`[ANTI-LOOP] Scene ${sceneId}: already running (mutex), skip`);
+      return { success: false, sceneId, error: 'already_running' };
+    }
+
+    // ── Step 1: Load scene (1 DB query) ────────────────────────────────────
     const scene = await this.databaseService.scene.findUnique({
       where: { id: sceneId },
     });
@@ -322,41 +384,105 @@ export class DeviceControlProcessor extends WorkerHost {
     }
 
     const actions = (scene.actions as unknown as SceneAction[]) ?? [];
-    const byDevice = new Map<string, SceneDeviceAction[]>();
-    for (const a of actions) {
-      const list = byDevice.get(a.deviceToken) ?? [];
-      list.push({ entityCode: a.entityCode, value: a.value });
-      byDevice.set(a.deviceToken, list);
+    if (actions.length === 0) {
+      this.logger.warn(`Scene ${sceneId} has no actions`);
+      return { success: true, sceneId, deviceCount: 0, actionCount: 0 };
     }
 
-    const deviceCount = byDevice.size;
-    for (const [deviceToken, deviceActions] of byDevice) {
-      await this.deviceQueue.add(
-        DEVICE_JOBS.SCENE_DEVICE_ACTIONS,
-        { deviceToken, actions: deviceActions } satisfies SceneDeviceActionsPayload,
-        { priority: 2, attempts: 2, removeOnComplete: true },
-      );
+    // ── Step 2: Group actions by (deviceToken, delayMs) ───────────────────
+    // Actions on the same device with different delays go into separate sub-jobs
+    // so BullMQ's native `delay` option handles the timing (no setTimeout hacks).
+    // Example: "close curtain (0ms) → wait 5s → turn off light (5000ms)"
+    const groupKey = (token: string, delay: number) => `${token}::${delay}`;
+    const byDeviceDelay = new Map<string, { token: string; delayMs: number; actions: SceneDeviceAction[] }>();
+    for (const a of actions) {
+      const delay = a.delayMs ?? 0;
+      const key = groupKey(a.deviceToken, delay);
+      const group = byDeviceDelay.get(key) ?? { token: a.deviceToken, delayMs: delay, actions: [] };
+      group.actions.push({ entityCode: a.entityCode, value: a.value });
+      byDeviceDelay.set(key, group);
     }
+
+    // ── Step 3: Batch pre-fetch ALL devices (1 DB query instead of N) ─────
+    const deviceTokens = [...new Set([...byDeviceDelay.values()].map((g) => g.token))];
+    const devices = await this.databaseService.device.findMany({
+      where: { token: { in: deviceTokens } },
+      select: { id: true, token: true, protocol: true },
+    });
+    const deviceMap = new Map(devices.map((d) => [d.token, d]));
+
+    // ── Step 4: Write chain depth markers in 1 Redis pipeline ───────────────
+    // scene:chain:{token} = nextDepth is read by iot-gateway's processState.
+    // When the device confirms the state change via MQTT, iot-gateway picks up
+    // this depth and forwards it as chainDepth in the CHECK_DEVICE_STATE_TRIGGERS
+    // job payload — enabling cross-scene loop detection without hard-blocking.
+    const nextDepth = (chainDepth ?? 0) + 1;
+    const redis = this.redisService.getClient();
+    const pipeline = redis.pipeline();
+    for (const token of deviceTokens) {
+      pipeline.set(`scene:chain:${token}`, String(nextDepth), 'EX', SCENE_CHAIN_TTL_S);
+    }
+    await pipeline.exec();
+
+    // ── Step 5: Enqueue ALL sub-jobs in 1 BullMQ addBulk (1 Redis pipeline) ─
+    const jobs: Array<{ name: string; data: SceneDeviceActionsPayload; opts: Record<string, unknown> }> = [];
+    for (const [, group] of byDeviceDelay) {
+      const dev = deviceMap.get(group.token);
+      if (!dev) {
+        this.logger.warn(`Scene ${sceneId}: device ${group.token} not found, skipping`);
+        continue;
+      }
+      jobs.push({
+        name: DEVICE_JOBS.SCENE_DEVICE_ACTIONS,
+        data: {
+          deviceToken: group.token,
+          deviceId: dev.id,
+          protocol: dev.protocol,
+          actions: group.actions,
+          sceneId,
+        },
+        opts: {
+          priority: 2,
+          attempts: 2,
+          removeOnComplete: true,
+          ...(group.delayMs > 0 ? { delay: group.delayMs } : {}),
+        },
+      });
+    }
+
+    if (jobs.length > 0) {
+      await this.deviceQueue.addBulk(jobs);
+    }
+
+    // ── NOTE: Do NOT release lockKey — let TTL (10s) expire naturally ──────
+    // Releasing early creates a race window where concurrent trigger evaluation
+    // could re-queue this scene before scene:chain markers propagate.
 
     this.logger.log(
-      `✅ Scene ${scene.name}: queued ${deviceCount} device job(s) for ${actions.length} action(s)`,
+      `✅ Scene ${scene.name}: queued ${jobs.length} device job(s) for ${actions.length} action(s)`,
     );
     return {
       success: true,
       sceneId,
-      deviceCount,
+      deviceCount: jobs.length,
       actionCount: actions.length,
     };
   }
 
   /**
-   * SCENE_DEVICE_ACTIONS: Thực thi gộp toàn bộ entity actions của 1 device.
+   * ═══════════════════════════════════════════════════════════════════════════
+   * SCENE_DEVICE_ACTIONS: Lean executor — zero extra Redis writes.
+   * ═══════════════════════════════════════════════════════════════════════════
+   *
+   * scene:chain markers were written by handleRunScene's pipeline, so this
+   * handler has zero Redis writes. Only I/O: 1 DB query + 1 MQTT + 1 Socket.
    */
   private async handleSceneDeviceActions(
     job: Job,
   ): Promise<{ success: boolean; deviceToken?: string; entityCount?: number; skipped?: boolean; error?: string }> {
-    const { deviceToken, actions } = job.data as SceneDeviceActionsPayload;
+    const { deviceToken, deviceId, protocol, actions, sceneId } = job.data as SceneDeviceActionsPayload;
 
+    // Fetch entities for this device (still needed for driver.setValueBulk entity shape)
     const device = await this.databaseService.device.findUnique({
       where: { token: deviceToken },
       include: { partner: true, deviceModel: true, entities: true },
@@ -385,13 +511,15 @@ export class DeviceControlProcessor extends WorkerHost {
     }
 
     try {
-      const driver = this.integrationManager.getDriver(device.protocol);
+      // scene:chain depth marker is written by handleRunScene's pipeline — no Redis write needed here.
+
+      const driver = this.integrationManager.getDriver(protocol);
       await driver.setValueBulk(device, newEntities);
       this.logger.log(
         `✅ Scene device ${deviceToken}: ${newEntities.length} entity(ies)`,
       );
 
-      // Notify realtime UI (with retry)
+      // Notify realtime UI
       await this.socketPublisher.emitToDevice(device.token, 'COMMAND_SENT', {
         deviceId: device.id,
         values: newEntities.map((e) => ({
@@ -400,6 +528,7 @@ export class DeviceControlProcessor extends WorkerHost {
         })),
         timestamp: new Date(),
         status: 'sent',
+        source: 'scene',
       });
 
       return {
@@ -421,10 +550,11 @@ export class DeviceControlProcessor extends WorkerHost {
   }
 
   /**
-   * CHECK_DEVICE_STATE_TRIGGERS: Đánh giá scene triggers khi device state thay đổi.
+   * CHECK_DEVICE_STATE_TRIGGERS: Evaluate scene triggers when device state changes.
+   * Passes chainDepth to RUN_SCENE to prevent cross-scene loops (Layer 3).
    */
   private async handleCheckDeviceStateTriggers(job: Job): Promise<{ ok: boolean }> {
-    const { deviceToken } = job.data as CheckDeviceStateTriggersPayload;
+    const { deviceToken, chainDepth } = job.data as CheckDeviceStateTriggersPayload;
 
     const sceneIds = await this.sceneTriggerIndexService.getSceneIdsForDevice(deviceToken);
     
@@ -490,7 +620,7 @@ export class DeviceControlProcessor extends WorkerHost {
 
           await this.deviceQueue.add(
             DEVICE_JOBS.RUN_SCENE,
-            { sceneId: scene.id },
+            { sceneId: scene.id, chainDepth: (chainDepth ?? 0) + 1 },
             { priority: 1, attempts: 1, removeOnComplete: true },
           );
 

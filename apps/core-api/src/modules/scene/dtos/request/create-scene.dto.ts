@@ -6,6 +6,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   MaxLength,
   Min,
   MinLength,
@@ -30,13 +31,14 @@ export class SceneActionItemDto {
   value: any;
 
   @ApiPropertyOptional({
-    description: 'Độ trễ (ms) trước khi thực thi action này. Hỗ trợ "đóng rèm → chờ 5s → tắt đèn".',
+    description: 'Độ trễ (ms) trước khi thực thi action này. Hỗ trợ "đóng rèm → chờ 5s → tắt đèn". Tối đa 5 phút (300000ms).',
     example: 5000,
     default: 0,
   })
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(300_000)
   delayMs?: number;
 }
 
@@ -55,6 +57,17 @@ export class CreateSceneDto {
   @IsOptional()
   @IsBoolean()
   active?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Khoảng cách tối thiểu (giây) giữa 2 lần chạy scene. Bảo vệ chống loop: nếu trigger kích liên tục, scene sẽ được throttle theo khoảng này. Mặc định = 60s.',
+    example: 60,
+    default: 60,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(10)
+  minIntervalSeconds?: number;
 
   @ApiPropertyOptional({
     description: 'Icon name từ MaterialCommunityIcons (vd: "home-outline", "weather-night")',

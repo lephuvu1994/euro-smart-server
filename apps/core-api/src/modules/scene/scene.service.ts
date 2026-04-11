@@ -2,7 +2,11 @@ import { HttpStatus, Injectable, HttpException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { DatabaseService } from '@app/database';
-import { APP_BULLMQ_QUEUES, DEVICE_JOBS, SceneTriggerIndexService } from '@app/common';
+import {
+  APP_BULLMQ_QUEUES,
+  DEVICE_JOBS,
+  SceneTriggerIndexService,
+} from '@app/common';
 import { Prisma } from '@prisma/client';
 import { CreateSceneDto, UpdateSceneDto } from './dtos/request';
 import { SceneResponseDto } from './dtos/response/scene.response';
@@ -35,7 +39,10 @@ export class SceneService {
     private readonly deviceQueue: Queue,
   ) {}
 
-  private async ensureUserCanAccessHome(userId: string, homeId: string): Promise<void> {
+  private async ensureUserCanAccessHome(
+    userId: string,
+    homeId: string,
+  ): Promise<void> {
     const home = await this.databaseService.home.findFirst({
       where: {
         id: homeId,
@@ -43,11 +50,17 @@ export class SceneService {
       },
     });
     if (!home) {
-      throw new HttpException('scene.error.homeNotFoundOrNoAccess', HttpStatus.FORBIDDEN);
+      throw new HttpException(
+        'scene.error.homeNotFoundOrNoAccess',
+        HttpStatus.FORBIDDEN,
+      );
     }
   }
 
-  private async ensureUserCanAccessScene(userId: string, sceneId: string): Promise<void> {
+  private async ensureUserCanAccessScene(
+    userId: string,
+    sceneId: string,
+  ): Promise<void> {
     const scene = await this.databaseService.scene.findFirst({
       where: {
         id: sceneId,
@@ -57,7 +70,10 @@ export class SceneService {
       },
     });
     if (!scene) {
-      throw new HttpException('scene.error.sceneNotFoundOrNoAccess', HttpStatus.FORBIDDEN);
+      throw new HttpException(
+        'scene.error.sceneNotFoundOrNoAccess',
+        HttpStatus.FORBIDDEN,
+      );
     }
   }
 
@@ -97,7 +113,10 @@ export class SceneService {
     } as unknown as SceneResponseDto;
   }
 
-  async getScenesByHome(homeId: string, userId: string): Promise<SceneResponseDto[]> {
+  async getScenesByHome(
+    homeId: string,
+    userId: string,
+  ): Promise<SceneResponseDto[]> {
     await this.ensureUserCanAccessHome(userId, homeId);
     const scenes = await this.databaseService.scene.findMany({
       where: { homeId },
@@ -108,9 +127,14 @@ export class SceneService {
 
   async getScene(sceneId: string, userId: string): Promise<SceneResponseDto> {
     await this.ensureUserCanAccessScene(userId, sceneId);
-    const scene = await this.databaseService.scene.findUnique({ where: { id: sceneId } });
+    const scene = await this.databaseService.scene.findUnique({
+      where: { id: sceneId },
+    });
     if (!scene) {
-      throw new HttpException('scene.error.sceneNotFound', HttpStatus.NOT_FOUND);
+      throw new HttpException(
+        'scene.error.sceneNotFound',
+        HttpStatus.NOT_FOUND,
+      );
     }
     return this.toResponseDto(scene);
   }
@@ -123,12 +147,18 @@ export class SceneService {
     await this.ensureUserCanAccessHome(userId, homeId);
 
     const [user, sceneCount] = await Promise.all([
-      this.databaseService.user.findUnique({ where: { id: userId }, select: { maxScenes: true } }),
+      this.databaseService.user.findUnique({
+        where: { id: userId },
+        select: { maxScenes: true },
+      }),
       this.databaseService.scene.count({ where: { homeId } }),
     ]);
 
     if (sceneCount >= (user?.maxScenes ?? 100)) {
-      throw new HttpException('scene.error.sceneQuotaExceeded', HttpStatus.BAD_REQUEST);
+      throw new HttpException(
+        'scene.error.sceneQuotaExceeded',
+        HttpStatus.BAD_REQUEST,
+      );
     }
     const scene = await this.databaseService.scene.create({
       data: {
@@ -147,10 +177,9 @@ export class SceneService {
 
     // Build Redis reverse-index for DEVICE_STATE triggers
     if (dto.triggers && dto.triggers.length > 0) {
-      await this.sceneTriggerIndexService.rebuildIndex(
-        scene.id,
-        dto.triggers as unknown as SceneTriggerJson[],
-      ).catch(() => undefined); // Non-blocking — index can be rebuilt on startup
+      await this.sceneTriggerIndexService
+        .rebuildIndex(scene.id, dto.triggers as unknown as SceneTriggerJson[])
+        .catch(() => undefined); // Non-blocking — index can be rebuilt on startup
     }
 
     return this.toResponseDto(scene);
@@ -167,7 +196,9 @@ export class SceneService {
       data: {
         ...(dto.name !== undefined && { name: dto.name }),
         ...(dto.active !== undefined && { active: dto.active }),
-        ...(dto.minIntervalSeconds !== undefined && { minIntervalSeconds: dto.minIntervalSeconds }),
+        ...(dto.minIntervalSeconds !== undefined && {
+          minIntervalSeconds: dto.minIntervalSeconds,
+        }),
         ...(dto.icon !== undefined && { icon: dto.icon }),
         ...(dto.color !== undefined && { color: dto.color }),
         // roomId: null = xóa gán phòng; string = set phòng; undefined = giữ nguyên
@@ -183,10 +214,9 @@ export class SceneService {
 
     // Rebuild Redis reverse-index when triggers change
     if (dto.triggers !== undefined) {
-      await this.sceneTriggerIndexService.rebuildIndex(
-        sceneId,
-        dto.triggers as unknown as SceneTriggerJson[],
-      ).catch(() => undefined);
+      await this.sceneTriggerIndexService
+        .rebuildIndex(sceneId, dto.triggers as unknown as SceneTriggerJson[])
+        .catch(() => undefined);
     }
 
     return this.toResponseDto(scene);
@@ -196,14 +226,20 @@ export class SceneService {
     await this.ensureUserCanAccessScene(userId, sceneId);
     await this.databaseService.scene.delete({ where: { id: sceneId } });
     // Remove Redis index entries for this scene
-    await this.sceneTriggerIndexService.removeIndex(sceneId).catch(() => undefined);
+    await this.sceneTriggerIndexService
+      .removeIndex(sceneId)
+      .catch(() => undefined);
   }
 
   /**
    * Sắp xếp lại thứ tự hiển thị scenes trong một home.
    * Mảng sceneIds chứa UUID theo thứ tự mong muốn: index 0 = sortOrder 0, v.v.
    */
-  async reorderScenes(homeId: string, userId: string, sceneIds: string[]): Promise<void> {
+  async reorderScenes(
+    homeId: string,
+    userId: string,
+    sceneIds: string[],
+  ): Promise<void> {
     await this.ensureUserCanAccessHome(userId, homeId);
 
     // Batch update sortOrder bằng transaction
@@ -223,20 +259,34 @@ export class SceneService {
   async runScene(
     sceneId: string,
     userId: string,
+    delaySeconds?: number,
   ): Promise<{ jobId: string; message: string }> {
     await this.ensureUserCanAccessScene(userId, sceneId);
-    const scene = await this.databaseService.scene.findUnique({ where: { id: sceneId } });
+    const scene = await this.databaseService.scene.findUnique({
+      where: { id: sceneId },
+    });
     if (!scene) {
-      throw new HttpException('scene.error.sceneNotFound', HttpStatus.NOT_FOUND);
+      throw new HttpException(
+        'scene.error.sceneNotFound',
+        HttpStatus.NOT_FOUND,
+      );
     }
     if (!scene.active) {
-      throw new HttpException('scene.error.sceneInactive', HttpStatus.BAD_REQUEST);
+      throw new HttpException(
+        'scene.error.sceneInactive',
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     const job = await this.deviceQueue.add(
       DEVICE_JOBS.RUN_SCENE,
       { sceneId },
-      { priority: 1, attempts: 1, removeOnComplete: true },
+      {
+        priority: 1,
+        attempts: 1,
+        removeOnComplete: true,
+        ...(delaySeconds ? { delay: delaySeconds * 1000 } : {}),
+      },
     );
 
     return { jobId: job.id ?? '', message: 'scene.success.runQueued' };
@@ -247,7 +297,9 @@ export class SceneService {
    * Không kiểm tra user; dùng nội bộ bởi trigger executors.
    */
   async runSceneByTrigger(sceneId: string): Promise<void> {
-    const scene = await this.databaseService.scene.findUnique({ where: { id: sceneId } });
+    const scene = await this.databaseService.scene.findUnique({
+      where: { id: sceneId },
+    });
     if (!scene?.active) return;
 
     await this.deviceQueue.add(

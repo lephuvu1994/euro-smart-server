@@ -22,6 +22,7 @@ import {
   LocationReportDto,
   ReorderScenesDto,
   UpdateSceneDto,
+  RunSceneDto,
 } from './dtos/request';
 import { SceneResponseDto } from './dtos/response/scene.response';
 import { SceneTriggerLocationService } from './services/scene-trigger-location.service';
@@ -75,7 +76,11 @@ export class SceneController {
     @AuthUser() user: IAuthUser,
     @Body() dto: ReorderScenesDto,
   ): Promise<void> {
-    return this.sceneService.reorderScenes(dto.homeId, user.userId, dto.sceneIds);
+    return this.sceneService.reorderScenes(
+      dto.homeId,
+      user.userId,
+      dto.sceneIds,
+    );
   }
 
   @Get(':sceneId')
@@ -131,8 +136,9 @@ export class SceneController {
   async runScene(
     @AuthUser() user: IAuthUser,
     @Param('sceneId') sceneId: string,
+    @Body() dto: RunSceneDto,
   ): Promise<{ jobId: string; message: string }> {
-    return this.sceneService.runScene(sceneId, user.userId);
+    return this.sceneService.runScene(sceneId, user.userId, dto.delaySeconds);
   }
 
   @Delete(':sceneId')

@@ -6,6 +6,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   MaxLength,
   Min,
   MinLength,
@@ -30,13 +31,14 @@ export class SceneActionItemDto {
   value: any;
 
   @ApiPropertyOptional({
-    description: 'Độ trễ (ms) trước khi thực thi action này. Hỗ trợ "đóng rèm → chờ 5s → tắt đèn".',
+    description: 'Độ trễ (ms) trước khi thực thi action này. Hỗ trợ "đóng rèm → chờ 5s → tắt đèn". Tối đa 5 phút (300000ms).',
     example: 5000,
     default: 0,
   })
   @IsOptional()
   @IsNumber()
   @Min(0)
+  @Max(300_000)
   delayMs?: number;
 }
 

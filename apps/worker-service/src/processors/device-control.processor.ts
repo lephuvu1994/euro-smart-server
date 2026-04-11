@@ -40,6 +40,7 @@ interface SceneAction {
   deviceToken: string;
   entityCode: string;
   value: string | number | boolean;
+  delayMs?: number;
 }
 
 interface SceneDeviceAction {
@@ -47,16 +48,37 @@ interface SceneDeviceAction {
   value: string | number | boolean;
 }
 
+/**
+ * Payload for SCENE_DEVICE_ACTIONS job.
+ * Contains ALL metadata needed for execution — NO DB lookup required in the handler.
+ * Pre-fetched by handleRunScene for O(1) batched I/O.
+ */
 interface SceneDeviceActionsPayload {
   deviceToken: string;
+  deviceId: string;     // Pre-resolved — eliminates findUnique in handler
+  protocol: string;     // Pre-resolved — driver lookup without DB
   actions: SceneDeviceAction[];
-  sceneId?: string; // Used to set scene:origin Redis marker after dispatch
+  sceneId: string;
 }
 
 interface CheckDeviceStateTriggersPayload {
   deviceToken: string;
+  chainDepth?: number;  // Anti-loop Layer 4: cross-scene chain depth counter
   updates?: { entityCode: string; state: string | number | boolean; attributes?: Record<string, unknown>[] }[];
 }
+
+// ---------------------------------------------------------------------------
+// Anti-loop & performance constants
+// ---------------------------------------------------------------------------
+
+/** Scene execution mutex TTL — prevents double-fire. Let it expire naturally. */
+const SCENE_LOCK_TTL_S = 30;
+
+/** Origin marker TTL — tells iot-gateway to skip trigger check for scene-caused state changes. */
+const SCENE_ORIGIN_TTL_S = 15;
+
+/** Max scene→trigger→scene hops before rejecting. Prevents A→B→C→A cross-loops. */
+const MAX_SCENE_CHAIN_DEPTH = 3;
 
 type CompareOperator = 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte';
 
@@ -300,45 +322,67 @@ export class DeviceControlProcessor extends WorkerHost {
   }
 
   /**
-   * RUN_SCENE: Load scene, gộp actions theo deviceToken, đẩy job/device.
-   * Anti-loop Layer 2 — Redis execution lock:
-   * Prevents the same scene from being queued concurrently (e.g. two DEVICE_STATE triggers
-   * arrive within milliseconds of each other before lastFiredAt is persisted).
+   * ═══════════════════════════════════════════════════════════════════════════
+   * RUN_SCENE: Orchestrator — single source of I/O for scene execution.
+   * ═══════════════════════════════════════════════════════════════════════════
+   *
+   * Performance strategy (all I/O is O(1) regardless of device count):
+   *  1. One DB query  — load scene
+   *  2. One DB query  — batch pre-fetch ALL target devices
+   *  3. One Redis pipeline — set ALL scene:origin markers
+   *  4. One BullMQ addBulk — enqueue ALL sub-jobs
+   *
+   * Anti-loop:
+   *  Layer 2 — setnx mutex `scene:lock:{sceneId}` with TTL.
+   *            Do NOT manually release — let TTL expire to close the race window
+   *            between enqueue and sub-job execution.
+   *  Layer 4 — chainDepth counter from trigger evaluator (reject at depth ≥ 3).
    */
   private async handleRunScene(
     job: Job,
   ): Promise<{ success: boolean; sceneId?: string; deviceCount?: number; actionCount?: number; error?: string }> {
-    const { sceneId } = job.data as { sceneId: string };
+    const { sceneId, chainDepth } = job.data as { sceneId: string; chainDepth?: number };
 
-    // ── Layer 2: Execution mutex ──────────────────────────────────────────────
-    // TTL = 30s: long enough to cover any realistic scene execution time.
-    // setnx returns true only if the key did not exist → first caller wins.
+    // ── Layer 4: Cross-scene chain depth guard ─────────────────────────────
+    if ((chainDepth ?? 0) >= MAX_SCENE_CHAIN_DEPTH) {
+      this.logger.warn(
+        `[ANTI-LOOP] Scene ${sceneId}: chain depth ${chainDepth} exceeds max ${MAX_SCENE_CHAIN_DEPTH}, rejecting`,
+      );
+      return { success: false, sceneId, error: 'chain_depth_exceeded' };
+    }
+
+    // ── Layer 2: Execution mutex ──────────────────────────────────────────
+    // setnx returns true only if the key did NOT exist → first caller wins.
+    // TTL expires naturally — do NOT del() early to close the race window.
     const lockKey = `scene:lock:${sceneId}`;
-    const acquired = await this.redisService.setnxWithTtl(lockKey, '1', 30_000);
+    const acquired = await this.redisService.setnxWithTtl(lockKey, '1', SCENE_LOCK_TTL_S * 1000);
     if (!acquired) {
       this.logger.warn(`[ANTI-LOOP] Scene ${sceneId}: already running (mutex), skip`);
       return { success: false, sceneId, error: 'already_running' };
     }
 
-    this.logger.log(`🎬 Scene ${sceneId}: grouping actions by device...`);
-
+    // ── Step 1: Load scene (1 DB query) ────────────────────────────────────
     const scene = await this.databaseService.scene.findUnique({
       where: { id: sceneId },
     });
 
     if (!scene) {
-      await this.redisService.del(lockKey).catch(() => undefined);
       this.logger.error(`Scene ${sceneId} not found`);
       return { success: false, error: 'Scene not found' };
     }
 
     if (!scene.active) {
-      await this.redisService.del(lockKey).catch(() => undefined);
       this.logger.warn(`Scene ${sceneId} is inactive, skip`);
       return { success: false, error: 'Scene is inactive' };
     }
 
     const actions = (scene.actions as unknown as SceneAction[]) ?? [];
+    if (actions.length === 0) {
+      this.logger.warn(`Scene ${sceneId} has no actions`);
+      return { success: true, sceneId, deviceCount: 0, actionCount: 0 };
+    }
+
+    // ── Step 2: Group actions by device ────────────────────────────────────
     const byDevice = new Map<string, SceneDeviceAction[]>();
     for (const a of actions) {
       const list = byDevice.get(a.deviceToken) ?? [];
@@ -346,44 +390,81 @@ export class DeviceControlProcessor extends WorkerHost {
       byDevice.set(a.deviceToken, list);
     }
 
-    const deviceCount = byDevice.size;
-    for (const [deviceToken, deviceActions] of byDevice) {
-      await this.deviceQueue.add(
-        DEVICE_JOBS.SCENE_DEVICE_ACTIONS,
-        { deviceToken, actions: deviceActions, sceneId } satisfies SceneDeviceActionsPayload,
-        { priority: 2, attempts: 2, removeOnComplete: true },
-      );
+    // ── Step 3: Batch pre-fetch ALL devices (1 DB query instead of N) ─────
+    const deviceTokens = [...byDevice.keys()];
+    const devices = await this.databaseService.device.findMany({
+      where: { token: { in: deviceTokens } },
+      select: { id: true, token: true, protocol: true },
+    });
+    const deviceMap = new Map(devices.map((d) => [d.token, d]));
+
+    // ── Step 4: Set ALL scene:origin markers in 1 Redis pipeline ──────────
+    // Pre-set BEFORE enqueueing sub-jobs so the markers are already in place
+    // when iot-gateway receives the MQTT feedback from the hardware.
+    const redis = this.redisService.getClient();
+    const pipeline = redis.pipeline();
+    for (const token of deviceTokens) {
+      pipeline.set(`scene:origin:${token}`, sceneId, 'EX', SCENE_ORIGIN_TTL_S);
+    }
+    await pipeline.exec();
+
+    // ── Step 5: Enqueue ALL sub-jobs in 1 BullMQ addBulk (1 Redis pipeline) ─
+    const jobs: Array<{ name: string; data: SceneDeviceActionsPayload; opts: Record<string, unknown> }> = [];
+    for (const [token, deviceActions] of byDevice) {
+      const dev = deviceMap.get(token);
+      if (!dev) {
+        this.logger.warn(`Scene ${sceneId}: device ${token} not found, skipping`);
+        continue;
+      }
+      jobs.push({
+        name: DEVICE_JOBS.SCENE_DEVICE_ACTIONS,
+        data: {
+          deviceToken: token,
+          deviceId: dev.id,
+          protocol: dev.protocol,
+          actions: deviceActions,
+          sceneId,
+        },
+        opts: { priority: 2, attempts: 2, removeOnComplete: true },
+      });
     }
 
-    // Release mutex after enqueueing (SCENE_DEVICE_ACTIONS jobs carry the origin marker)
-    await this.redisService.del(lockKey).catch(() => undefined);
+    if (jobs.length > 0) {
+      await this.deviceQueue.addBulk(jobs);
+    }
+
+    // ── NOTE: Do NOT release lockKey — let TTL expire ─────────────────────
+    // Releasing early creates a ~10-50ms race window where trigger evaluation
+    // could re-queue this scene before sub-jobs set scene:origin markers.
 
     this.logger.log(
-      `✅ Scene ${scene.name}: queued ${deviceCount} device job(s) for ${actions.length} action(s)`,
+      `✅ Scene ${scene.name}: queued ${jobs.length} device job(s) for ${actions.length} action(s)`,
     );
     return {
       success: true,
       sceneId,
-      deviceCount,
+      deviceCount: jobs.length,
       actionCount: actions.length,
     };
   }
 
   /**
-   * SCENE_DEVICE_ACTIONS: Thực thi gộp toàn bộ entity actions của 1 device.
-   * Anti-loop Layer 1 — Scene origin marker:
-   * After dispatching commands to hardware, mark this device token in Redis so
-   * iot-gateway knows the upcoming state-change MQTT response originated from a
-   * scene (not a human/device action) and should NOT re-trigger scene evaluation.
+   * ═══════════════════════════════════════════════════════════════════════════
+   * SCENE_DEVICE_ACTIONS: Lean executor — zero DB queries.
+   * ═══════════════════════════════════════════════════════════════════════════
    *
-   * TTL = 15s: generous window covering MQTT round-trip + device response time.
-   * If the device is offline, the marker expires harmlessly.
+   * Receives ALL metadata from handleRunScene via job payload:
+   *  - deviceToken, deviceId, protocol — no findUnique needed
+   *  - scene:origin marker already set by handleRunScene pipeline — no Redis SET needed
+   *
+   * Only I/O: 1 MQTT publish + 1 Socket emit (both unavoidable).
    */
   private async handleSceneDeviceActions(
     job: Job,
   ): Promise<{ success: boolean; deviceToken?: string; entityCount?: number; skipped?: boolean; error?: string }> {
-    const { deviceToken, actions, sceneId } = job.data as SceneDeviceActionsPayload;
+    const { deviceToken, deviceId, protocol, actions, sceneId } = job.data as SceneDeviceActionsPayload;
 
+    // Fetch entities for this device (still needed for driver.setValueBulk entity shape)
     const device = await this.databaseService.device.findUnique({
       where: { token: deviceToken },
       include: { partner: true, deviceModel: true, entities: true },
@@ -412,12 +493,7 @@ export class DeviceControlProcessor extends WorkerHost {
     }
 
     try {
-      // ── Layer 1: Pre-mark device as scene-origin BEFORE dispatching ──────────
-      // Set BEFORE driver.setValueBulk so the marker is in place when iot-gateway
-      // receives the MQTT feedback (device confirms state), preventing re-trigger.
-      const SCENE_ORIGIN_TTL_MS = 15_000;
-      const originKey = `scene:origin:${deviceToken}`;
-      await this.redisService.set(originKey, sceneId ?? '1', SCENE_ORIGIN_TTL_MS);
+      // scene:origin marker is already set by handleRunScene's pipeline — no SET needed here.
 
       const driver = this.integrationManager.getDriver(device.protocol);
       await driver.setValueBulk(device, newEntities);
@@ -425,7 +501,7 @@ export class DeviceControlProcessor extends WorkerHost {
         `✅ Scene device ${deviceToken}: ${newEntities.length} entity(ies)`,
       );
 
-      // Notify realtime UI (with retry)
+      // Notify realtime UI
       await this.socketPublisher.emitToDevice(device.token, 'COMMAND_SENT', {
         deviceId: device.id,
         values: newEntities.map((e) => ({
@@ -456,10 +532,11 @@ export class DeviceControlProcessor extends WorkerHost {
   }
 
   /**
-   * CHECK_DEVICE_STATE_TRIGGERS: Đánh giá scene triggers khi device state thay đổi.
+   * CHECK_DEVICE_STATE_TRIGGERS: Evaluate scene triggers when device state changes.
+   * Passes chainDepth to RUN_SCENE to prevent cross-scene loops (Layer 4).
    */
   private async handleCheckDeviceStateTriggers(job: Job): Promise<{ ok: boolean }> {
-    const { deviceToken } = job.data as CheckDeviceStateTriggersPayload;
+    const { deviceToken, chainDepth } = job.data as CheckDeviceStateTriggersPayload;
 
     const sceneIds = await this.sceneTriggerIndexService.getSceneIdsForDevice(deviceToken);
     
@@ -525,7 +602,7 @@ export class DeviceControlProcessor extends WorkerHost {
 
           await this.deviceQueue.add(
             DEVICE_JOBS.RUN_SCENE,
-            { sceneId: scene.id },
+            { sceneId: scene.id, chainDepth: (chainDepth ?? 0) + 1 },
             { priority: 1, attempts: 1, removeOnComplete: true },
           );
 

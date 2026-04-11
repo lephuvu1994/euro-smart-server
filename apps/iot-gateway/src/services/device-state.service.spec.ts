@@ -140,10 +140,57 @@ describe('DeviceStateService', () => {
         DEVICE_JOBS.CHECK_DEVICE_STATE_TRIGGERS,
         expect.objectContaining({
           deviceToken: mockDeviceToken,
+          chainDepth: 0,
           updates: expect.arrayContaining([
             expect.objectContaining({ entityCode: 'light_1', state: 1 }),
           ]),
         }),
+        expect.any(Object),
+      );
+    });
+
+    it('should pass chainDepth from scene:chain Redis marker to trigger job', async () => {
+      const payloadObj = { state: 1 };
+
+      db.device.findUnique.mockResolvedValue(mockDevice);
+      redis.get.mockImplementation(async (key: string) => {
+        if (key.startsWith('device:meta:')) return null;
+        // scene:chain marker set by handleRunScene with depth=3
+        if (key === `scene:chain:${mockDeviceToken}`) return '3';
+        return null; // oldState = {} → state transition from undefined→1
+      });
+      redis.setnxWithTtl.mockResolvedValue(1);
+      redis.smembers.mockResolvedValue([]);
+
+      await service.processState(mockDeviceToken, payloadObj);
+
+      expect(controlQueue.add).toHaveBeenCalledWith(
+        DEVICE_JOBS.CHECK_DEVICE_STATE_TRIGGERS,
+        expect.objectContaining({
+          deviceToken: mockDeviceToken,
+          chainDepth: 3,
+        }),
+        expect.any(Object),
+      );
+    });
+
+    it('should NOT queue CHECK_DEVICE_STATE_TRIGGERS when state has not changed (HA pattern)', async () => {
+      const payloadObj = { state: 1 };
+
+      db.device.findUnique.mockResolvedValue(mockDevice);
+      redis.get.mockImplementation(async (key: string) => {
+        if (key.startsWith('device:meta:')) return null;
+        // oldState already has state=1 → same value → no transition
+        if (key === `device:dev-1:entity:light_1`)
+          return JSON.stringify({ state: 1 });
+        return null;
+      });
+
+      await service.processState(mockDeviceToken, payloadObj);
+
+      expect(controlQueue.add).not.toHaveBeenCalledWith(
+        DEVICE_JOBS.CHECK_DEVICE_STATE_TRIGGERS,
+        expect.any(Object),
         expect.any(Object),
       );
     });

@@ -121,6 +121,11 @@ export class DeviceStateService {
       // ★ PARALLEL: persist all entity states + history + notifications concurrently
       const writePromises: Promise<unknown>[] = [];
 
+      // Collect only entities with ACTUAL state transitions for scene trigger evaluation.
+      // Entities whose value didn't change are excluded — prevents scene origin loops
+      // (HA State Transition Filter pattern).
+      const triggerUpdates: typeof updates = [];
+
       for (let i = 0; i < entityKeys.length; i++) {
         const entityRedisKey = entityKeys[i];
         const mapEntry = entityKeyMap.get(entityRedisKey);
@@ -266,17 +271,42 @@ export class DeviceStateService {
           }
         }
 
+        // ── HA Pattern: State Transition Filter ───────────────────────────────
+        // Only add to triggerUpdates when the entity value ACTUALLY changed.
+        // If a scene sets device X to 60% and it was already 60%, this check
+        // ensures no trigger is queued → loop dies at the source with zero cost.
+        const stateActuallyChanged =
+          entityUpdate.state !== undefined &&
+          !isEqual(entityUpdate.state, oldState.state);
+        const attrsActuallyChanged =
+          entityUpdate.attributes?.some(
+            (a) => !isEqual(a.value, (oldState as Record<string, unknown>)[a.key]),
+          ) ?? false;
+
+        if (stateActuallyChanged || attrsActuallyChanged) {
+          triggerUpdates.push(entityUpdate);
+        }
+
         updates.push(entityUpdate);
       }
 
-      // 5. Trigger scene evaluation — add to the parallel batch
-      if (updates.length > 0) {
+      // 5. Trigger scene evaluation — only for entities with ACTUAL state transitions.
+      // (v2 Anti-loop Layer 1: HA State Transition Filter + Tuya chain depth guard)
+      // Replacing the v1 scene:origin hard-block which prevented valid cascade chains.
+      if (triggerUpdates.length > 0) {
+        // Read chain depth written by handleRunScene when it dispatched
+        // SCENE_DEVICE_ACTIONS for this token. 0 = user/physical action.
+        const chainKey = `scene:chain:${token}`;
+        const depthStr = await this.redisService.get(chainKey);
+        const currentDepth = depthStr ? parseInt(depthStr, 10) : 0;
+
         writePromises.push(
           this.deviceControlQueue.add(
             DEVICE_JOBS.CHECK_DEVICE_STATE_TRIGGERS,
             {
               deviceToken: token,
-              updates: updates.map((u) => ({
+              chainDepth: currentDepth,
+              updates: triggerUpdates.map((u) => ({
                 entityCode: u.entityCode,
                 state: u.state,
                 attributes: u.attributes,

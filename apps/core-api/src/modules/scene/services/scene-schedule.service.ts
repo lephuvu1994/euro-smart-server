@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-const cronParser = require('cron-parser');
+import { CronExpressionParser } from 'cron-parser';
 import { DatabaseService } from '@app/database';
 import { RedisService } from '@app/redis-cache';
 import { SceneTriggerType } from '@app/common';
@@ -66,11 +66,11 @@ export class SceneScheduleService {
     now: Date,
   ): boolean {
     try {
-      const interval = cronParser.parseExpression(cronExpr, {
+      const interval = CronExpressionParser.parse(cronExpr, {
         currentDate: now,
         tz: timezone,
       });
-      const next = interval.next();
+      const next = interval.next().toDate();
       const diff = next.getTime() - now.getTime();
       return diff >= 0 && diff < ONE_MINUTE_MS;
     } catch {

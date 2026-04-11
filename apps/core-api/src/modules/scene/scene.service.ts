@@ -65,6 +65,7 @@ export class SceneService {
     id: string;
     name: string;
     active: boolean;
+    minIntervalSeconds: number;
     icon: string | null;
     color: string | null;
     roomId: string | null;
@@ -78,6 +79,7 @@ export class SceneService {
       id: scene.id,
       name: scene.name,
       active: scene.active,
+      minIntervalSeconds: scene.minIntervalSeconds,
       icon: scene.icon,
       color: scene.color,
       roomId: scene.roomId,
@@ -134,6 +136,7 @@ export class SceneService {
         icon: dto.icon ?? null,
         color: dto.color ?? null,
         roomId: dto.roomId ?? null,
+        minIntervalSeconds: dto.minIntervalSeconds ?? 60,
         triggers: (dto.triggers ?? []) as unknown as Prisma.InputJsonValue,
         actions: dto.actions as unknown as Prisma.InputJsonValue,
       },
@@ -161,6 +164,7 @@ export class SceneService {
       data: {
         ...(dto.name !== undefined && { name: dto.name }),
         ...(dto.active !== undefined && { active: dto.active }),
+        ...(dto.minIntervalSeconds !== undefined && { minIntervalSeconds: dto.minIntervalSeconds }),
         ...(dto.icon !== undefined && { icon: dto.icon }),
         ...(dto.color !== undefined && { color: dto.color }),
         // roomId: null = xóa gán phòng; string = set phòng; undefined = giữ nguyên

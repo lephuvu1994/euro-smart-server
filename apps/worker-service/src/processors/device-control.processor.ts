@@ -50,6 +50,7 @@ interface SceneDeviceAction {
 interface SceneDeviceActionsPayload {
   deviceToken: string;
   actions: SceneDeviceAction[];
+  sceneId?: string; // Used to set scene:origin Redis marker after dispatch
 }
 
 interface CheckDeviceStateTriggersPayload {
@@ -300,11 +301,25 @@ export class DeviceControlProcessor extends WorkerHost {
 
   /**
    * RUN_SCENE: Load scene, gộp actions theo deviceToken, đẩy job/device.
+   * Anti-loop Layer 2 — Redis execution lock:
+   * Prevents the same scene from being queued concurrently (e.g. two DEVICE_STATE triggers
+   * arrive within milliseconds of each other before lastFiredAt is persisted).
    */
   private async handleRunScene(
     job: Job,
   ): Promise<{ success: boolean; sceneId?: string; deviceCount?: number; actionCount?: number; error?: string }> {
     const { sceneId } = job.data as { sceneId: string };
+
+    // ── Layer 2: Execution mutex ──────────────────────────────────────────────
+    // TTL = 30s: long enough to cover any realistic scene execution time.
+    // setnx returns true only if the key did not exist → first caller wins.
+    const lockKey = `scene:lock:${sceneId}`;
+    const acquired = await this.redisService.setnxWithTtl(lockKey, '1', 30_000);
+    if (!acquired) {
+      this.logger.warn(`[ANTI-LOOP] Scene ${sceneId}: already running (mutex), skip`);
+      return { success: false, sceneId, error: 'already_running' };
+    }
+
     this.logger.log(`🎬 Scene ${sceneId}: grouping actions by device...`);
 
     const scene = await this.databaseService.scene.findUnique({
@@ -312,11 +327,13 @@ export class DeviceControlProcessor extends WorkerHost {
     });
 
     if (!scene) {
+      await this.redisService.del(lockKey).catch(() => undefined);
       this.logger.error(`Scene ${sceneId} not found`);
       return { success: false, error: 'Scene not found' };
     }
 
     if (!scene.active) {
+      await this.redisService.del(lockKey).catch(() => undefined);
       this.logger.warn(`Scene ${sceneId} is inactive, skip`);
       return { success: false, error: 'Scene is inactive' };
     }
@@ -333,10 +350,13 @@ export class DeviceControlProcessor extends WorkerHost {
     for (const [deviceToken, deviceActions] of byDevice) {
       await this.deviceQueue.add(
         DEVICE_JOBS.SCENE_DEVICE_ACTIONS,
-        { deviceToken, actions: deviceActions } satisfies SceneDeviceActionsPayload,
+        { deviceToken, actions: deviceActions, sceneId } satisfies SceneDeviceActionsPayload,
         { priority: 2, attempts: 2, removeOnComplete: true },
       );
     }
+
+    // Release mutex after enqueueing (SCENE_DEVICE_ACTIONS jobs carry the origin marker)
+    await this.redisService.del(lockKey).catch(() => undefined);
 
     this.logger.log(
       `✅ Scene ${scene.name}: queued ${deviceCount} device job(s) for ${actions.length} action(s)`,
@@ -351,11 +371,18 @@ export class DeviceControlProcessor extends WorkerHost {
 
   /**
    * SCENE_DEVICE_ACTIONS: Thực thi gộp toàn bộ entity actions của 1 device.
+   * Anti-loop Layer 1 — Scene origin marker:
+   * After dispatching commands to hardware, mark this device token in Redis so
+   * iot-gateway knows the upcoming state-change MQTT response originated from a
+   * scene (not a human/device action) and should NOT re-trigger scene evaluation.
+   *
+   * TTL = 15s: generous window covering MQTT round-trip + device response time.
+   * If the device is offline, the marker expires harmlessly.
    */
   private async handleSceneDeviceActions(
     job: Job,
   ): Promise<{ success: boolean; deviceToken?: string; entityCount?: number; skipped?: boolean; error?: string }> {
-    const { deviceToken, actions } = job.data as SceneDeviceActionsPayload;
+    const { deviceToken, actions, sceneId } = job.data as SceneDeviceActionsPayload;
 
     const device = await this.databaseService.device.findUnique({
       where: { token: deviceToken },
@@ -385,6 +412,13 @@ export class DeviceControlProcessor extends WorkerHost {
     }
 
     try {
+      // ── Layer 1: Pre-mark device as scene-origin BEFORE dispatching ──────────
+      // Set BEFORE driver.setValueBulk so the marker is in place when iot-gateway
+      // receives the MQTT feedback (device confirms state), preventing re-trigger.
+      const SCENE_ORIGIN_TTL_MS = 15_000;
+      const originKey = `scene:origin:${deviceToken}`;
+      await this.redisService.set(originKey, sceneId ?? '1', SCENE_ORIGIN_TTL_MS);
+
       const driver = this.integrationManager.getDriver(device.protocol);
       await driver.setValueBulk(device, newEntities);
       this.logger.log(
@@ -400,6 +434,7 @@ export class DeviceControlProcessor extends WorkerHost {
         })),
         timestamp: new Date(),
         status: 'sent',
+        source: 'scene',
       });
 
       return {

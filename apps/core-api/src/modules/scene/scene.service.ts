@@ -134,6 +134,7 @@ export class SceneService {
         icon: dto.icon ?? null,
         color: dto.color ?? null,
         roomId: dto.roomId ?? null,
+        minIntervalSeconds: dto.minIntervalSeconds ?? 60,
         triggers: (dto.triggers ?? []) as unknown as Prisma.InputJsonValue,
         actions: dto.actions as unknown as Prisma.InputJsonValue,
       },
@@ -161,6 +162,7 @@ export class SceneService {
       data: {
         ...(dto.name !== undefined && { name: dto.name }),
         ...(dto.active !== undefined && { active: dto.active }),
+        ...(dto.minIntervalSeconds !== undefined && { minIntervalSeconds: dto.minIntervalSeconds }),
         ...(dto.icon !== undefined && { icon: dto.icon }),
         ...(dto.color !== undefined && { color: dto.color }),
         // roomId: null = xóa gán phòng; string = set phòng; undefined = giữ nguyên

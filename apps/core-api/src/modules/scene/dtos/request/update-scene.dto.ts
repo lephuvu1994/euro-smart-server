@@ -2,10 +2,12 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsArray,
   IsBoolean,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
   MaxLength,
+  Min,
   MinLength,
   ValidateNested,
 } from 'class-validator';
@@ -25,6 +27,15 @@ export class UpdateSceneDto {
   @IsOptional()
   @IsBoolean()
   active?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Khoảng cách tối thiểu (giây) giữa 2 lần chạy. Mặc định = 60s. Tối thiểu 10s.',
+    example: 60,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(10)
+  minIntervalSeconds?: number;
 
   @ApiPropertyOptional({
     description: 'Icon name từ MaterialCommunityIcons (vd: "home-outline")',

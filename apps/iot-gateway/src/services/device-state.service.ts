@@ -269,23 +269,35 @@ export class DeviceStateService {
         updates.push(entityUpdate);
       }
 
-      // 5. Trigger scene evaluation — add to the parallel batch
+      // 5. Trigger scene evaluation — skip if this state update was caused by a scene action
+      // (Anti-loop Layer 1b: if scene:origin marker exists, queuing CHECK_DEVICE_STATE_TRIGGERS
+      // would re-evaluate the same scene that just ran → infinite loop).
       if (updates.length > 0) {
-        writePromises.push(
-          this.deviceControlQueue.add(
-            DEVICE_JOBS.CHECK_DEVICE_STATE_TRIGGERS,
-            {
-              deviceToken: token,
-              updates: updates.map((u) => ({
-                entityCode: u.entityCode,
-                state: u.state,
-                attributes: u.attributes,
-              })),
-            },
-            { priority: 3, attempts: 1, removeOnComplete: true },
-          ),
-        );
+        const sceneOriginKey = `scene:origin:${token}`;
+        const isSceneOrigin = await this.redisService.get(sceneOriginKey);
+
+        if (isSceneOrigin) {
+          this.logger.debug(
+            `[ANTI-LOOP] Skipping scene trigger check for ${token} (originated from scene ${isSceneOrigin})`,
+          );
+        } else {
+          writePromises.push(
+            this.deviceControlQueue.add(
+              DEVICE_JOBS.CHECK_DEVICE_STATE_TRIGGERS,
+              {
+                deviceToken: token,
+                updates: updates.map((u) => ({
+                  entityCode: u.entityCode,
+                  state: u.state,
+                  attributes: u.attributes,
+                })),
+              },
+              { priority: 3, attempts: 1, removeOnComplete: true },
+            ),
+          );
+        }
       }
+
 
       await Promise.all(writePromises);
     } catch (e) {

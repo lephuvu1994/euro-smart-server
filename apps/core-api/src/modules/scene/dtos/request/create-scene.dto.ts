@@ -57,6 +57,17 @@ export class CreateSceneDto {
   active?: boolean;
 
   @ApiPropertyOptional({
+    description:
+      'Khoảng cách tối thiểu (giây) giữa 2 lần chạy scene. Bảo vệ chống loop: nếu trigger kích liên tục, scene sẽ được throttle theo khoảng này. Mặc định = 60s.',
+    example: 60,
+    default: 60,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(10)
+  minIntervalSeconds?: number;
+
+  @ApiPropertyOptional({
     description: 'Icon name từ MaterialCommunityIcons (vd: "home-outline", "weather-night")',
     example: 'home-outline',
   })

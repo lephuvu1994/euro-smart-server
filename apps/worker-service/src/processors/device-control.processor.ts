@@ -389,16 +389,22 @@ export class DeviceControlProcessor extends WorkerHost {
       return { success: true, sceneId, deviceCount: 0, actionCount: 0 };
     }
 
-    // ── Step 2: Group actions by device ────────────────────────────────────
-    const byDevice = new Map<string, SceneDeviceAction[]>();
+    // ── Step 2: Group actions by (deviceToken, delayMs) ───────────────────
+    // Actions on the same device with different delays go into separate sub-jobs
+    // so BullMQ's native `delay` option handles the timing (no setTimeout hacks).
+    // Example: "close curtain (0ms) → wait 5s → turn off light (5000ms)"
+    const groupKey = (token: string, delay: number) => `${token}::${delay}`;
+    const byDeviceDelay = new Map<string, { token: string; delayMs: number; actions: SceneDeviceAction[] }>();
     for (const a of actions) {
-      const list = byDevice.get(a.deviceToken) ?? [];
-      list.push({ entityCode: a.entityCode, value: a.value });
-      byDevice.set(a.deviceToken, list);
+      const delay = a.delayMs ?? 0;
+      const key = groupKey(a.deviceToken, delay);
+      const group = byDeviceDelay.get(key) ?? { token: a.deviceToken, delayMs: delay, actions: [] };
+      group.actions.push({ entityCode: a.entityCode, value: a.value });
+      byDeviceDelay.set(key, group);
     }
 
     // ── Step 3: Batch pre-fetch ALL devices (1 DB query instead of N) ─────
-    const deviceTokens = [...byDevice.keys()];
+    const deviceTokens = [...new Set([...byDeviceDelay.values()].map((g) => g.token))];
     const devices = await this.databaseService.device.findMany({
       where: { token: { in: deviceTokens } },
       select: { id: true, token: true, protocol: true },
@@ -420,22 +426,27 @@ export class DeviceControlProcessor extends WorkerHost {
 
     // ── Step 5: Enqueue ALL sub-jobs in 1 BullMQ addBulk (1 Redis pipeline) ─
     const jobs: Array<{ name: string; data: SceneDeviceActionsPayload; opts: Record<string, unknown> }> = [];
-    for (const [token, deviceActions] of byDevice) {
-      const dev = deviceMap.get(token);
+    for (const [, group] of byDeviceDelay) {
+      const dev = deviceMap.get(group.token);
       if (!dev) {
-        this.logger.warn(`Scene ${sceneId}: device ${token} not found, skipping`);
+        this.logger.warn(`Scene ${sceneId}: device ${group.token} not found, skipping`);
         continue;
       }
       jobs.push({
         name: DEVICE_JOBS.SCENE_DEVICE_ACTIONS,
         data: {
-          deviceToken: token,
+          deviceToken: group.token,
           deviceId: dev.id,
           protocol: dev.protocol,
-          actions: deviceActions,
+          actions: group.actions,
           sceneId,
         },
-        opts: { priority: 2, attempts: 2, removeOnComplete: true },
+        opts: {
+          priority: 2,
+          attempts: 2,
+          removeOnComplete: true,
+          ...(group.delayMs > 0 ? { delay: group.delayMs } : {}),
+        },
       });
     }
 

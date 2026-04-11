@@ -65,6 +65,9 @@ export class SceneService {
     id: string;
     name: string;
     active: boolean;
+    icon: string | null;
+    color: string | null;
+    roomId: string | null;
     triggers: Prisma.JsonValue;
     actions: Prisma.JsonValue;
     homeId: string;
@@ -75,6 +78,9 @@ export class SceneService {
       id: scene.id,
       name: scene.name,
       active: scene.active,
+      icon: scene.icon,
+      color: scene.color,
+      roomId: scene.roomId,
       triggers: Array.isArray(scene.triggers)
         ? (scene.triggers as unknown as SceneTriggerJson[])
         : [],
@@ -125,6 +131,9 @@ export class SceneService {
         homeId,
         name: dto.name,
         active: dto.active ?? true,
+        icon: dto.icon ?? null,
+        color: dto.color ?? null,
+        roomId: dto.roomId ?? null,
         triggers: (dto.triggers ?? []) as unknown as Prisma.InputJsonValue,
         actions: dto.actions as unknown as Prisma.InputJsonValue,
       },
@@ -152,6 +161,10 @@ export class SceneService {
       data: {
         ...(dto.name !== undefined && { name: dto.name }),
         ...(dto.active !== undefined && { active: dto.active }),
+        ...(dto.icon !== undefined && { icon: dto.icon }),
+        ...(dto.color !== undefined && { color: dto.color }),
+        // roomId: null = xóa gán phòng; string = set phòng; undefined = giữ nguyên
+        ...(dto.roomId !== undefined && { roomId: dto.roomId }),
         ...(dto.triggers !== undefined && {
           triggers: dto.triggers as unknown as Prisma.InputJsonValue,
         }),

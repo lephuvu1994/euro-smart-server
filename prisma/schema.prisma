@@ -488,6 +488,7 @@ model Room {
   floorId   String?  @map("floor_id") @db.Uuid
   floor     Floor?   @relation(fields: [floorId], references: [id], onDelete: SetNull)
   devices   Device[]
+  scenes    Scene[]
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -515,11 +516,18 @@ model Scene {
   triggers Json    @default("[]")
   actions  Json    @default("[]")
 
+  icon  String? // MaterialCommunityIcons name e.g. "home-outline", "weather-night"
+  color String? // Hex color for card background e.g. "#ECFDF5"
+
   minIntervalSeconds Int?      @default(60)
   lastFiredAt        DateTime?
 
-  homeId    String   @map("home_id") @db.Uuid
-  home      Home     @relation(fields: [homeId], references: [id], onDelete: Cascade)
+  homeId String @map("home_id") @db.Uuid
+  home   Home   @relation(fields: [homeId], references: [id], onDelete: Cascade)
+
+  roomId String? @map("room_id") @db.Uuid
+  room   Room?   @relation(fields: [roomId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

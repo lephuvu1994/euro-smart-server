@@ -20,6 +20,7 @@ import { UseGuards } from '@nestjs/common';
 import {
   CreateSceneDto,
   LocationReportDto,
+  ReorderScenesDto,
   UpdateSceneDto,
 } from './dtos/request';
 import { SceneResponseDto } from './dtos/response/scene.response';
@@ -65,6 +66,16 @@ export class SceneController {
     @Query('homeId') homeId: string,
   ): Promise<SceneResponseDto[]> {
     return this.sceneService.getScenesByHome(homeId, user.userId);
+  }
+
+  @Patch('reorder')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Sắp xếp lại thứ tự scenes' })
+  async reorderScenes(
+    @AuthUser() user: IAuthUser,
+    @Body() dto: ReorderScenesDto,
+  ): Promise<void> {
+    return this.sceneService.reorderScenes(dto.homeId, user.userId, dto.sceneIds);
   }
 
   @Get(':sceneId')

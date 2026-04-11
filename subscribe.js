@@ -4,6 +4,7 @@ const brokerUrl = 'mqtt://100.117.220.15:1883';
 const options = {
   username: 'leephusvux1994',
   password: 'Vu31101994@',
+  clientId: 'mqttjs_test_sub',
 };
 
 const client = mqtt.connect(brokerUrl, options);

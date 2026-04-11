@@ -1,11 +1,13 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsArray,
   IsBoolean,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
   MaxLength,
+  Min,
   MinLength,
   ValidateNested,
 } from 'class-validator';
@@ -26,6 +28,16 @@ export class SceneActionItemDto {
     description: 'Giá trị (số, boolean, string tùy loại entity)',
   })
   value: any;
+
+  @ApiPropertyOptional({
+    description: 'Độ trễ (ms) trước khi thực thi action này. Hỗ trợ "đóng rèm → chờ 5s → tắt đèn".',
+    example: 5000,
+    default: 0,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  delayMs?: number;
 }
 
 export class CreateSceneDto {
@@ -39,12 +51,33 @@ export class CreateSceneDto {
   @MaxLength(100)
   name: string;
 
-  @ApiProperty({ required: false, default: true })
+  @ApiPropertyOptional({ required: false, default: true })
   @IsOptional()
   @IsBoolean()
   active?: boolean;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
+    description: 'Icon name từ MaterialCommunityIcons (vd: "home-outline", "weather-night")',
+    example: 'home-outline',
+  })
+  @IsOptional()
+  @IsString()
+  icon?: string;
+
+  @ApiPropertyOptional({
+    description: 'Hex color cho card nền (vd: "#ECFDF5")',
+    example: '#ECFDF5',
+  })
+  @IsOptional()
+  @IsString()
+  color?: string;
+
+  @ApiPropertyOptional({ description: 'ID phòng để filter scene theo phòng (optional)' })
+  @IsOptional()
+  @IsUUID()
+  roomId?: string;
+
+  @ApiPropertyOptional({
     required: false,
     description:
       'Triggers: SCHEDULE (lịch cron/at time), LOCATION (geofence enter/leave), DEVICE_STATE (điều kiện thiết bị). Để trống = scene chỉ chạy tay (manual). Server tự chạy scene khi trigger kích hoạt.',
@@ -63,7 +96,7 @@ export class CreateSceneDto {
     type: [SceneActionItemDto],
     example: [
       { deviceToken: 'device-abc', entityCode: 'channel_1', value: 1 },
-      { deviceToken: 'device-abc', entityCode: 'channel_2', value: 80 },
+      { deviceToken: 'device-abc', entityCode: 'channel_2', value: 80, delayMs: 5000 },
     ],
   })
   @IsArray()

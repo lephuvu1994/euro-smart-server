@@ -1,9 +1,10 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsArray,
   IsBoolean,
   IsOptional,
   IsString,
+  IsUUID,
   MaxLength,
   MinLength,
   ValidateNested,
@@ -13,22 +14,41 @@ import { SceneActionItemDto } from './create-scene.dto';
 import { SceneTriggerItemDto } from './scene-trigger.dto';
 
 export class UpdateSceneDto {
-  @ApiProperty({ example: 'Tối về nhà', required: false })
+  @ApiPropertyOptional({ example: 'Tối về nhà' })
   @IsOptional()
   @IsString()
   @MinLength(1)
   @MaxLength(100)
   name?: string;
 
-  @ApiProperty({ required: false })
+  @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()
   active?: boolean;
 
-  @ApiProperty({
-    required: false,
-    description:
-      'Triggers: SCHEDULE, LOCATION, DEVICE_STATE. Rỗng = chỉ chạy tay (manual).',
+  @ApiPropertyOptional({
+    description: 'Icon name từ MaterialCommunityIcons (vd: "home-outline")',
+    example: 'home-outline',
+  })
+  @IsOptional()
+  @IsString()
+  icon?: string;
+
+  @ApiPropertyOptional({
+    description: 'Hex color cho card nền (vd: "#ECFDF5")',
+    example: '#ECFDF5',
+  })
+  @IsOptional()
+  @IsString()
+  color?: string;
+
+  @ApiPropertyOptional({ description: 'ID phòng (null để xóa gán phòng)' })
+  @IsOptional()
+  @IsUUID()
+  roomId?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Triggers: SCHEDULE, LOCATION, DEVICE_STATE. Rỗng = chỉ chạy tay (manual).',
     type: [SceneTriggerItemDto],
   })
   @IsOptional()
@@ -37,8 +57,7 @@ export class UpdateSceneDto {
   @Type(() => SceneTriggerItemDto)
   triggers?: SceneTriggerItemDto[];
 
-  @ApiProperty({
-    required: false,
+  @ApiPropertyOptional({
     type: [SceneActionItemDto],
   })
   @IsOptional()

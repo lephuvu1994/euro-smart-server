@@ -177,9 +177,8 @@ export class DeviceStateService {
               const cmdUserKey = `cmd_user:${token}:${entity.code}`;
               const actionUserIds =
                 await this.redisService.smembers(cmdUserKey);
-              if (actionUserIds.length > 0) {
-                await this.redisService.del(cmdUserKey);
-              }
+              // ★ Do NOT delete cmd_user here — preserve it across transient states
+              // (e.g. CLOSING → CLOSED). Only clear after final-state history is recorded.
               const source =
                 actionUserIds.length > 0 ? 'app' : rawData.source || 'device';
 
@@ -220,6 +219,13 @@ export class DeviceStateService {
                     { removeOnComplete: true, attempts: 2 },
                   ),
                 );
+
+                // ★ Clear attribution cache ONLY after final-state history is recorded.
+                // Transient states (CLOSING, OPENING) must NOT consume the token,
+                // so the subsequent final state (CLOSED, OPENED) still knows who initiated it.
+                if (actionUserIds.length > 0) {
+                  writePromises.push(this.redisService.del(cmdUserKey));
+                }
               }
 
               // ★ Notification token pre-flight logic

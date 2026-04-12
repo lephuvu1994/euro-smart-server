@@ -106,7 +106,7 @@ Content-Type: application/json
             },
             {
                 "code": "child_lock",
-                "name": "Khoá trẻ em",
+                "name": "Khoá",
                 "domain": "lock",
                 "commandKey": "child_lock",
                 "commandSuffix": "set",

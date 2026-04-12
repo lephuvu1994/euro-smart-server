@@ -198,10 +198,12 @@ export class DeviceControlProcessor extends WorkerHost {
 
     try {
       // ★ Cache userId for gateway to lookup when device responds
+      // TTL = 120s to cover slow mechanical devices (curtain travel up to 120s).
+      // Gateway clears this key after recording final-state history.
       if (userId) {
         const cacheKey = `cmd_user:${token}:${entityCode}`;
         await this.redisService.sadd(cacheKey, userId);
-        await this.redisService.expire(cacheKey, 10);
+        await this.redisService.expire(cacheKey, 120);
       }
 
       const driver = this.integrationManager.getDriver(device.protocol);
@@ -270,11 +272,13 @@ export class DeviceControlProcessor extends WorkerHost {
 
     try {
       // ★ Cache userId for all entities being controlled
+      // TTL = 120s to cover slow mechanical devices (curtain travel up to 120s).
+      // Gateway clears this key after recording final-state history.
       if (userId) {
         const cachePromises = entityPayloads.map((ep) => {
           const cacheKey = `cmd_user:${token}:${ep.entityCode}`;
           return this.redisService.sadd(cacheKey, userId).then(() =>
-            this.redisService.expire(cacheKey, 10),
+            this.redisService.expire(cacheKey, 120),
           );
         });
         await Promise.all(cachePromises);

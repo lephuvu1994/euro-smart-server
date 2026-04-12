@@ -75,7 +75,7 @@ export class MqttGenericDriver implements IDeviceDriver {
    * Topic: {company}/{model}/{token}/set
    * Dùng cho: unbind, OTA URL, system commands...
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   async publishRaw(
     device: any,
     payload: Record<string, any>,

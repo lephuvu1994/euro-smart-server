@@ -20,6 +20,9 @@
     "allowSyntheticDefaultImports": true,
     "baseUrl": ".",
     "paths": {
+      "@nestjs/bullmq/lib/*": [
+        "node_modules/@nestjs/bullmq/dist/*"
+      ],
       "@sensa-smart/common": [
         "libs/common/src/index.ts"
       ],

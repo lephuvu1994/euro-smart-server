@@ -28,9 +28,9 @@ export class MqttGenericDriver implements IDeviceDriver {
 
       await this.mqttService.publish(topic, payloadStr, { qos: 1 });
       return true;
-    } catch (error) {
+    } catch (error: unknown) {
       this.logger.error(
-        `Failed to set value for device ${device.token}, entity ${entity.code}: ${error.message}`,
+        `Failed to set value for device ${device.token}, entity ${entity.code}: ${error instanceof Error ? error.message : String(error)}`,
       );
       return false;
     }
@@ -62,9 +62,9 @@ export class MqttGenericDriver implements IDeviceDriver {
       const payloadStr = JSON.stringify(payload);
       await this.mqttService.publish(topic, payloadStr, { qos: 1 });
       return true;
-    } catch (error) {
+    } catch (error: unknown) {
       this.logger.error(
-        `Failed to set value bulk for device ${device.token}: ${error.message}`,
+        `Failed to set value bulk for device ${device.token}: ${error instanceof Error ? error.message : String(error)}`,
       );
       return false;
     }

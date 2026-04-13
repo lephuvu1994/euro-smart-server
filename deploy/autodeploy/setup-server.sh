@@ -111,15 +111,28 @@ if [ ! -f "$SSL_DIR/fullchain.pem" ]; then
     fi
 
     log "Đang request SSL từ Let's Encrypt (Quy trình này sẽ mất vài phút)..."
+    # Tắt lỗi tạm thời để tránh crash nếu certbot fail do DNS chưa update
+    set +e
     docker run -it --rm --name certbot \
         -v "$PWD/deploy/docker/ssl-data:/etc/letsencrypt" \
         -p 80:80 \
         certbot/certbot certonly --standalone \
         --non-interactive --agree-tos -m "$APP_EMAIL" -d "$APP_DOMAIN"
+    set -e
     
     log "Trích xuất chứng chỉ từ /etc/letsencrypt sang ./deploy/docker/ssl..."
-    cp deploy/docker/ssl-data/live/$APP_DOMAIN/fullchain.pem $SSL_DIR/
-    cp deploy/docker/ssl-data/live/$APP_DOMAIN/privkey.pem $SSL_DIR/
+    if [ -f "deploy/docker/ssl-data/live/$APP_DOMAIN/fullchain.pem" ]; then
+        cp deploy/docker/ssl-data/live/$APP_DOMAIN/fullchain.pem $SSL_DIR/
+        cp deploy/docker/ssl-data/live/$APP_DOMAIN/privkey.pem $SSL_DIR/
+        success "Đã lấy chứng chỉ Let's Encrypt thành công!"
+    else
+        warn "Không thể lấy chứng chỉ Let's Encrypt (Có thể do DNS chưa cập nhật). Đang tạo Self-Signed SSL dự phòng..."
+        openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+            -keyout "$SSL_DIR/privkey.pem" \
+            -out "$SSL_DIR/fullchain.pem" \
+            -subj "/CN=$APP_DOMAIN"
+        success "Đã tạo chứng chỉ Self-Signed thành công!"
+    fi
     
     # Gộp chứng chỉ cho HAProxy/EMQX
     cat $SSL_DIR/fullchain.pem $SSL_DIR/privkey.pem > $SSL_DIR/mqtt.pem

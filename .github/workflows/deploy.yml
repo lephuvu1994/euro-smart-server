@@ -106,7 +106,7 @@ jobs:
               -e MQTT_HOST=mqtt://emqx \
               --network sensa-smart-prod-network \
               $IMAGE \
-              npx prisma db push --accept-data-loss
+              npx prisma migrate deploy
 
             echo "==> [VPS1] Restarting ALL services (GĐ1 — single node)..."
             IMAGE=$IMAGE docker compose \

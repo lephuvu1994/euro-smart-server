@@ -1,8 +1,8 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: aurathink-ingress
-  namespace: aurathink
+  name: sensa-smart-ingress
+  namespace: sensa-smart
   annotations:
     nginx.ingress.kubernetes.io/proxy-body-size: '10m'
     nginx.ingress.kubernetes.io/proxy-read-timeout: '300'
@@ -15,7 +15,7 @@ spec:
   # tls:
   #   - hosts:
   #       - api.yourdomain.com
-  #     secretName: aurathink-tls
+  #     secretName: sensa-smart-tls
   rules:
     # ── REST API ──
     - host: api.yourdomain.com

@@ -33,11 +33,11 @@ if [ -f "$PROJECT_DIR/.env" ]; then
 fi
 
 # Thư mục lưu trạng thái (persistent qua reboot)
-STATE_DIR="/var/lib/aurathink-monitor"
+STATE_DIR="/var/lib/sensa-smart-monitor"
 mkdir -p "$STATE_DIR"
 
 # File log
-LOG_FILE="/var/log/aurathink-monitor.log"
+LOG_FILE="/var/log/sensa-smart-monitor.log"
 
 # Ngưỡng cảnh báo
 CPU_WARN=85
@@ -60,17 +60,17 @@ MAX_RESTARTS_PER_HOUR=2
 
 # Danh sách Docker containers cần giám sát
 CONTAINERS=(
-    "aurathink-postgres-prod"
-    "aurathink-redis-prod"
-    "aurathink-emqx-prod"
-    "aurathink-core-api-prod"
-    "aurathink-iot-gateway-prod"
-    "aurathink-worker-service-prod"
-    "euro-nginx-prod"
+    "sensa-smart-postgres-prod"
+    "sensa-smart-redis-prod"
+    "sensa-smart-emqx-prod"
+    "sensa-smart-core-api-prod"
+    "sensa-smart-iot-gateway-prod"
+    "sensa-smart-worker-service-prod"
+    "sensa-smart-nginx-prod"
 )
 
 # Health endpoint — probe trực tiếp bên trong container core-api (best practice: không phụ thuộc Nginx)
-HEALTH_CONTAINER="aurathink-core-api-prod"
+HEALTH_CONTAINER="sensa-smart-core-api-prod"
 HEALTH_PATH="/health"
 
 # Hostname để phân biệt máy chủ trong alert

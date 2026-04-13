@@ -1,4 +1,4 @@
-# Tài liệu Hệ thống: Smart Home Server (euro-smart-server)
+# Tài liệu Hệ thống: Smart Home Server (sensa-smart-server)
 
 ## 1. Tổng quan
 Đây là hệ thống Backend trung tâm dạng Microservices quản trị theo nguyên tắc NX Monorepo. Nền tảng đảm nhiệm việc định tuyến người dùng, xử lý các tín hiệu IoT, lập lịch sự kiện, thực thi hàng đợi tin nhắn và cung cấp khả năng High Availability (HA) trải dài trên 2 máy chủ gốc (VPS) qua kết nối mã hóa Tailscale VPN.

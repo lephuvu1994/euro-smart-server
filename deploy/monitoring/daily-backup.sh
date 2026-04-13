@@ -7,7 +7,7 @@
 # Luồng hoạt động:
 #   1. Dump PostgreSQL → file .sql
 #   2. Dump Redis RDB → file .rdb
-#   3. Nén gộp → euro-smart-backup-{timestamp}.tar.gz
+#   3. Nén gộp → sensa-smart-backup-{timestamp}.tar.gz
 #   4. Upload lên Cloudflare R2 / S3 (nếu có key)
 #   5. Upload qua Telegram Bot (nếu có token, file < 50MB)
 #   6. Dọn dẹp backup cũ > 7 ngày trên ổ cục bộ
@@ -35,17 +35,17 @@ if [ -f "$ROOT_DIR/.env" ]; then
 fi
 
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-BACKUP_DIR="/var/lib/aurathink-backups"
+BACKUP_DIR="/var/lib/sensa-smart-backups"
 mkdir -p "$BACKUP_DIR"
 
 # Tên container Docker (khớp với docker-compose.prod.yml)
-DB_CONTAINER="aurathink-postgres-prod"
-REDIS_CONTAINER="aurathink-redis-prod"
+DB_CONTAINER="sensa-smart-postgres-prod"
+REDIS_CONTAINER="sensa-smart-redis-prod"
 
 POSTGRES_USER="${POSTGRES_USER:-postgres}"
-POSTGRES_DB="${POSTGRES_DB:-aurathink}"
+POSTGRES_DB="${POSTGRES_DB:-sensa_smart}"
 
-FINAL_TAR="${BACKUP_DIR}/euro-smart-backup-${TIMESTAMP}.tar.gz"
+FINAL_TAR="${BACKUP_DIR}/sensa-smart-backup-${TIMESTAMP}.tar.gz"
 
 log() { echo "[$(date +%H:%M:%S)] $*"; }
 
@@ -192,6 +192,6 @@ if [ "$S3_UPLOADED" = false ] && [ "$TELEGRAM_UPLOADED" = false ]; then
 fi
 
 log "  → Dọn dẹp: Xóa backup cục bộ cũ hơn 7 ngày..."
-find "$BACKUP_DIR" -name "euro-smart-backup-*.tar.gz" -type f -mtime +7 -delete
+find "$BACKUP_DIR" -name "sensa-smart-backup-*.tar.gz" -type f -mtime +7 -delete
 
 log "═══ TIẾN TRÌNH SAO LƯU ĐÃ KHÉP LẠI ═══"

@@ -14,13 +14,13 @@
     "esModuleInterop": true,
     "baseUrl": ".",
     "paths": {
-      "@aurathink-server/common": [
+      "@sensa-smart/common": [
         "../../libs/common/src/index.ts"
       ],
-      "@aurathink-server/database": [
+      "@sensa-smart/database": [
         "../../libs/database/src/index.ts"
       ],
-      "@aurathink-server/redis-cache": [
+      "@sensa-smart/redis-cache": [
         "../../libs/redis-cache/src/index.ts"
       ],
       "@app/common": [

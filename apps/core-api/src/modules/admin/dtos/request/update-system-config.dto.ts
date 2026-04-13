@@ -17,7 +17,7 @@ export class UpdateSystemConfigDto {
   @IsOptional()
   otpExpire?: number;
 
-  @ApiPropertyOptional({ example: 'wss://aurathink.ddns.net/mqtt' })
+  @ApiPropertyOptional({ example: 'wss://sensasmart.ddns.net/mqtt' })
   @IsString()
   @IsOptional()
   mqttWssUrl?: string;

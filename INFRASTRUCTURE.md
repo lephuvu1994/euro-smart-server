@@ -74,15 +74,15 @@ Private mesh network connecting VPS1 ↔ VPS2.
 
 | Node | Public IP | Tailscale IP | Hostname |
 |------|-----------|-------------|----------|
-| VPS1 | 157.66.27.91 | 100.117.220.15 | aurathink-vps1 |
-| VPS2 | 42.96.13.60 | 100.85.73.41 | aurathink-vps2 |
+| VPS1 | 157.66.27.91 | 100.117.220.15 | sensa-smart-vps1 |
+| VPS2 | 42.96.13.60 | 100.85.73.41 | sensa-smart-vps2 |
 
 ```bash
 # Check status
 tailscale status
 
 # Ping other node
-tailscale ping aurathink-vps1   # from VPS2
+tailscale ping sensa-smart-vps1   # from VPS2
 ```
 
 ---
@@ -93,7 +93,7 @@ tailscale ping aurathink-vps1   # from VPS2
 
 ```bash
 # Check cluster status
-docker exec aurathink-emqx-prod emqx ctl cluster status
+docker exec sensa-smart-emqx-prod emqx ctl cluster status
 
 # Dashboard: http://VPS_IP:18083
 # Default: admin / (EMQX_DASHBOARD_PASS)
@@ -169,7 +169,7 @@ git push main
 ```env
 EMQX_NODE_NAME=emqx@100.117.220.15
 TAILSCALE_IP=100.117.220.15
-DATABASE_URL=postgresql://postgres:PASSWORD@postgres:5432/aurathink?schema=public
+DATABASE_URL=postgresql://postgres:PASSWORD@postgres:5432/sensa_smart?schema=public
 REDIS_HOST=redis
 MQTT_HOST=mqtt://emqx
 ```
@@ -177,7 +177,7 @@ MQTT_HOST=mqtt://emqx
 ### VPS2 (.env) — Mặt tiền
 ```env
 EMQX_NODE_NAME=emqx@100.85.73.41
-DATABASE_URL=postgresql://postgres:PASSWORD@100.117.220.15:5432/aurathink?schema=public
+DATABASE_URL=postgresql://postgres:PASSWORD@100.117.220.15:5432/sensa_smart?schema=public
 REDIS_HOST=100.117.220.15
 MQTT_HOST=mqtt://localhost
 ```
@@ -195,7 +195,7 @@ Server services (iot-gateway, worker) authenticate with `MQTT_USER`/`MQTT_PASS`.
 
 ```bash
 # Verify MQTT clients
-docker exec aurathink-emqx-prod emqx_ctl clients list
+docker exec sensa-smart-emqx-prod emqx_ctl clients list
 ```
 
 ---
@@ -210,7 +210,7 @@ docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 docker compose logs -f --tail=50 core-api
 
 # EMQX cluster
-docker exec aurathink-emqx-prod emqx ctl cluster status
+docker exec sensa-smart-emqx-prod emqx ctl cluster status
 
 # HAProxy stats
 curl http://localhost:8404/stats
@@ -230,7 +230,7 @@ nc -zv 100.117.220.15 4370
 nc -zv 100.85.73.41 4370
 
 # Verify EMQX_NODE_NAME matches Tailscale IP
-docker exec aurathink-emqx-prod emqx ctl cluster status
+docker exec sensa-smart-emqx-prod emqx ctl cluster status
 ```
 
 ### VPS2 can't connect to Postgres/Redis
@@ -239,7 +239,7 @@ docker exec aurathink-emqx-prod emqx ctl cluster status
 ping 100.117.220.15
 
 # Check ports are bound to Tailscale IP
-docker port aurathink-postgres-prod
+docker port sensa-smart-postgres-prod
 # Should show: 100.117.220.15:5432->5432/tcp
 ```
 
@@ -252,5 +252,5 @@ ls -la deploy/docker/ssl/mqtt.pem
 mosquitto_pub -h domain -p 8883 --cafile ca.crt -t test -m "hello"
 
 # Check HAProxy config
-docker exec aurathink-haproxy-prod haproxy -c -f /usr/local/etc/haproxy/haproxy.cfg
+docker exec sensa-smart-haproxy-prod haproxy -c -f /usr/local/etc/haproxy/haproxy.cfg
 ```

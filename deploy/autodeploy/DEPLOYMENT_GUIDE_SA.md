@@ -14,15 +14,15 @@ Tài liệu này được soạn thảo theo tiêu chuẩn System Administrator 
 - Mở tất cả các Port sau trên tường lửa (Firewall) của nhà cung cấp VPS: `80` (HTTP), `443` (HTTPS), `1883` (Mqtt TCP), `8883` (Mqtt TLS). Cổng `18083` (EMQX Dashboard) chỉ nên cho phép IP nhà bạn truy cập vào.
 
 ### 2. Trỏ Tên Miền (Domain)
-Vào nhà cung cấp Tên miền (Cloudflare, Tenten, Mắt Bão), trỏ 1 Record `A` từ Domain dự định dùng (vd: `aurathink.ddns.net`) về **IP của VPS**. Đảm bảo (Ping) thấy Domain trả về đúng IP trước khi làm bước tiếp theo.
+Vào nhà cung cấp Tên miền (Cloudflare, Tenten, Mắt Bão), trỏ 1 Record `A` từ Domain dự định dùng (vd: `sensasmart.ddns.net`) về **IP của VPS**. Đảm bảo (Ping) thấy Domain trả về đúng IP trước khi làm bước tiếp theo.
 
 ### 3. Thực Hiện Lệnh
 Chạy 3 dòng lệnh sau trên VPS:
 
 ```bash
 # 1. Klon Source Code
-git clone https://github.com/your-org/euro-smart-server.git
-cd euro-smart-server
+git clone https://github.com/your-org/sensa-smart-server.git
+cd sensa-smart-server
 
 # 2. Cấp quyền chạy cho Tool cài đặt
 chmod +x setup-server.sh
@@ -118,13 +118,13 @@ docker compose -f docker-compose.prod.yml up -d --no-deps core-api iot-gateway w
 Nếu có một Container chết hoặc nghi vấn app chạy lỗi. Hãy soi Log tức thì bằng:
 ```bash
 # Soi Error của Core Server:
-docker logs --tail 200 -f aurathink-core-api-prod
+docker logs --tail 200 -f sensa-smart-core-api-prod
 
 # Xem Webhook IoT chập chờn:
-docker logs --tail 100 -f aurathink-iot-gateway-prod
+docker logs --tail 100 -f sensa-smart-iot-gateway-prod
 
 # Khởi động ép (Kẹt ram hụt bộ nhớ):
-docker restart aurathink-core-api-prod
+docker restart sensa-smart-core-api-prod
 ```
 
 ---
@@ -172,23 +172,23 @@ Nếu bạn đã dùng **Cách 1: 1-Click Deploy**, hệ thống monitoring đã
 
 ```bash
 # Tạo thư mục state (giữ trạng thái qua reboot)
-sudo mkdir -p /var/lib/aurathink-monitor
+sudo mkdir -p /var/lib/sensa-smart-monitor
 
 # Cấp quyền chạy
 chmod +x deploy/monitoring/server-health.sh
 
 # Gắn vào Crontab (chạy mỗi 3 phút)
-(crontab -l 2>/dev/null; echo "*/3 * * * * /bin/bash $(pwd)/deploy/monitoring/server-health.sh >> /var/log/aurathink-monitor-cron.log 2>&1") | crontab -
+(crontab -l 2>/dev/null; echo "*/3 * * * * /bin/bash $(pwd)/deploy/monitoring/server-health.sh >> /var/log/sensa-smart-monitor-cron.log 2>&1") | crontab -
 
 # Cài logrotate (tự xoá log cũ sau 7 ngày)
-sudo cp deploy/monitoring/logrotate-monitor.conf /etc/logrotate.d/aurathink-monitor
+sudo cp deploy/monitoring/logrotate-monitor.conf /etc/logrotate.d/sensa-smart-monitor
 ```
 
 ### Kiểm tra hoạt động
 
 ```bash
 # Xem log giám sát real-time:
-tail -f /var/log/aurathink-monitor.log
+tail -f /var/log/sensa-smart-monitor.log
 
 # Test thủ công (chạy 1 lần ngay):
 bash deploy/monitoring/server-health.sh

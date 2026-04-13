@@ -2,10 +2,10 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: iot-gateway
-  namespace: aurathink
+  namespace: sensa-smart
   labels:
     app: iot-gateway
-    app.kubernetes.io/part-of: aurathink-server
+    app.kubernetes.io/part-of: sensa-smart-server
 spec:
   replicas: 1
   selector:
@@ -24,16 +24,16 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: iot-gateway
-          image: aurathink-server:latest
+          image: sensa-smart-server:latest
           command: ['node', 'dist/apps/iot-gateway/main.js']
           ports:
             - containerPort: 3003
               name: http
           envFrom:
             - configMapRef:
-                name: aurathink-config
+                name: sensa-smart-config
             - secretRef:
-                name: aurathink-secrets
+                name: sensa-smart-secrets
           resources:
             requests:
               memory: '128Mi'
@@ -56,7 +56,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: iot-gateway
-  namespace: aurathink
+  namespace: sensa-smart
   labels:
     app: iot-gateway
 spec:

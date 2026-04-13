@@ -18,7 +18,7 @@
 #   docker compose -f docker-compose.prod.yml logs -f --tail=100
 # ══════════════════════════════════════════════════════════════════
 
-name: aurathink-prod
+name: sensa-smart-prod
 
 services:
   # ─────────────────────────────────────────────
@@ -27,22 +27,22 @@ services:
 
   postgres:
     image: timescale/timescaledb:latest-pg16
-    container_name: aurathink-postgres-prod
+    container_name: sensa-smart-postgres-prod
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
-      POSTGRES_DB: ${POSTGRES_DB:-aurathink}
+      POSTGRES_DB: ${POSTGRES_DB:-sensa_smart}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./deploy/docker/timescaledb-init.sql:/docker-entrypoint-initdb.d/01_timescale.sql:ro
     networks:
-      - euro-internal
+      - sensa-internal
     healthcheck:
       test:
         [
           'CMD-SHELL',
-          'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB:-aurathink}',
+          'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB:-sensa_smart}',
         ]
       interval: 10s
       timeout: 5s
@@ -62,7 +62,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: aurathink-redis-prod
+    container_name: sensa-smart-redis-prod
     restart: unless-stopped
     command: >
       redis-server --maxmemory-policy noeviction
@@ -72,7 +72,7 @@ services:
     volumes:
       - redis_data:/data
     networks:
-      - euro-internal
+      - sensa-internal
     healthcheck:
       test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD}', 'ping']
       interval: 10s
@@ -95,8 +95,8 @@ services:
     build:
       context: .
       dockerfile: deploy/docker/Dockerfile.emqx
-    image: aurathink-emqx-prod:5.8.5
-    container_name: aurathink-emqx-prod
+    image: sensa-smart-emqx-prod:5.8.5
+    container_name: sensa-smart-emqx-prod
     restart: unless-stopped
     ports:
       - '1883:1883' # MQTT TCP — IoT devices kết nối
@@ -124,7 +124,7 @@ services:
       - emqx_data:/opt/emqx/data
       - emqx_log:/opt/emqx/log
     networks:
-      - euro-internal
+      - sensa-internal
     healthcheck:
       test:
         [
@@ -153,8 +153,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: ${IMAGE:-ghcr.io/lephuvu1994/aurathink-server:latest}
-    container_name: aurathink-migrate-prod
+    image: ${IMAGE:-ghcr.io/lephuvu1994/sensa-smart-server:latest}
+    container_name: sensa-smart-migrate-prod
     restart: 'no'
     env_file:
       - .env
@@ -165,7 +165,7 @@ services:
       postgres:
         condition: service_healthy
     networks:
-      - euro-internal
+      - sensa-internal
 
   # ─────────────────────────────────────────────
   # APPLICATION SERVICES
@@ -175,8 +175,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: ${IMAGE:-ghcr.io/lephuvu1994/aurathink-server:latest}
-    container_name: aurathink-core-api-prod
+    image: ${IMAGE:-ghcr.io/lephuvu1994/sensa-smart-server:latest}
+    container_name: sensa-smart-core-api-prod
     restart: unless-stopped
     env_file:
       - .env
@@ -197,7 +197,7 @@ services:
       emqx:
         condition: service_healthy
     networks:
-      - euro-internal
+      - sensa-internal
     healthcheck:
       test:
         [
@@ -229,8 +229,8 @@ services:
 
 
   iot-gateway:
-    image: ${IMAGE:-ghcr.io/lephuvu1994/aurathink-server:latest}
-    container_name: aurathink-iot-gateway-prod
+    image: ${IMAGE:-ghcr.io/lephuvu1994/sensa-smart-server:latest}
+    container_name: sensa-smart-iot-gateway-prod
     restart: unless-stopped
     env_file:
       - .env
@@ -254,7 +254,7 @@ services:
       core-api:
         condition: service_healthy
     networks:
-      - euro-internal
+      - sensa-internal
     deploy:
       resources:
         limits:
@@ -270,8 +270,8 @@ services:
         max-file: '5'
 
   worker-service:
-    image: ${IMAGE:-ghcr.io/lephuvu1994/aurathink-server:latest}
-    container_name: aurathink-worker-service-prod
+    image: ${IMAGE:-ghcr.io/lephuvu1994/sensa-smart-server:latest}
+    container_name: sensa-smart-worker-service-prod
     restart: unless-stopped
     env_file:
       - .env
@@ -287,7 +287,7 @@ services:
       core-api:
         condition: service_healthy
     networks:
-      - euro-internal
+      - sensa-internal
     deploy:
       resources:
         limits:
@@ -307,7 +307,7 @@ services:
   # ─────────────────────────────────────────────
   haproxy:
     image: haproxy:2.9-alpine
-    container_name: aurathink-haproxy-prod
+    container_name: sensa-smart-haproxy-prod
     restart: unless-stopped
     network_mode: host
     command: >
@@ -333,7 +333,7 @@ services:
   # ─────────────────────────────────────────────
   nginx:
     image: nginx:1.27-alpine
-    container_name: euro-nginx-prod
+    container_name: sensa-smart-nginx-prod
     restart: unless-stopped
     ports:
       - '80:80'
@@ -348,7 +348,7 @@ services:
       emqx:
         condition: service_healthy
     networks:
-      - euro-internal
+      - sensa-internal
     healthcheck:
       test: ['CMD', 'wget', '--spider', '-q', 'http://localhost/health']
       interval: 30s
@@ -366,22 +366,22 @@ services:
 # ─────────────────────────────────────────────
 
 networks:
-  euro-internal:
+  sensa-internal:
     driver: bridge
     # Tên cố định để partial deploy (--no-deps) dùng lại đúng network.
     # KHÔNG dùng external:true vì sẽ fail trên VPS mới chưa có network.
-    # KHÔNG đổi tên này — aurathink-prod-network là network production thực tế
+    # KHÔNG đổi tên này — sensa-smart-prod-network là network production thực tế
     # chứa postgres/redis/emqx. Đổi tên sẽ cô lập DB khỏi các services.
-    name: aurathink-prod-network
+    name: sensa-smart-prod-network
 
 volumes:
   postgres_data:
-    name: euro-prod-postgres-data
+    name: sensa-smart-postgres-data
   redis_data:
-    name: euro-prod-redis-data
+    name: sensa-smart-redis-data
   emqx_data:
-    name: euro-prod-emqx-data
+    name: sensa-smart-emqx-data
   emqx_log:
-    name: euro-prod-emqx-log
+    name: sensa-smart-emqx-log
   certbot_webroot:
-    name: euro-prod-certbot-webroot
+    name: sensa-smart-certbot-webroot

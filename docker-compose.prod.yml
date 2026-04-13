@@ -248,6 +248,11 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      # BUG FIX: EMQX auth webhook gọi core-api. Nếu core-api chưa ready,
+      # EMQX trả Not Authorized → iot-gateway bị kick và mqtt.js v4+
+      # KHÔNG tự reconnect sau CONNACK rc=5. Phải đợi core-api healthy.
+      core-api:
+        condition: service_healthy
     networks:
       - euro-internal
     deploy:
@@ -277,6 +282,9 @@ services:
     command: ['node', 'dist/apps/worker-service/main.js']
     depends_on:
       redis:
+        condition: service_healthy
+      # Worker cần DB migration hoàn tất (Prisma schema) trước khi xử lý jobs
+      core-api:
         condition: service_healthy
     networks:
       - euro-internal
@@ -360,7 +368,10 @@ services:
 networks:
   euro-internal:
     driver: bridge
-    name: aurathink-prod-network
+    # BUG FIX: Tên network phải match với tên thực trên VPS.
+    # Dùng 'external: true' + tên thực để tránh compose tạo network mới,
+    # gây mất kết nối giữa các container khi deploy partial services.
+    name: aurathink-network
     # Chỉ expose qua nginx, các service không bind port ra host
 
 volumes:

@@ -78,15 +78,21 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
       this.logger.error(`MQTT Error: ${err.message}`);
 
       // BUG FIX: mqtt.js v4+ dừng reconnect hoàn toàn khi nhận CONNACK rc=5
-      // (Not Authorized). Điều này xảy ra khi core-api chưa sẵn sàng lúc deploy
-      // (đang chạy Prisma migrations). Force reconnect với exponential backoff.
+      // (Not Authorized). Xảy ra khi core-api chưa ready lúc deploy
+      // (Prisma migrations đang chạy). Force reconnect vô hạn với exponential backoff.
+      // Root cause: core-api chưa được liệt kê trong depends_on của iot-gateway.
       if (
         !this.isDestroyed &&
         (err.message.includes('Not authorized') ||
           err.message.includes('Connection refused') ||
-          err.message.includes('Bad username'))
+          err.message.includes('Bad username') ||
+          err.message.includes('ECONNREFUSED') ||
+          err.message.includes('ETIMEDOUT'))
       ) {
-        this.scheduleReconnect(10_000);
+        this.logger.warn(
+          `Auth/Connection error detected — forcing reconnect in ${Math.round(this.reconnectDelay / 1000)}s...`,
+        );
+        this.scheduleReconnect(this.reconnectDelay);
       }
     });
 
@@ -172,18 +178,21 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     if (this.isDestroyed) return;
     this.reconnectDelay = Math.min(delay * 1.5, 60_000); // cap at 60s
     this.logger.warn(
-      `Auth/Connection error detected — forcing reconnect in ${Math.round(delay / 1000)}s...`,
+      `Scheduling MQTT reconnect in ${Math.round(delay / 1000)}s (next backoff: ${Math.round(this.reconnectDelay / 1000)}s)...`,
     );
     setTimeout(() => {
-      if (!this.isDestroyed && !this.client.connected) {
-        this.logger.log('Executing forced MQTT reconnect...');
-        try {
-          this.client.reconnect();
-        } catch (reconnectErr) {
-          this.logger.error(`Force reconnect failed: ${reconnectErr.message}`);
-          // If reconnect() threw, schedule another attempt
-          this.scheduleReconnect(this.reconnectDelay);
-        }
+      if (this.isDestroyed) return;
+      if (this.client.connected) {
+        this.logger.log('MQTT already reconnected, skipping scheduled reconnect.');
+        return;
+      }
+      this.logger.log('Executing forced MQTT reconnect...');
+      try {
+        this.client.reconnect();
+      } catch (reconnectErr) {
+        this.logger.error(`Force reconnect failed: ${reconnectErr.message}`);
+        // If reconnect() threw, schedule another attempt — never give up
+        this.scheduleReconnect(this.reconnectDelay);
       }
     }, delay);
   }

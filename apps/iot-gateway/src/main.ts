@@ -4,7 +4,9 @@ import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  // bufferLogs: false - log ngay lập tức để Docker capture được
+  // bufferLogs: true sẽ giữ log trong RAM → crash trước khi Pino attach = mất toàn bộ logs
+  const app = await NestFactory.create(AppModule, { bufferLogs: false });
   const logger = app.get(Logger);
   app.useLogger(logger);
   const port = process.env.IOT_GATEWAY_PORT || 3003;

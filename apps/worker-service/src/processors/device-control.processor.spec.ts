@@ -43,6 +43,7 @@ describe('DeviceControlProcessor', () => {
         findMany: jest.fn(),
       },
       scene: {
+        findUnique: jest.fn(),
         findMany: jest.fn(),
         update: jest.fn(),
       },
@@ -134,19 +135,57 @@ describe('DeviceControlProcessor', () => {
         data: { sceneId: 'scene-1', chainDepth: 5 }, // MAX_SCENE_CHAIN_DEPTH = 5
       } as unknown as Job;
 
-      const result = await processor.process(job) as any;
+      const result = (await processor.process(job)) as any;
       expect(result.success).toBe(false);
       expect(result.error).toEqual('chain_depth_exceeded');
     });
 
     it('should reject if mutex lock cannot be acquired', async () => {
-      redisService.setnxWithTtl = jest.fn().mockResolvedValue(false); // could not acquire
+      // Mock scene load (Step 1)
+      databaseService.scene.findUnique.mockResolvedValueOnce({
+        id: 'scene-1',
+        active: true,
+        actions: [
+          { deviceToken: 'dev-1', entityCode: 'switch_1', value: true },
+        ],
+        compiledActions: null,
+        compiledAt: null,
+        homeId: 'home-1',
+      });
+
+      // Mock device version query (Step 2)
+      databaseService.device.findMany
+        .mockResolvedValueOnce([
+          { id: 'dev-1', token: 'dev-1', protocol: 'MQTT', configVersion: 1 },
+        ])
+        // Mock full entity fetch for re-compile (since compiledActions is null)
+        .mockResolvedValueOnce([
+          {
+            token: 'dev-1',
+            protocol: 'MQTT',
+            configVersion: 1,
+            entities: [
+              {
+                code: 'switch_1',
+                commandKey: 'switch_1',
+                commandSuffix: 'set',
+              },
+            ],
+          },
+        ]);
+
+      // Mock scene.update for compile persist (fire-and-forget)
+      databaseService.scene.update.mockResolvedValue(undefined);
+
+      // Mock mutex lock fail
+      redisService.setnxWithTtl = jest.fn().mockResolvedValue(false);
+
       const job = {
         name: DEVICE_JOBS.RUN_SCENE,
         data: { sceneId: 'scene-1', chainDepth: 2 },
       } as unknown as Job;
 
-      const result = await processor.process(job) as any;
+      const result = (await processor.process(job)) as any;
       expect(result.success).toBe(false);
       expect(result.error).toEqual('already_running');
     });

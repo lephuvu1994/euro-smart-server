@@ -8,7 +8,12 @@ export class MqttGenericDriver implements IDeviceDriver {
   name = 'mqtt';
   private readonly logger = new Logger(MqttGenericDriver.name);
 
-  constructor(private mqttService: MqttService) {}
+  // Expose mqttService so executor can do direct lean publish with compiled topics
+  readonly mqttService: MqttService;
+
+  constructor(mqttService: MqttService) {
+    this.mqttService = mqttService;
+  }
 
   /**
    * Gửi lệnh điều khiển 1 entity.
@@ -38,29 +43,38 @@ export class MqttGenericDriver implements IDeviceDriver {
 
   /**
    * Gửi lệnh bulk cho nhiều entities cùng 1 device.
-   * Gộp nhiều entity values vào 1 MQTT message.
+   * [SCENE SCALING FIX] Group entities theo commandSuffix trước khi publish
+   * để tránh gửi nhầm topic khi các entities dùng suffix khác nhau.
    */
   async setValueBulk(device: any, entities: DeviceEntity[]): Promise<boolean> {
     try {
       if (entities.length === 0) return true;
 
-      // Dùng commandSuffix của entity đầu tiên (bulk thường cùng suffix)
-      const suffix = ((entities[0] as any).commandSuffix ?? 'set').replace(
-        /^\//,
-        '',
-      );
-      const topic = `device/${device.token}/${suffix}`;
-
-      // Gộp payload: { commandKey1: value1, commandKey2: value2, ... }
-      const payload: Record<string, any> = {};
-      for (const entity of entities as any[]) {
-        if (entity.commandKey) {
-          payload[entity.commandKey] = entity.state ?? entity.stateText ?? '';
-        }
+      // Group by commandSuffix — mỗi suffix là 1 MQTT message riêng
+      const bySuffix = new Map<string, DeviceEntity[]>();
+      for (const entity of entities) {
+        const suffix = ((entity as any).commandSuffix ?? 'set').replace(
+          /^\//,
+          '',
+        );
+        const group = bySuffix.get(suffix) ?? [];
+        group.push(entity);
+        bySuffix.set(suffix, group);
       }
 
-      const payloadStr = JSON.stringify(payload);
-      await this.mqttService.publish(topic, payloadStr, { qos: 1 });
+      for (const [suffix, group] of bySuffix) {
+        const topic = `device/${device.token}/${suffix}`;
+        const payload: Record<string, any> = {};
+        for (const entity of group as any[]) {
+          if (entity.commandKey) {
+            payload[entity.commandKey] = entity.state ?? entity.stateText ?? '';
+          }
+        }
+        await this.mqttService.publish(topic, JSON.stringify(payload), {
+          qos: 1,
+        });
+      }
+
       return true;
     } catch (error: unknown) {
       this.logger.error(
@@ -72,10 +86,9 @@ export class MqttGenericDriver implements IDeviceDriver {
 
   /**
    * Gửi raw payload đến device command topic (không cần entity).
-   * Topic: {company}/{model}/{token}/set
+   * Topic: device/{token}/set
    * Dùng cho: unbind, OTA URL, system commands...
    */
-   
   async publishRaw(
     device: any,
     payload: Record<string, any>,

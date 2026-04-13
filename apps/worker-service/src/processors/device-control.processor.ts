@@ -6,10 +6,16 @@ import { Job, Queue } from 'bullmq';
 import { Logger } from '@nestjs/common';
 import { APP_BULLMQ_QUEUES } from '@app/common';
 import { RedisService } from '@app/redis-cache';
-import { IntegrationManager, SceneTriggerType, DEVICE_JOBS, SceneTriggerIndexService } from '@app/common';
+import {
+  IntegrationManager,
+  SceneTriggerType,
+  DEVICE_JOBS,
+  SceneTriggerIndexService,
+} from '@app/common';
 import { SocketEventPublisher } from '@app/common/events/socket-event.publisher';
 import { DatabaseService } from '@app/database';
 import { DeviceEntity } from '@prisma/client';
+import { MqttGenericDriver } from '@app/common/integration/drivers/mqtt-generic.driver';
 
 // ---------------------------------------------------------------------------
 // Typed interfaces for job payloads (avoid `any`)
@@ -21,7 +27,7 @@ interface ControlCmdPayload {
   value: string | number | boolean;
   userId?: string;
   source?: string;
-  issuedAt?: number;  // Unix ms timestamp — used for TTL expiry check
+  issuedAt?: number; // Unix ms timestamp — used for TTL expiry check
 }
 
 interface EntityPayload {
@@ -33,7 +39,7 @@ interface ControlDeviceValueCmdPayload {
   token: string;
   entityPayloads: EntityPayload[];
   userId?: string;
-  issuedAt?: number;  // Unix ms timestamp — used for TTL expiry check
+  issuedAt?: number; // Unix ms timestamp — used for TTL expiry check
 }
 
 interface SceneAction {
@@ -49,43 +55,58 @@ interface SceneDeviceAction {
 }
 
 /**
- * Payload for SCENE_DEVICE_ACTIONS job.
- * Contains ALL metadata needed for execution — NO DB lookup required in the handler.
- * Pre-fetched by handleRunScene for O(1) batched I/O.
+ * [SCENE SCALING] Compiled action — pre-resolved at create/update time.
+ * Contains ALL MQTT routing info so executor fires without any DB lookup.
+ */
+interface CompiledSceneAction {
+  deviceToken: string;
+  entityCode: string;
+  value: string | number | boolean;
+  delayMs?: number;
+  protocol: string;
+  commandKey: string | null;
+  commandSuffix: string;
+}
+
+/**
+ * Payload for SCENE_DEVICE_ACTIONS job (delayed actions).
+ * All MQTT metadata is pre-embedded — NO DB lookup required in the handler.
  */
 interface SceneDeviceActionsPayload {
   deviceToken: string;
-  deviceId: string;     // Pre-resolved — eliminates findUnique in handler
-  protocol: string;     // Pre-resolved — driver lookup without DB
-  actions: SceneDeviceAction[];
+  deviceId: string;
+  protocol: string;
+  /** Compiled actions with commandKey/commandSuffix resolved */
+  compiledActions: Array<{
+    entityCode: string;
+    value: string | number | boolean;
+    commandKey: string | null;
+    commandSuffix: string;
+  }>;
   sceneId: string;
+  homeId: string;
 }
 
 interface CheckDeviceStateTriggersPayload {
   deviceToken: string;
-  chainDepth?: number;  // Anti-loop Layer 3: cross-scene chain depth counter
-  updates?: { entityCode: string; state: string | number | boolean; attributes?: Record<string, unknown>[] }[];
+  chainDepth?: number; // Anti-loop Layer 3: cross-scene chain depth counter
+  updates?: {
+    entityCode: string;
+    state: string | number | boolean;
+    attributes?: Record<string, unknown>[];
+  }[];
 }
 
 // ---------------------------------------------------------------------------
 // Anti-loop & performance constants
 // ---------------------------------------------------------------------------
 
-/** Scene execution mutex TTL — prevents double-fire. Let it expire naturally.
- *  Kept short (10s) because its only purpose is preventing concurrent trigger
- *  evaluations from double-queuing. Rate-limiting is handled by minIntervalSeconds. */
-const SCENE_LOCK_TTL_S = 10;
-
-/**
- * Chain depth marker TTL — communicated to iot-gateway via Redis so it can
- * pass chainDepth to CHECK_DEVICE_STATE_TRIGGERS jobs. Longer than v1's
- * scene:origin because chain markers must survive slow device round-trips.
- */
+const SCENE_LOCK_TTL_S = 10; // minimum — dynamic TTL overrides for delay>0 scenes
 const SCENE_CHAIN_TTL_S = 30;
-
-/** Max scene→trigger→scene hops. 5 allows complex legitimate cascades (A→B→C→D→E)
- * while capping infinite loops (A→B→A→B→...). */
 const MAX_SCENE_CHAIN_DEPTH = 5;
+/** Max actions executed inline (delay=0) per scene without creating sub-jobs.
+ *  Prevents a single RUN_SCENE job from holding a worker slot > ~500ms. */
+const INLINE_ACTION_CAP = 200;
 
 type CompareOperator = 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte';
 
@@ -277,9 +298,9 @@ export class DeviceControlProcessor extends WorkerHost {
       if (userId) {
         const cachePromises = entityPayloads.map((ep) => {
           const cacheKey = `cmd_user:${token}:${ep.entityCode}`;
-          return this.redisService.sadd(cacheKey, userId).then(() =>
-            this.redisService.expire(cacheKey, 120),
-          );
+          return this.redisService
+            .sadd(cacheKey, userId)
+            .then(() => this.redisService.expire(cacheKey, 120));
         });
         await Promise.all(cachePromises);
       }
@@ -334,27 +355,31 @@ export class DeviceControlProcessor extends WorkerHost {
 
   /**
    * ═══════════════════════════════════════════════════════════════════════════
-   * RUN_SCENE: Orchestrator — single source of I/O for scene execution.
+   * RUN_SCENE: Orchestrator — [SCENE SCALING v2]
    * ═══════════════════════════════════════════════════════════════════════════
    *
-   * Performance strategy (all I/O is O(1) regardless of device count):
-   *  1. One DB query  — load scene
-   *  2. One DB query  — batch pre-fetch ALL target devices
-   *  3. One Redis pipeline — write ALL scene:chain depth markers
-   *  4. One BullMQ addBulk — enqueue ALL sub-jobs
-   *
-   * Anti-loop:
-   *  Layer 2 — setnx mutex `scene:lock:{sceneId}` with TTL.
-   *            Do NOT manually release — let TTL expire to close the race window
-   *            between enqueue and sub-job execution.
-   *  Layer 3 — chainDepth counter from trigger evaluator (reject at depth ≥ 5).
+   * Strategy:
+   * 1. Load scene (compiled actions embedded).
+   * 2. Light DB query: device tokens → configVersion (NO entity join).
+   * 3. Lazy re-compile if any device.configVersion > compiledAt (0.1% case).
+   * 4. Dynamic lock TTL = max(10s, maxDelay + 15s) — delay up to 1h supported.
+   * 5. Zero-delay actions (≤0ms): fired inline DIRECTLY via MQTT — no sub-job.
+   * 6. Delayed actions (>0ms): enqueued as sub-jobs with compiled metadata.
+   * 7. Batch socket emit: 1 SCENE_EXECUTED event instead of N COMMAND_SENT.
    */
-  private async handleRunScene(
-    job: Job,
-  ): Promise<{ success: boolean; sceneId?: string; deviceCount?: number; actionCount?: number; error?: string }> {
-    const { sceneId, chainDepth } = job.data as { sceneId: string; chainDepth?: number };
+  private async handleRunScene(job: Job): Promise<{
+    success: boolean;
+    sceneId?: string;
+    deviceCount?: number;
+    actionCount?: number;
+    error?: string;
+  }> {
+    const { sceneId, chainDepth } = job.data as {
+      sceneId: string;
+      chainDepth?: number;
+    };
 
-    // ── Layer 3: Cross-scene chain depth guard ─────────────────────────────
+    // ── Layer 3: Cross-scene chain depth guard ─────────────────────────
     if ((chainDepth ?? 0) >= MAX_SCENE_CHAIN_DEPTH) {
       this.logger.warn(
         `[ANTI-LOOP] Scene ${sceneId}: chain depth ${chainDepth} exceeds max ${MAX_SCENE_CHAIN_DEPTH}, rejecting`,
@@ -362,17 +387,7 @@ export class DeviceControlProcessor extends WorkerHost {
       return { success: false, sceneId, error: 'chain_depth_exceeded' };
     }
 
-    // ── Layer 2: Execution mutex ──────────────────────────────────────────
-    // setnx returns true only if the key did NOT exist → first caller wins.
-    // TTL expires naturally — do NOT del() early to close the race window.
-    const lockKey = `scene:lock:${sceneId}`;
-    const acquired = await this.redisService.setnxWithTtl(lockKey, '1', SCENE_LOCK_TTL_S * 1000);
-    if (!acquired) {
-      this.logger.warn(`[ANTI-LOOP] Scene ${sceneId}: already running (mutex), skip`);
-      return { success: false, sceneId, error: 'already_running' };
-    }
-
-    // ── Step 1: Load scene (1 DB query) ────────────────────────────────────
+    // ── Step 1: Load scene ──────────────────────────────────────────────────
     const scene = await this.databaseService.scene.findUnique({
       where: { id: sceneId },
     });
@@ -381,174 +396,375 @@ export class DeviceControlProcessor extends WorkerHost {
       this.logger.error(`Scene ${sceneId} not found`);
       return { success: false, error: 'Scene not found' };
     }
-
     if (!scene.active) {
       this.logger.warn(`Scene ${sceneId} is inactive, skip`);
       return { success: false, error: 'Scene is inactive' };
     }
 
-    const actions = (scene.actions as unknown as SceneAction[]) ?? [];
-    if (actions.length === 0) {
-      this.logger.warn(`Scene ${sceneId} has no actions`);
+    const rawActions = (scene.actions as unknown as SceneAction[]) ?? [];
+    if (rawActions.length === 0) {
       return { success: true, sceneId, deviceCount: 0, actionCount: 0 };
     }
 
-    // ── Step 2: Group actions by (deviceToken, delayMs) ───────────────────
-    // Actions on the same device with different delays go into separate sub-jobs
-    // so BullMQ's native `delay` option handles the timing (no setTimeout hacks).
-    // Example: "close curtain (0ms) → wait 5s → turn off light (5000ms)"
-    const groupKey = (token: string, delay: number) => `${token}::${delay}`;
-    const byDeviceDelay = new Map<string, { token: string; delayMs: number; actions: SceneDeviceAction[] }>();
-    for (const a of actions) {
-      const delay = a.delayMs ?? 0;
-      const key = groupKey(a.deviceToken, delay);
-      const group = byDeviceDelay.get(key) ?? { token: a.deviceToken, delayMs: delay, actions: [] };
-      group.actions.push({ entityCode: a.entityCode, value: a.value });
-      byDeviceDelay.set(key, group);
+    // ── Step 2: Resolve compiled actions (Hybrid Compiled + Version Check) ──
+    const deviceTokens = [...new Set(rawActions.map((a) => a.deviceToken))];
+
+    // Light query: ONLY configVersion, no entity JOIN
+    const deviceVersions = await this.databaseService.device.findMany({
+      where: { token: { in: deviceTokens } },
+      select: { id: true, token: true, protocol: true, configVersion: true },
+    });
+    const deviceVersionMap = new Map(deviceVersions.map((d) => [d.token, d]));
+
+    // Parse compiled data — support both legacy array format and new { actions, versionSnapshot } format
+    const compiledData = scene.compiledActions as unknown as
+      | {
+          actions?: CompiledSceneAction[];
+          versionSnapshot?: Record<string, number>;
+        }
+      | CompiledSceneAction[]
+      | null;
+
+    let compiledActions: CompiledSceneAction[] | null = null;
+    let versionSnapshot: Record<string, number> = {};
+
+    if (Array.isArray(compiledData)) {
+      // Legacy format (plain array) — force re-compile to upgrade
+      compiledActions = compiledData;
+    } else if (compiledData && 'actions' in compiledData) {
+      compiledActions = compiledData.actions ?? null;
+      versionSnapshot = compiledData.versionSnapshot ?? {};
     }
 
-    // ── Step 3: Batch pre-fetch ALL devices (1 DB query instead of N) ─────
-    const deviceTokens = [...new Set([...byDeviceDelay.values()].map((g) => g.token))];
-    const devices = await this.databaseService.device.findMany({
-      where: { token: { in: deviceTokens } },
-      select: { id: true, token: true, protocol: true },
-    });
-    const deviceMap = new Map(devices.map((d) => [d.token, d]));
+    // Check if any device was reconfigured after last compile
+    const needsRecompile =
+      !compiledActions ||
+      !scene.compiledAt ||
+      deviceVersions.some(
+        (d) => d.configVersion > (versionSnapshot[d.token] ?? 0),
+      );
 
-    // ── Step 4: Write chain depth markers in 1 Redis pipeline ───────────────
-    // scene:chain:{token} = nextDepth is read by iot-gateway's processState.
-    // When the device confirms the state change via MQTT, iot-gateway picks up
-    // this depth and forwards it as chainDepth in the CHECK_DEVICE_STATE_TRIGGERS
-    // job payload — enabling cross-scene loop detection without hard-blocking.
+    if (needsRecompile) {
+      this.logger.log(
+        `[COMPILE] Scene ${sceneId}: lazy re-compiling actions...`,
+      );
+      try {
+        // Full entity fetch for re-compile
+        const devicesWithEntities = await this.databaseService.device.findMany({
+          where: { token: { in: deviceTokens } },
+          select: {
+            token: true,
+            protocol: true,
+            configVersion: true,
+            entities: {
+              select: { code: true, commandKey: true, commandSuffix: true },
+            },
+          },
+        });
+        const devMap = new Map(devicesWithEntities.map((d) => [d.token, d]));
+
+        // Build new version snapshot
+        const newSnapshot: Record<string, number> = {};
+        for (const d of devicesWithEntities) {
+          newSnapshot[d.token] = d.configVersion;
+        }
+
+        compiledActions = rawActions.map((action) => {
+          const dev = devMap.get(action.deviceToken);
+          const entity = dev?.entities.find(
+            (e) => e.code === action.entityCode,
+          );
+          return {
+            ...action,
+            protocol: dev?.protocol ?? 'MQTT',
+            commandKey: entity?.commandKey ?? null,
+            commandSuffix: (entity?.commandSuffix ?? 'set').replace(/^\//, ''),
+          };
+        });
+
+        // Persist re-compiled actions with snapshot (fire-and-forget)
+        const compiledPayload = {
+          actions: compiledActions,
+          versionSnapshot: newSnapshot,
+        };
+        this.databaseService.scene
+          .update({
+            where: { id: sceneId },
+            data: {
+              compiledActions: compiledPayload as unknown as never,
+              compiledAt: new Date(),
+            },
+          })
+          .catch(() => undefined);
+      } catch (err) {
+        this.logger.error(
+          `[COMPILE] Re-compile failed for scene ${sceneId}: ${err}`,
+        );
+        return { success: false, sceneId, error: 'compile_failed' };
+      }
+    }
+
+    if (!compiledActions || compiledActions.length === 0) {
+      return { success: true, sceneId, deviceCount: 0, actionCount: 0 };
+    }
+
+    // ── Step 3: Dynamic lock TTL ────────────────────────────────────────────
+    // Lock TTL grows with max delay to prevent double-fire on long-delay scenes (e.g. 1-hour delay)
+    const maxDelayMs = Math.max(
+      0,
+      ...compiledActions.map((a) => a.delayMs ?? 0),
+    );
+    const dynamicLockTtl = Math.max(
+      SCENE_LOCK_TTL_S,
+      Math.ceil(maxDelayMs / 1000) + 15,
+    );
+    const lockKey = `scene:lock:${sceneId}`;
+    const acquired = await this.redisService.setnxWithTtl(
+      lockKey,
+      '1',
+      dynamicLockTtl * 1000,
+    );
+    if (!acquired) {
+      this.logger.warn(
+        `[ANTI-LOOP] Scene ${sceneId}: already running (mutex), skip`,
+      );
+      return { success: false, sceneId, error: 'already_running' };
+    }
+
+    // ── Step 4: Write chain depth markers via pipeline ─────────────────────
     const nextDepth = (chainDepth ?? 0) + 1;
     const redis = this.redisService.getClient();
-    const pipeline = redis.pipeline();
+    const chainPipeline = redis.pipeline();
     for (const token of deviceTokens) {
-      pipeline.set(`scene:chain:${token}`, String(nextDepth), 'EX', SCENE_CHAIN_TTL_S);
+      chainPipeline.set(
+        `scene:chain:${token}`,
+        String(nextDepth),
+        'EX',
+        SCENE_CHAIN_TTL_S,
+      );
     }
-    await pipeline.exec();
+    await chainPipeline.exec();
 
-    // ── Step 5: Enqueue ALL sub-jobs in 1 BullMQ addBulk (1 Redis pipeline) ─
-    const jobs: Array<{ name: string; data: SceneDeviceActionsPayload; opts: Record<string, unknown> }> = [];
-    for (const [, group] of byDeviceDelay) {
-      const dev = deviceMap.get(group.token);
-      if (!dev) {
-        this.logger.warn(`Scene ${sceneId}: device ${group.token} not found, skipping`);
-        continue;
+    // ── Step 5: Split into inline (delay=0) vs delayed (delay>0) ──────────
+    const inlineActions: CompiledSceneAction[] = [];
+    const delayedActions: CompiledSceneAction[] = [];
+    let inlineCount = 0;
+    for (const action of compiledActions) {
+      if ((action.delayMs ?? 0) === 0 && inlineCount < INLINE_ACTION_CAP) {
+        inlineActions.push(action);
+        inlineCount++;
+      } else {
+        delayedActions.push(action);
       }
-      jobs.push({
-        name: DEVICE_JOBS.SCENE_DEVICE_ACTIONS,
-        data: {
-          deviceToken: group.token,
-          deviceId: dev.id,
-          protocol: dev.protocol,
-          actions: group.actions,
+    }
+
+    // ── Step 6: Inline execution — MQTT directly, NO sub-jobs ─────────────
+    const inlineResults: Array<{
+      token: string;
+      entityCode: string;
+      value: string | number | boolean;
+    }> = [];
+    if (inlineActions.length > 0) {
+      const mqttDriver = this.integrationManager.getDriver(
+        'MQTT',
+      ) as MqttGenericDriver;
+      // Group by (deviceToken, commandSuffix) to batch per topic
+      const byGroup = new Map<string, CompiledSceneAction[]>();
+      for (const action of inlineActions) {
+        const key = `${action.deviceToken}::${action.commandSuffix}`;
+        const group = byGroup.get(key) ?? [];
+        group.push(action);
+        byGroup.set(key, group);
+      }
+      for (const [, groupActions] of byGroup) {
+        const first = groupActions[0];
+        const topic = `device/${first.deviceToken}/${first.commandSuffix}`;
+        const payload: Record<string, string | number | boolean> = {};
+        for (const a of groupActions) {
+          if (a.commandKey) payload[a.commandKey] = a.value;
+        }
+        let published = false;
+        try {
+          await mqttDriver.mqttService.publish(topic, JSON.stringify(payload), {
+            qos: 1,
+          });
+          published = true;
+        } catch (err) {
+          this.logger.warn(`[INLINE] Failed to publish ${topic}: ${err}`);
+        }
+        if (published) {
+          for (const a of groupActions) {
+            inlineResults.push({
+              token: a.deviceToken,
+              entityCode: a.entityCode,
+              value: a.value,
+            });
+          }
+        }
+      }
+    }
+
+    // ── Step 7: Enqueue delayed actions as sub-jobs ────────────────────────
+    if (delayedActions.length > 0) {
+      const byDeviceDelay = new Map<
+        string,
+        { token: string; delayMs: number; actions: CompiledSceneAction[] }
+      >();
+      for (const a of delayedActions) {
+        const key = `${a.deviceToken}::${a.delayMs ?? 0}`;
+        const group = byDeviceDelay.get(key) ?? {
+          token: a.deviceToken,
+          delayMs: a.delayMs ?? 0,
+          actions: [],
+        };
+        group.actions.push(a);
+        byDeviceDelay.set(key, group);
+      }
+      const jobs = [...byDeviceDelay.values()]
+        .filter((g) => deviceVersionMap.has(g.token))
+        .map((g) => ({
+          name: DEVICE_JOBS.SCENE_DEVICE_ACTIONS,
+          data: {
+            deviceToken: g.token,
+            deviceId: deviceVersionMap.get(g.token)!.id,
+            protocol: deviceVersionMap.get(g.token)!.protocol,
+            compiledActions: g.actions.map((a) => ({
+              entityCode: a.entityCode,
+              value: a.value,
+              commandKey: a.commandKey,
+              commandSuffix: a.commandSuffix,
+            })),
+            sceneId,
+            homeId: scene.homeId,
+          } satisfies SceneDeviceActionsPayload,
+          opts: {
+            priority: 2,
+            attempts: 2,
+            removeOnComplete: true,
+            delay: g.delayMs,
+          },
+        }));
+      if (jobs.length > 0) await this.deviceQueue.addBulk(jobs);
+    }
+
+    // ── Step 8: Batch socket emit — 1 event instead of N COMMAND_SENT ──────
+    if (inlineResults.length > 0) {
+      const byDevice = new Map<
+        string,
+        Array<{ entityCode: string; value: string | number | boolean }>
+      >();
+      for (const r of inlineResults) {
+        const group = byDevice.get(r.token) ?? [];
+        group.push({ entityCode: r.entityCode, value: r.value });
+        byDevice.set(r.token, group);
+      }
+      this.socketPublisher
+        .emitToHome(scene.homeId, 'SCENE_EXECUTED', {
           sceneId,
-        },
-        opts: {
-          priority: 2,
-          attempts: 2,
-          removeOnComplete: true,
-          ...(group.delayMs > 0 ? { delay: group.delayMs } : {}),
-        },
-      });
+          sceneName: scene.name,
+          devices: [...byDevice.entries()].map(([token, actions]) => ({
+            token,
+            actions,
+          })),
+          timestamp: new Date(),
+          source: 'scene',
+        })
+        .catch(() => undefined);
     }
 
-    if (jobs.length > 0) {
-      await this.deviceQueue.addBulk(jobs);
-    }
-
-    // ── NOTE: Do NOT release lockKey — let TTL (10s) expire naturally ──────
-    // Releasing early creates a race window where concurrent trigger evaluation
-    // could re-queue this scene before scene:chain markers propagate.
-
+    const totalActions = compiledActions.length;
     this.logger.log(
-      `✅ Scene ${scene.name}: queued ${jobs.length} device job(s) for ${actions.length} action(s)`,
+      `✅ Scene "${scene.name}": ${inlineResults.length} inline + ${delayedActions.length} delayed action(s)`,
     );
     return {
       success: true,
       sceneId,
-      deviceCount: jobs.length,
-      actionCount: actions.length,
+      deviceCount: deviceTokens.length,
+      actionCount: totalActions,
     };
   }
 
   /**
-   * ═══════════════════════════════════════════════════════════════════════════
-   * SCENE_DEVICE_ACTIONS: Lean executor — zero extra Redis writes.
-   * ═══════════════════════════════════════════════════════════════════════════
-   *
-   * scene:chain markers were written by handleRunScene's pipeline, so this
-   * handler has zero Redis writes. Only I/O: 1 DB query + 1 MQTT + 1 Socket.
+   * SCENE_DEVICE_ACTIONS: Executes delayed scene actions.
+   * [SCENE SCALING v2] — uses compiled metadata from payload, ZERO DB queries.
    */
-  private async handleSceneDeviceActions(
-    job: Job,
-  ): Promise<{ success: boolean; deviceToken?: string; entityCount?: number; skipped?: boolean; error?: string }> {
-    const { deviceToken, deviceId, protocol, actions, sceneId } = job.data as SceneDeviceActionsPayload;
+  private async handleSceneDeviceActions(job: Job): Promise<{
+    success: boolean;
+    deviceToken?: string;
+    entityCount?: number;
+    skipped?: boolean;
+    error?: string;
+  }> {
+    const {
+      deviceToken,
+      deviceId,
+      protocol,
+      compiledActions,
+      sceneId,
+      homeId,
+    } = job.data as SceneDeviceActionsPayload;
 
-    // Fetch entities for this device (still needed for driver.setValueBulk entity shape)
-    const device = await this.databaseService.device.findUnique({
-      where: { token: deviceToken },
-      include: { partner: true, deviceModel: true, entities: true },
-    });
-
-    if (!device) {
-      this.logger.error(`Scene device ${deviceToken} not found`);
-      return { success: false, deviceToken, error: 'Device not found' };
-    }
-
-    const actionMap = new Map(actions.map((a) => [a.entityCode, a.value]));
-    const newEntities: DeviceEntity[] = device.entities
-      .filter((e) => actionMap.has(e.code))
-      .map((e) => {
-        const value = actionMap.get(e.code);
-        if (value !== undefined && value !== null) {
-          const numVal = Number(value);
-          if (!Number.isNaN(numVal)) return { ...e, state: numVal, stateText: e.stateText };
-        }
-        return { ...e, stateText: value !== undefined ? String(value) : null };
-      });
-
-    if (newEntities.length === 0) {
-      this.logger.warn(`Scene device ${deviceToken}: no valid actions`);
+    if (!compiledActions || compiledActions.length === 0) {
       return { success: true, deviceToken, skipped: true };
     }
 
     try {
-      // scene:chain depth marker is written by handleRunScene's pipeline — no Redis write needed here.
+      const mqttDriver = this.integrationManager.getDriver(
+        protocol,
+      ) as MqttGenericDriver;
 
-      const driver = this.integrationManager.getDriver(protocol);
-      await driver.setValueBulk(device, newEntities);
+      // Group by commandSuffix — publish 1 MQTT message per suffix
+      const bySuffix = new Map<string, typeof compiledActions>();
+      for (const a of compiledActions) {
+        const group = bySuffix.get(a.commandSuffix) ?? [];
+        group.push(a);
+        bySuffix.set(a.commandSuffix, group);
+      }
+
+      for (const [suffix, actions] of bySuffix) {
+        const topic = `device/${deviceToken}/${suffix}`;
+        const payload: Record<string, string | number | boolean> = {};
+        for (const a of actions) {
+          if (a.commandKey) payload[a.commandKey] = a.value;
+        }
+        await mqttDriver.mqttService.publish(topic, JSON.stringify(payload), {
+          qos: 1,
+        });
+      }
+
       this.logger.log(
-        `✅ Scene device ${deviceToken}: ${newEntities.length} entity(ies)`,
+        `✅ [DELAYED] Scene device ${deviceToken}: ${compiledActions.length} action(s)`,
       );
 
-      // Notify realtime UI
-      await this.socketPublisher.emitToDevice(device.token, 'COMMAND_SENT', {
-        deviceId: device.id,
-        values: newEntities.map((e) => ({
-          entityCode: e.code,
-          value: e.state ?? e.stateText,
-        })),
-        timestamp: new Date(),
-        status: 'sent',
-        source: 'scene',
-      });
+      // Notify UI for delayed actions
+      await this.socketPublisher
+        .emitToHome(homeId, 'SCENE_EXECUTED', {
+          sceneId,
+          devices: [
+            {
+              token: deviceToken,
+              actions: compiledActions.map((a) => ({
+                entityCode: a.entityCode,
+                value: a.value,
+              })),
+            },
+          ],
+          timestamp: new Date(),
+          source: 'scene_delayed',
+        })
+        .catch(() => undefined);
 
       return {
         success: true,
         deviceToken,
-        entityCount: newEntities.length,
+        entityCount: compiledActions.length,
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(`❌ Scene device ${deviceToken}: ${message}`);
-
-      await this.socketPublisher.emitToDevice(device.token, 'COMMAND_ERROR', {
-        deviceId: device.id,
-        error: message,
-      });
-
+      this.logger.error(`❌ [DELAYED] Scene device ${deviceToken}: ${message}`);
+      await this.socketPublisher
+        .emitToHome(homeId, 'COMMAND_ERROR', { deviceToken, error: message })
+        .catch(() => undefined);
       throw error;
     }
   }
@@ -557,27 +773,41 @@ export class DeviceControlProcessor extends WorkerHost {
    * CHECK_DEVICE_STATE_TRIGGERS: Evaluate scene triggers when device state changes.
    * Passes chainDepth to RUN_SCENE to prevent cross-scene loops (Layer 3).
    */
-  private async handleCheckDeviceStateTriggers(job: Job): Promise<{ ok: boolean }> {
-    const { deviceToken, chainDepth } = job.data as CheckDeviceStateTriggersPayload;
+  private async handleCheckDeviceStateTriggers(
+    job: Job,
+  ): Promise<{ ok: boolean }> {
+    const { deviceToken, chainDepth } =
+      job.data as CheckDeviceStateTriggersPayload;
 
-    const sceneIds = await this.sceneTriggerIndexService.getSceneIdsForDevice(deviceToken);
-    
+    const sceneIds =
+      await this.sceneTriggerIndexService.getSceneIdsForDevice(deviceToken);
+
     if (sceneIds.length === 0) {
       return { ok: true };
     }
 
     const scenes = await this.databaseService.scene.findMany({
       where: { id: { in: sceneIds }, active: true },
-      select: { id: true, name: true, triggers: true, minIntervalSeconds: true, lastFiredAt: true },
+      select: {
+        id: true,
+        name: true,
+        triggers: true,
+        minIntervalSeconds: true,
+        lastFiredAt: true,
+      },
     });
 
     // Batch-resolve all deviceTokens → deviceIds upfront (eliminates N+1 queries)
     const allTokens = new Set<string>();
     for (const scene of scenes) {
-      const triggers = Array.isArray(scene.triggers) ? (scene.triggers as Record<string, unknown>[]) : [];
+      const triggers = Array.isArray(scene.triggers)
+        ? (scene.triggers as Record<string, unknown>[])
+        : [];
       for (const trigger of triggers) {
         if (trigger?.['type'] !== SceneTriggerType.DEVICE_STATE) continue;
-        const cfg = trigger['deviceStateConfig'] as { conditions?: ConditionConfig[] } | undefined;
+        const cfg = trigger['deviceStateConfig'] as
+          | { conditions?: ConditionConfig[] }
+          | undefined;
         for (const c of cfg?.conditions ?? []) {
           if (c.deviceToken) allTokens.add(c.deviceToken);
         }
@@ -587,14 +817,18 @@ export class DeviceControlProcessor extends WorkerHost {
     const tokenMap = await this.resolveDeviceTokens([...allTokens]);
 
     for (const scene of scenes) {
-      const triggers = Array.isArray(scene.triggers) ? (scene.triggers as Record<string, unknown>[]) : [];
+      const triggers = Array.isArray(scene.triggers)
+        ? (scene.triggers as Record<string, unknown>[])
+        : [];
       for (const trigger of triggers) {
         if (trigger?.['type'] !== SceneTriggerType.DEVICE_STATE) continue;
 
-        const deviceStateConfig = trigger['deviceStateConfig'] as {
-          conditionLogic: 'and' | 'or';
-          conditions: ConditionConfig[];
-        } | undefined;
+        const deviceStateConfig = trigger['deviceStateConfig'] as
+          | {
+              conditionLogic: 'and' | 'or';
+              conditions: ConditionConfig[];
+            }
+          | undefined;
 
         if (!deviceStateConfig?.conditions?.length) continue;
 
@@ -647,7 +881,9 @@ export class DeviceControlProcessor extends WorkerHost {
   /**
    * Batch-resolve deviceTokens → deviceIds in a single DB query.
    */
-  private async resolveDeviceTokens(tokens: string[]): Promise<Map<string, string>> {
+  private async resolveDeviceTokens(
+    tokens: string[],
+  ): Promise<Map<string, string>> {
     if (tokens.length === 0) return new Map();
     const devices = await this.databaseService.device.findMany({
       where: { token: { in: tokens } },
@@ -656,14 +892,20 @@ export class DeviceControlProcessor extends WorkerHost {
     return new Map(devices.map((d) => [d.token, d.id]));
   }
 
-  private async evaluateConditionsAll(conditions: ConditionConfig[], tokenMap: Map<string, string>): Promise<boolean> {
+  private async evaluateConditionsAll(
+    conditions: ConditionConfig[],
+    tokenMap: Map<string, string>,
+  ): Promise<boolean> {
     for (const c of conditions) {
       if (!(await this.evaluateOneCondition(c, tokenMap))) return false;
     }
     return true;
   }
 
-  private async evaluateConditionsAny(conditions: ConditionConfig[], tokenMap: Map<string, string>): Promise<boolean> {
+  private async evaluateConditionsAny(
+    conditions: ConditionConfig[],
+    tokenMap: Map<string, string>,
+  ): Promise<boolean> {
     for (const c of conditions) {
       if (await this.evaluateOneCondition(c, tokenMap)) return true;
     }
@@ -674,7 +916,10 @@ export class DeviceControlProcessor extends WorkerHost {
    * Evaluate 1 condition: read entity state from Redis, compare with expected value.
    * Uses pre-resolved tokenMap to avoid per-condition DB lookups.
    */
-  private async evaluateOneCondition(condition: ConditionConfig, tokenMap: Map<string, string>): Promise<boolean> {
+  private async evaluateOneCondition(
+    condition: ConditionConfig,
+    tokenMap: Map<string, string>,
+  ): Promise<boolean> {
     const deviceId = tokenMap.get(condition.deviceToken);
     if (!deviceId) return false;
 
@@ -692,10 +937,9 @@ export class DeviceControlProcessor extends WorkerHost {
     }
 
     // Get the value to compare: attribute or primary state
-    let current: string | number | boolean | unknown =
-      condition.attributeKey
-        ? entityState[condition.attributeKey]
-        : entityState.state;
+    let current: string | number | boolean | unknown = condition.attributeKey
+      ? entityState[condition.attributeKey]
+      : entityState.state;
 
     if (current === undefined || current === null) return false;
 
@@ -737,7 +981,9 @@ export class DeviceControlProcessor extends WorkerHost {
    * Hard-delete Device (cascade) + Redis cleanup.
    * Idempotent: safe to call even if device already deleted.
    */
-  private async handleHardDeleteDevice(job: Job): Promise<{ success: boolean; skipped?: boolean; error?: string }> {
+  private async handleHardDeleteDevice(
+    job: Job,
+  ): Promise<{ success: boolean; skipped?: boolean; error?: string }> {
     const { deviceId, token } = job.data as { deviceId: string; token: string };
     this.logger.log(`🗑️ Hard-deleting device: ${deviceId} (token: ${token})`);
 
@@ -747,7 +993,9 @@ export class DeviceControlProcessor extends WorkerHost {
       });
 
       if (!device) {
-        this.logger.warn(`Device ${deviceId} already deleted or not unbound, skipping.`);
+        this.logger.warn(
+          `Device ${deviceId} already deleted or not unbound, skipping.`,
+        );
         return { success: true, skipped: true };
       }
 
@@ -756,7 +1004,9 @@ export class DeviceControlProcessor extends WorkerHost {
 
       // Redis cleanup
       await this.redisService.del(`status:${token}`).catch(() => undefined);
-      await this.redisService.del(`device:shadow:${token}`).catch(() => undefined);
+      await this.redisService
+        .del(`device:shadow:${token}`)
+        .catch(() => undefined);
 
       const trackingKey = `device:${deviceId}:_ekeys`;
       const entityKeys = await this.redisService
@@ -764,7 +1014,9 @@ export class DeviceControlProcessor extends WorkerHost {
         .catch(() => [] as string[]);
 
       if (entityKeys.length > 0) {
-        await this.redisService.del([...entityKeys, trackingKey]).catch(() => undefined);
+        await this.redisService
+          .del([...entityKeys, trackingKey])
+          .catch(() => undefined);
       } else {
         await this.redisService.del(trackingKey).catch(() => undefined);
       }
@@ -773,7 +1025,9 @@ export class DeviceControlProcessor extends WorkerHost {
       return { success: true };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      this.logger.error(`❌ Failed to hard-delete device ${deviceId}: ${message}`);
+      this.logger.error(
+        `❌ Failed to hard-delete device ${deviceId}: ${message}`,
+      );
       return { success: false, error: message };
     }
   }

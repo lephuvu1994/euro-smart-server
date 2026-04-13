@@ -194,13 +194,14 @@ Cho phép người dùng thay đổi thông tin định danh cá nhân như Tên
 ### P3 — Nice to have (Đã hoàn thành ✅)
 
 #### Task P3.1: API — Execution Logs
-- [x] `GET /v1/automation/stats` →  Đã trả về `successCount`, `failCount` sử dụng `ScheduleExecutionLog` model.
+
+- [x] `GET /v1/automation/stats` → Đã trả về `successCount`, `failCount` sử dụng `ScheduleExecutionLog` model.
 
 #### Task P3.2: API — Queue Metrics (admin)
+
 - [x] `GET /v1/admin/metrics/queues` → Đã khai thác BullMQ `getJobCounts()`.
 
 ---
-
 
 ### Technical Context (không được quên khi làm tiếp)
 
@@ -251,9 +252,11 @@ P0 → +2.0 điểm | P1 → +1.5 điểm | P2 → +1.0 điểm | P3 → +2.0 đ
 **Trạng thái**: ✅ Đã hoàn thành (SA Grade).
 
 ### 1. Mô tả tổng quan
+
 Xây dựng lớp giám sát liên tục tình trạng tài nguyên (CPU, RAM, Disk, Swap) của Server vật lý và trạng thái các Docker container. Tách biệt hoàn toàn với Docker (chạy OS-level Crontab) để đảm bảo giám sát hoạt động ngay cả khi hệ sinh thái Docker sập. Hỗ trợ đa kênh (Email + Telegram) cho nhiều người nhận, tự động khởi động lại container bị chết, và chống nhiễu (Strike + Cooldown).
 
 ### 2. Checklist (To-Do)
+
 - [x] Giải pháp đo tài nguyên: Script Bash `server-health.sh` chạy OS-level Crontab hoàn toàn độc lập.
 - [x] Thiết lập logic ngưỡng: Threshold (CPU 85-95%, RAM 85-95%) với Strike counter (vượt ngưỡng 3 lần liên tiếp) & Cooldown (30 phút) để chống spam.
 - [x] Đa kênh cảnh báo: Gửi đồng thời Telegram Bot & Mail Template HTML chuyên nghiệp xử lý bằng Python `smtplib` (Zero pip dependency).
@@ -270,9 +273,11 @@ Xây dựng lớp giám sát liên tục tình trạng tài nguyên (CPU, RAM, D
 **Trạng thái**: ✅ Đã hoàn thành.
 
 ### 1. Mô tả tổng quan
+
 Mỗi 3 giờ sáng hàng ngày, hệ thống sẽ tự động trích xuất toàn bộ dữ liệu từ PostgreSQL (TimescaleDB) và Redis, nén lại thành file zip an toàn và gửi lên một bên thứ ba (Third-party Storage) như AWS S3, Google Drive, hoặc Backblaze B2. Điều này đảm bảo an toàn tuyệt đối khi Server vật lý hỏng ổ cứng hoặc nhà cung cấp VPS bị chập cháy rớt mạng vĩnh viễn.
 
 ### 2. Checklist (To-Do)
+
 - [x] Viết `daily-backup.sh`: Dùng lệnh `docker exec pg_dump` và `redis-cli save` để lấy DB dump + Cache RDB.
 - [x] Nén toàn bộ file `.sql` và `.rdb` kèm timestamp ra file `tar.gz`.
 - [x] Tích hợp Upload Đa hệ: Mặc định gửi **cả 2 kênh** (Telegram Bot + Cloudflare R2/S3). Nếu chưa có S3 key thì chỉ gửi Telegram. Thêm key vào GitHub Secret → redeploy → tự kích hoạt.
@@ -288,9 +293,165 @@ Mỗi 3 giờ sáng hàng ngày, hệ thống sẽ tự động trích xuất to
 **Trạng thái**: ⏳ Lên Kế Hoạch (Planning) - **Xem kế hoạch chi tiết + task tại: [feature_8_mcp_chatbox.md](./feature_8_mcp_chatbox.md)**
 
 ### 1. Mô tả tổng quan
+
 Xây dựng một MCP (Model Context Protocol) Server kết nối trực tiếp vào CSDL của Euro Smart Server để hỗ trợ xây dựng **Chatbox Quản trị viên** trên Admin Dashboard React mới.
-Hệ thống giúp quy tụ mọi thao tác quản lý phức tạp (Tra cứu user, cấp phép license cho model thiết bị, theo dõi trạng thái partner) về chung một cửa sổ giao tiếp tự nhiên. Tương lai sẽ mở rộng tính năng Assistant này cho cả người dùng cuối nếu phù hợp.
+Hệ thống giúp quy tụ mọi thao tác quản lý phức tạp (Tra cứu user, cấp phép license cho model thiết bị, theo dõi trạng thái partner) về chung một cửa sổ giao tiếp tự nhiên.
+
+### Component F: Quản lý Device Group (`core-api`)
+
+- [x] Tạo `DeviceGroup` model trong schema (homeId, name, groupCode).
+- [x] Tạo `DeviceGroupMember` model (groupId, deviceId).
+- [x] Viết API Create/Update/Delete Group (`POST /homes/:homeId/device-groups`).
+- [x] Viết API Add/Remove Device khỏi Group. Khi add/remove, server push lệnh MQTT xuống firmware thiết bị đó (`device/{token}/config`).
+      _Payload ví dụ: `{"command": "join_group", "groupCode": "xyz123"}`_
+
+### Component G: Firmware Group Topic Subscription (Ai-WB2 / BL602)
+
+- [x] Cắt nghĩa cấu trúc payload từ `device/{token}/config`.
+- [x] Khi nhận `join_group`, gọi API MQTT layer để subscribe thêm topic `group/{groupCode}/set`.
+- [x] Ghi nhớ các `groupCode` đang join vào bộ nhớ non-volatile (Flash/EEPROM) để khi mất điện/reboot vẫn tự subscribe lại.
 
 ### 2. Checklist (To-Do)
-*Toàn bộ task checklist chi tiết (bao gồm chia 3 Phase và các nhóm chức năng Tool) đã được lưu vào file [feature_8_mcp_chatbox.md](./feature_8_mcp_chatbox.md).*
 
+_Toàn bộ task checklist chi tiết (bao gồm chia 3 Phase và các nhóm chức năng Tool) đã được lưu vào file [feature_8_mcp_chatbox.md](./feature_8_mcp_chatbox.md)._
+
+---
+
+## Tính năng 9: Scene Execution Scaling (100k+ Thiết Bị — Tối Ưu Hiệu năng Scale)
+
+**Trạng thái**: 🔄 Đang triển khai — P0 ưu tiên cao nhất.
+
+### 1. Mô tả tổng quan
+
+Kiến trúc scene hiện tại đã tối ưu cho ~1,000 thiết bị. Khi scale lên **10,000 người dùng đồng thời trigger scene lúc 23:00** (mỗi nhà ~30 thiết bị → 300,000 device actions), hệ thống sẽ gặp 3 nút thắt nghiêm trọng:
+
+1. **Cron tuần tự**: `for await` 10k lần `queue.add()` → 20 giây delay trước khi scene cuối cùng vào queue.
+2. **300k sub-jobs ảo**: Mỗi `RUN_SCENE` đẻ 30 `SCENE_DEVICE_ACTIONS` jobs dù delay = 0ms → bloat Redis RAM + 300k `findUnique` vào Postgres.
+3. **Compiled Actions thiếu metadata**: `SceneDeviceActionsPayload` comment "NO DB lookup required" nhưng thiếu `commandKey`/`commandSuffix` → handler buộc phải query DB mỗi job.
+
+**Mục tiêu**: 300,000 device actions hoàn tất trong **< 5 giây** (thay vì ~5 phút hiện tại).
+
+---
+
+### 2. Kiến trúc: Hybrid Compiled Scene + Version Check
+
+Khi user lưu/sửa Scene → server **compile đầy đủ metadata** (`protocol`, `commandKey`, `commandSuffix`) vào `compiledActions` JSON.
+
+Khi chạy Scene:
+
+- Load `compiledActions` (không cần query entities)
+- Light query `findMany({ select: { token, configVersion } })` — không JOIN
+- So sánh với `scene.compiledAt`: nếu lệch → lazy re-compile 1 lần
+- 99.9% case: dùng compiled data, **ZERO entity DB queries**
+
+Khi device entity bị sửa (`commandKey`, `commandSuffix`) → bump `device.configVersion` → lần chạy scene tiếp tự heal.
+
+---
+
+### 3. MQTT Group Topic (Kiến trúc mới — Firmware hỗ trợ)
+
+Firmware hiện tại (`app_mqtt.c`) chỉ subscribe 2 topics cố định:
+
+- `device/{token}/set` — lệnh điều khiển
+- `device/{token}/license` — license update
+
+Thêm cơ chế **Group Subscribe** qua topic config:
+
+- `device/{token}/config` → nhận lệnh `join_group` / `leave_group`
+- Firmware subscribe thêm: `group/{groupCode}/set`
+- Server bắn **1 MQTT message** → N thiết bị trong group nhận đồng loạt
+
+Payload format tương thích hoàn toàn với format hiện tại của `app_door_controller_core.c`.
+
+---
+
+### 4. Checklist Triển khai (To-Do)
+
+#### A. Phía Server — Database Schema
+
+- [x] Thêm `compiledActions Json?` và `compiledAt DateTime?` vào model `Scene`
+- [x] Thêm `configVersion Int @default(1)` vào model `Device`
+- [x] Tạo model `DeviceGroup` + `DeviceGroupMember` với `groupCode String @unique`
+- [x] Chạy migration: `prisma migrate dev --name scene_compiled_and_groups`
+
+#### B. Phía Server — Cron Bulk Enqueue (`scene-schedule-cron.service.ts`)
+
+- [x] Bỏ `for await` tuần tự, thay bằng: collect tất cả scene khớp giờ → array
+- [x] Batch check cooldown bằng Redis pipeline (`MGET` + batch `SET NX`)
+- [x] Dùng `deviceControlQueue.addBulk([...])` thay vì N lần `queue.add()`
+- [x] Mục tiêu: 10,000 scenes enqueue trong < 200ms
+
+#### C. Phía Server — Scene Compilation (`scene.service.ts`)
+
+- [x] Thêm method `compileSceneActions(actions, homeId): CompiledSceneAction[]`
+  - Query `device.findMany({ select: { token, protocol, configVersion, entities: { select: { code, commandKey, commandSuffix } } } })`
+  - Embed `protocol`, `commandKey`, `commandSuffix` vào từng action
+- [x] Gọi compile trong `createScene()` khi có actions
+- [x] Gọi compile trong `updateScene()` khi actions thay đổi
+- [x] Bump `device.configVersion` khi entity metadata thay đổi (device service)
+
+#### D. Phía Server — Scene Executor (`device-control.processor.ts`)
+
+- [x] **4a. Compiled Actions + Version Check**: trong `handleRunScene`, dùng `compiledActions` nếu hợp lệ; lazy re-compile nếu bất kỳ device nào có `configVersion` mới hơn `compiledAt`
+- [x] **4b. Zero-delay inline execution**: actions `delayMs = 0` → bắn MQTT trực tiếp trong handler, không tạo sub-job (cap 200 inline/scene)
+- [x] **4c. Delayed sub-jobs với compiled metadata**: actions `delayMs > 0` → tạo job nhưng payload đầy đủ commandKey/commandSuffix → handler không query DB
+- [x] **4d. MQTT Group optimization**: phát hiện devices thuộc cùng group với cùng value → gộp thành 1 MQTT message `group/{groupCode}/set`
+- [x] **4e. Dynamic Lock TTL**: `Math.max(10, Math.ceil(maxDelayMs/1000) + 15)` — hỗ trợ delay bất kỳ (kể cả 1 giờ)
+- [x] **4f. Batch Socket Emit**: thay 30 × `COMMAND_SENT` → 1 × `SCENE_EXECUTED` với mảng toàn bộ device states
+
+#### E. Phía Server — MQTT Driver Fix (`mqtt-generic.driver.ts`)
+
+- [x] Fix `setValueBulk`: group entities theo `commandSuffix` trước khi publish → tránh gửi sai topic
+- [x] Thêm `publishToGroup(groupCode: string, payload: Record<string, any>): Promise<boolean>`
+
+#### F. Phía Server — Device Group API (core-api)
+
+- [x] `POST /v1/homes/:homeId/device-groups` — Tạo group
+- [x] `GET /v1/homes/:homeId/device-groups` — List groups
+- [x] `PUT /v1/device-groups/:groupId/members` — Thêm/xóa devices
+- [x] `DELETE /v1/device-groups/:groupId` — Xóa group
+- [x] Khi add device vào group → gửi MQTT lệnh `join_group` xuống firmware
+
+#### G. Phía Firmware — Group Subscribe (`switch_door`)
+
+> **Firmware context**: Chip BL602/WB2-12F, RTOS FreeRTOS, MQTT client dùng `axk_mqtt_client`.
+> Subscribe trong `MQTT_EVENT_CONNECTED` callback (`app_mqtt.c:81~101`).
+> Xử lý JSON dùng `cJSON` (đã có sẵn trong core).
+
+- [x] Thêm topic buffer `g_group_topics[MAX_GROUPS][64]` + counter `g_group_count` vào `app_mqtt.c`
+- [x] Thêm hàm `app_mqtt_subscribe_group(const char* groupCode)` + `app_mqtt_unsubscribe_group(const char* groupCode)`
+- [x] Load group codes từ Flash khi boot → auto re-subscribe trong `MQTT_EVENT_CONNECTED` (tránh mất sub sau disconnect)
+- [x] Trong `app_conf.h`: thêm `#define MAX_GROUPS 10` và `#define MQTT_TOPIC_GROUP "group/%s/set"`
+- [x] Parse lệnh `join_group`/`leave_group` từ topic `device/{token}/config` trong `app_mqtt.c`'s `g_data_cb`
+- [x] Trong `main.c` hoặc `app_door_controller_core.c`: route message từ topic `group/*/set` sang `execute_cmd_string()` như lệnh thường
+- [x] Lưu group codes vào EasyFlash: `storage_save_groups()` / `storage_get_groups()`
+
+### 5. Redis Key Schema Mới
+
+```
+# Existing (giữ nguyên)
+scene_trigger:device:{deviceToken}   → Set<sceneId>
+scene_trigger:tracked:{sceneId}      → Set<deviceToken>
+scene_cooldown:{sceneId}             → "1" EX 60
+lock:scene_schedule                  → "1" EX 55
+
+# New keys
+device:group:{groupCode}             → Set<deviceToken>  (group membership cache)
+scene:lock:{sceneId}                 → "1" EX <dynamic>  (extended TTL)
+scene:chain:{deviceToken}            → depth EX 30        (existing)
+```
+
+### 6. Verification Plan
+
+```bash
+# Unit tests
+npx nx test worker-service
+npx nx test core-api
+
+# Manual tests
+# Test 1: Scene delay 0s — verify inline MQTT, no sub-job created
+# Test 2: Scene delay 1h — verify BullMQ delayed job, dynamic lock TTL = 3615s
+# Test 3: Compiled invalidation — đổi commandKey của entity → verify lazy re-compile
+# Test 4: Group topic — 3 devices join group, 1 MQTT message → verify cả 3 nhận lệnh
+# Test 5: Cron peak — simulate 100 scenes cùng lúc → verify addBulk < 200ms
+```

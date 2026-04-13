@@ -13,7 +13,7 @@
 #   docker compose up -d server (nếu dùng nodemon/ts-node)
 # ══════════════════════════════════════════════════════════════════
 
-name: aurathink-dev
+name: sensa-smart-dev
 
 services:
   # ─────────────────────────────────────────────
@@ -22,24 +22,24 @@ services:
 
   postgres:
     image: timescale/timescaledb:latest-pg16
-    container_name: aurathink-postgres
+    container_name: sensa-smart-postgres
     restart: unless-stopped
     ports:
       - '${POSTGRES_PORT:-5432}:5432'
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-master123}
-      POSTGRES_DB: ${POSTGRES_DB:-aurathink}
+      POSTGRES_DB: ${POSTGRES_DB:-sensa_smart}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./deploy/docker/timescaledb-init.sql:/docker-entrypoint-initdb.d/01_timescale.sql:ro
     networks:
-      - euro-network
+      - sensa-smart-network
     healthcheck:
       test:
         [
           'CMD-SHELL',
-          'pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-aurathink}',
+          'pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-sensa_smart}',
         ]
       interval: 10s
       timeout: 5s
@@ -48,7 +48,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: aurathink-redis
+    container_name: sensa-smart-redis
     restart: unless-stopped
     ports:
       - '${REDIS_PORT:-6379}:6379'
@@ -59,7 +59,7 @@ services:
     volumes:
       - redis_data:/data
     networks:
-      - euro-network
+      - sensa-smart-network
     healthcheck:
       test:
         - CMD-SHELL
@@ -76,7 +76,7 @@ services:
 
   emqx:
     image: emqx/emqx:5.8.5
-    container_name: aurathink-emqx
+    container_name: sensa-smart-emqx
     restart: unless-stopped
     ports:
       - '1883:1883' # MQTT TCP
@@ -113,7 +113,7 @@ services:
       - emqx_data:/opt/emqx/data
       - emqx_log:/opt/emqx/log
     networks:
-      - euro-network
+      - sensa-smart-network
     healthcheck:
       test: ['CMD-SHELL', 'curl -sf http://localhost:18083/status || exit 1']
       interval: 30s
@@ -129,8 +129,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: aurathink-server:dev
-    container_name: aurathink-core-api
+    image: sensa-smart-server:dev
+    container_name: sensa-smart-core-api
     restart: unless-stopped
     ports:
       - '${HTTP_PORT:-3001}:${HTTP_PORT:-3001}'
@@ -147,7 +147,7 @@ services:
       emqx:
         condition: service_healthy
     networks:
-      - euro-network
+      - sensa-smart-network
     healthcheck:
       test:
         [
@@ -163,8 +163,8 @@ services:
       start_period: 30s
 
   iot-gateway:
-    image: aurathink-server:dev
-    container_name: aurathink-iot-gateway
+    image: sensa-smart-server:dev
+    container_name: sensa-smart-iot-gateway
     restart: unless-stopped
     ports:
       - '${IOT_GATEWAY_PORT:-3003}:${IOT_GATEWAY_PORT:-3003}'
@@ -179,11 +179,11 @@ services:
       emqx:
         condition: service_healthy
     networks:
-      - euro-network
+      - sensa-smart-network
 
   worker-service:
-    image: aurathink-server:dev
-    container_name: aurathink-worker-service
+    image: sensa-smart-server:dev
+    container_name: sensa-smart-worker-service
     restart: unless-stopped
     env_file:
       - .env.docker
@@ -194,14 +194,14 @@ services:
       core-api:
         condition: service_healthy
     networks:
-      - euro-network
+      - sensa-smart-network
 
   # ─────────────────────────────────────────────
   # DATABASE MIGRATION (run once then exit)
   # ─────────────────────────────────────────────
   migrate:
-    image: aurathink-server:dev
-    container_name: aurathink-migrate
+    image: sensa-smart-server:dev
+    container_name: sensa-smart-migrate
     restart: 'no'
     env_file:
       - .env.docker
@@ -210,14 +210,14 @@ services:
       postgres:
         condition: service_healthy
     networks:
-      - euro-network
+      - sensa-smart-network
 
   # ─────────────────────────────────────────────
   # EMQX LOCAL SETUP (run once then exit)
   # ─────────────────────────────────────────────
   emqx-setup:
     image: alpine:latest
-    container_name: aurathink-emqx-setup
+    container_name: sensa-smart-emqx-setup
     restart: 'no'
     volumes:
       - ./deploy/docker/init-emqx-auth.sh:/app/init-emqx-auth.sh:ro
@@ -231,23 +231,23 @@ services:
       emqx:
         condition: service_healthy
     networks:
-      - euro-network
+      - sensa-smart-network
 
 # ─────────────────────────────────────────────
 # NETWORKS & VOLUMES
 # ─────────────────────────────────────────────
 
 networks:
-  euro-network:
+  sensa-smart-network:
     driver: bridge
-    name: aurathink-network
+    name: sensa-smart-network
 
 volumes:
   postgres_data:
-    name: aurathink-postgres-data
+    name: sensa-smart-postgres-data
   redis_data:
-    name: aurathink-redis-data
+    name: sensa-smart-redis-data
   emqx_data:
-    name: aurathink-emqx-data
+    name: sensa-smart-emqx-data
   emqx_log:
-    name: aurathink-emqx-log
+    name: sensa-smart-emqx-log

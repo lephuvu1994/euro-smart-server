@@ -10,10 +10,10 @@
 
 ```bash
 # Build
-docker build -t your-registry/aurathink-server:latest .
+docker build -t your-registry/sensa-smart-server:latest .
 
 # Push
-docker push your-registry/aurathink-server:latest
+docker push your-registry/sensa-smart-server:latest
 ```
 
 > **Note**: Update `image:` in all deployment YAML files to match your registry.
@@ -50,24 +50,24 @@ kubectl apply -f deploy/k8s/
 
 ```bash
 # Check all pods are running
-kubectl get pods -n aurathink
+kubectl get pods -n sensa-smart
 
 # Check services
-kubectl get svc -n aurathink
+kubectl get svc -n sensa-smart
 
 # View logs
-kubectl logs -f deployment/core-api -n aurathink
+kubectl logs -f deployment/core-api -n sensa-smart
 
 # Check HPA status
-kubectl get hpa -n aurathink
+kubectl get hpa -n sensa-smart
 ```
 
 ## Run Migrations
 
 ```bash
 kubectl run db-migrate --rm -it \
-  --image=your-registry/aurathink-server:latest \
-  --namespace=aurathink \
+  --image=your-registry/sensa-smart-server:latest \
+  --namespace=sensa-smart \
   --env="DATABASE_URL=your-database-url" \
   -- npx prisma migrate deploy
 ```
@@ -76,19 +76,19 @@ kubectl run db-migrate --rm -it \
 
 ```bash
 # Build, push, then rolling update
-docker build -t your-registry/aurathink-server:v2 .
-docker push your-registry/aurathink-server:v2
-kubectl set image deployment/core-api core-api=your-registry/aurathink-server:v2 -n aurathink
-kubectl set image deployment/socket-gateway socket-gateway=your-registry/aurathink-server:v2 -n aurathink
-kubectl set image deployment/iot-gateway iot-gateway=your-registry/aurathink-server:v2 -n aurathink
-kubectl set image deployment/worker-service worker-service=your-registry/aurathink-server:v2 -n aurathink
+docker build -t your-registry/sensa-smart-server:v2 .
+docker push your-registry/sensa-smart-server:v2
+kubectl set image deployment/core-api core-api=your-registry/sensa-smart-server:v2 -n sensa-smart
+kubectl set image deployment/socket-gateway socket-gateway=your-registry/sensa-smart-server:v2 -n sensa-smart
+kubectl set image deployment/iot-gateway iot-gateway=your-registry/sensa-smart-server:v2 -n sensa-smart
+kubectl set image deployment/worker-service worker-service=your-registry/sensa-smart-server:v2 -n sensa-smart
 ```
 
 ## Scaling
 
 ```bash
 # Manual scaling
-kubectl scale deployment core-api --replicas=5 -n aurathink
+kubectl scale deployment core-api --replicas=5 -n sensa-smart
 
 # HPA handles auto-scaling for core-api (min: 2, max: 10)
 ```

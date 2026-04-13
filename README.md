@@ -29,7 +29,7 @@ NX Monorepo cho hệ thống **Smart Home IoT** — 4 microservices NestJS, depl
               └────────────────────────┘
 ```
 
-**Shared Libraries**: `@aurathink-server/common` · `@aurathink-server/database` · `@aurathink-server/redis-cache`
+**Shared Libraries**: `@sensa-smart/common` · `@sensa-smart/database` · `@sensa-smart/redis-cache`
 
 ---
 
@@ -122,7 +122,7 @@ docker compose -f docker-compose.prod.yml -f docker-compose.vps2.yml --profile l
 ## 📁 Cấu Trúc Dự Án
 
 ```
-aurathink-server/
+sensa-smart-server/
 ├── apps/
 │   ├── core-api/               # REST API chính
 │   ├── socket-gateway/         # WebSocket server + RedisIoAdapter

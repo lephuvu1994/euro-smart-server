@@ -67,7 +67,7 @@ if [ ! -f .env ]; then
     RANDOM_MQTT_PASS=$(openssl rand -base64 16)
     
     sed -i "s/POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=\"$RANDOM_DB_PASS\"/" .env
-    sed -i "s/DATABASE_URL=.*/DATABASE_URL=\"postgresql:\/\/postgres:$RANDOM_DB_PASS@postgres:5432\/aurathink?schema=public\"/" .env
+    sed -i "s/DATABASE_URL=.*/DATABASE_URL=\"postgresql:\/\/postgres:$RANDOM_DB_PASS@postgres:5432\/sensa_smart?schema=public\"/" .env
     
     sed -i "s/REDIS_PASSWORD=.*/REDIS_PASSWORD=\"$RANDOM_REDIS_PASS\"/" .env
     sed -i "s/MQTT_PASS=.*/MQTT_PASS=\"$RANDOM_MQTT_PASS\"/" .env
@@ -83,7 +83,7 @@ fi
 # BƯỚC 3: Yêu cầu thông tin Domain & Fix SSL Chicken-Egg
 # ────────────────────────────────────────────────────────
 log "3. Xử lý bài toán Domain & HTTPS SSL"
-read -p "Nhập Domain của bạn (ex: aurathink.ddns.net): " APP_DOMAIN
+read -p "Nhập Domain của bạn (ex: sensasmart.ddns.net): " APP_DOMAIN
 read -p "Nhập Email của bạn (để Let's encrypt báo hạn): " APP_EMAIL
 
 if [ -z "$APP_DOMAIN" ] || [ -z "$APP_EMAIL" ]; then
@@ -172,21 +172,21 @@ sh ./deploy/docker/init-emqx-auth.sh || warn "Có lỗi khi chạy init-emqx-aut
 log "7. Cài đặt hệ thống giám sát sức khoẻ Server..."
 
 # Tạo thư mục lưu trạng thái (persistent qua reboot)
-mkdir -p /var/lib/aurathink-monitor
+mkdir -p /var/lib/sensa-smart-monitor
 
 # Cấp quyền chạy cho script giám sát
 chmod +x "$PWD/deploy/monitoring/server-health.sh"
 
 # Cài đặt Crontab tự động (chạy mỗi 3 phút)
 MONITOR_SCRIPT="$PWD/deploy/monitoring/server-health.sh"
-CRON_JOB="*/3 * * * * /bin/bash $MONITOR_SCRIPT >> /var/log/aurathink-monitor-cron.log 2>&1"
+CRON_JOB="*/3 * * * * /bin/bash $MONITOR_SCRIPT >> /var/log/sensa-smart-monitor-cron.log 2>&1"
 
 # Kiểm tra nếu crontab chưa có dòng này thì mới thêm (idempotent)
 (crontab -l 2>/dev/null | grep -qF "server-health.sh") || \
     (crontab -l 2>/dev/null; echo "$CRON_JOB") | crontab -
 
 # Cài đặt logrotate cho file log giám sát
-cp "$PWD/deploy/monitoring/logrotate-monitor.conf" /etc/logrotate.d/aurathink-monitor 2>/dev/null || true
+cp "$PWD/deploy/monitoring/logrotate-monitor.conf" /etc/logrotate.d/sensa-smart-monitor 2>/dev/null || true
 
 success "Hệ thống Monitoring đã được cài đặt! Cảnh báo sẽ chạy mỗi 3 phút."
 warn "Nhớ cấu hình TELEGRAM_BOT_TOKEN và TELEGRAM_CHAT_IDS trong file .env để nhận cảnh báo!"
@@ -201,7 +201,7 @@ chmod +x "$PWD/deploy/monitoring/daily-backup.sh"
 
 # Cài đặt Crontab tự động (chạy vào 03:00 sáng mỗi ngày)
 BACKUP_SCRIPT="$PWD/deploy/monitoring/daily-backup.sh"
-BACKUP_CRON="0 3 * * * /bin/bash $BACKUP_SCRIPT >> /var/log/aurathink-backup-cron.log 2>&1"
+BACKUP_CRON="0 3 * * * /bin/bash $BACKUP_SCRIPT >> /var/log/sensa-smart-backup-cron.log 2>&1"
 
 # Kiểm tra nếu crontab chưa có dòng này thì mới thêm
 (crontab -l 2>/dev/null | grep -qF "daily-backup.sh") || \

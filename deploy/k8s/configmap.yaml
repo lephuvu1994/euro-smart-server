@@ -1,11 +1,11 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: aurathink-config
-  namespace: aurathink
+  name: sensa-smart-config
+  namespace: sensa-smart
 data:
   APP_ENV: "production"
-  APP_NAME: "aurathink"
+  APP_NAME: "sensa-smart"
   APP_DEBUG: "false"
   APP_LOG_LEVEL: "info"
   HTTP_HOST: "0.0.0.0"

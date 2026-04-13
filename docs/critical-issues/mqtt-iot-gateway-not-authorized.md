@@ -7,12 +7,15 @@
 **Severity:** Critical (thiết bị phần cứng mất kết nối hoàn toàn)  
 **Services:** `iot-gateway`, `emqx`, `core-api`, `nginx`
 
+> [!WARNING]
+> **Post-Fix Incident (2026-04-13):** Trong quá trình fix, một sửa đổi sai (`external: true` + `name: sensa-smart-network`) đã gây ra lỗi CI/CD deploy khác. Xem phần **Pitfalls** cuối file.
+
 ---
 
 ## 🔥 Triệu chứng
 
 ```
-# docker logs aurathink-iot-gateway-prod
+# docker logs sensa-smart-iot-gateway-prod
 
 {"level":"ERROR","context":"MqttService","message":"MQTT Error: Connection refused: Not authorized"}
 {"level":"WARN","context":"MqttService","message":"Auth/Connection error detected — forcing reconnect in 10s..."}
@@ -21,7 +24,7 @@
 ```
 
 - Log **bị đóng băng** tại thời điểm lỗi, không có log mới dù container vẫn running
-- `docker exec aurathink-emqx-prod emqx_ctl clients list` chỉ thấy `core-api` — **không thấy `iot-gateway`**
+- `docker exec sensa-smart-emqx-prod emqx_ctl clients list` chỉ thấy `core-api` — **không thấy `iot-gateway`**
 - EMQX dashboard stats: `not_authorized` count tăng dần
 - Thiết bị phần cứng publish lên EMQX nhưng **không có service nhận** (subscriptions=0)
 - Restart `iot-gateway` bằng `docker restart` không có tác dụng vì logs vẫn cũ do `bufferLogs: true`
@@ -59,19 +62,19 @@ iot-gateway:
 # Compose tạo NETWORK MỚI thay vì dùng network có sẵn
 
 NETWORK ID     NAME                     DRIVER
-d121a17aed6e   aurathink-network        bridge   ← network cũ (core-api, worker)
-ec48de9164f5   aurathink-prod-network   bridge   ← network mới (emqx, nginx, iot-gateway)
+d121a17aed6e   sensa-smart-network        bridge   ← network cũ (core-api, worker)
+ec48de9164f5   sensa-smart-prod-network   bridge   ← network mới (emqx, nginx, iot-gateway)
 ```
 
-- Container cũ (`aurathink-network`) chứa: `core-api`, `worker-service`
-- Container mới (`aurathink-prod-network`) chứa: `emqx`, `nginx`, `redis`, `postgres`, `iot-gateway`
+- Container cũ (`sensa-smart-network`) chứa: `core-api`, `worker-service`
+- Container mới (`sensa-smart-prod-network`) chứa: `emqx`, `nginx`, `redis`, `postgres`, `iot-gateway`
 - **2 networks hoàn toàn cô lập** → nginx proxy `http://core-api:3001` thất bại silently
 
 ### Tầng 3 — EMQX Erlang DNS Cache
 
 - EMQX Erlang HTTP client cache IP resolution của `nginx`
 - Sau khi network bị recreate (IP thay đổi), EMQX tiếp tục dùng IP cũ → connection fail
-- Giải pháp tạm: `docker restart aurathink-emqx-prod` để flush Erlang DNS cache
+- Giải pháp tạm: `docker restart sensa-smart-emqx-prod` để flush Erlang DNS cache
 - **Đây là lý do tại sao nginx config dùng port 3002 riêng** (`enable_pipelining = 1` + `valid=10s` DNS resolver) nhưng Erlang vẫn cache lâu hơn
 
 ### Tầng 4 — bufferLogs:true Che Logs
@@ -83,7 +86,7 @@ const app = await NestFactory.create(AppModule, { bufferLogs: true });
 
 - `bufferLogs: true` → Pino giữ log trong RAM cho đến khi được attach
 - Nếu app crash hoặc freeze trước khi Pino attach → **mất toàn bộ logs startup**
-- `docker logs aurathink-iot-gateway-prod` chỉ hiện log từ lần khởi động trước
+- `docker logs sensa-smart-iot-gateway-prod` chỉ hiện log từ lần khởi động trước
 
 ---
 
@@ -115,10 +118,10 @@ worker-service:
 
 ```yaml
 networks:
-  euro-internal:
+  sensa-internal:
     # ✅ FIX: Dùng network có sẵn, không để compose tạo mới
     external: true
-    name: aurathink-network
+    name: sensa-smart-network
 ```
 
 ### Fix 3: `apps/iot-gateway/src/main.ts` — Tắt bufferLogs
@@ -144,13 +147,13 @@ const app = await NestFactory.create(AppModule, { bufferLogs: false });
 
 ```bash
 # Check log iot-gateway - có frozen tại lỗi "Not authorized" không?
-docker logs aurathink-iot-gateway-prod --tail 20
+docker logs sensa-smart-iot-gateway-prod --tail 20
 
 # Check EMQX clients - iot-gateway có kết nối không?
-docker exec aurathink-emqx-prod emqx_ctl clients list
+docker exec sensa-smart-emqx-prod emqx_ctl clients list
 
 # Check subscriptions - có 5 topics không?
-docker exec aurathink-emqx-prod emqx_ctl subscriptions list | grep 'mqttjs_'
+docker exec sensa-smart-emqx-prod emqx_ctl subscriptions list | grep 'mqttjs_'
 ```
 
 **Dấu hiệu bị lỗi:**
@@ -162,21 +165,21 @@ docker exec aurathink-emqx-prod emqx_ctl subscriptions list | grep 'mqttjs_'
 
 ```bash
 # Liệt kê tất cả networks
-docker network ls | grep aurathink
+docker network ls | grep sensa-smart
 
 # Xem container nào trong network nào
 docker ps -a --format '{{.Names}} {{.Networks}}'
 
 # QUAN TRỌNG: core-api và iot-gateway phải cùng network
-docker inspect aurathink-core-api-prod --format 'Networks: {{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}'
-docker inspect aurathink-iot-gateway-prod --format 'Networks: {{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}'
+docker inspect sensa-smart-core-api-prod --format 'Networks: {{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}'
+docker inspect sensa-smart-iot-gateway-prod --format 'Networks: {{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}'
 ```
 
 ### Bước 3: Test auth webhook trực tiếp
 
 ```bash
 # Test từ bên trong iot-gateway container đến core-api auth endpoint
-docker exec aurathink-iot-gateway-prod node -e "
+docker exec sensa-smart-iot-gateway-prod node -e "
 fetch('http://core-api:3001/v1/internal/emqx/auth', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
@@ -205,8 +208,8 @@ c.on('connect', () => { clearTimeout(done); console.log('MQTT CONNECT SUCCESS');
 c.on('error', (e) => { clearTimeout(done); console.error('MQTT ERROR:', e.message); c.end(true); process.exit(1); });
 EOF
 
-docker cp /tmp/mqtt_test.js aurathink-iot-gateway-prod:/tmp/mqtt_test.js
-docker exec aurathink-iot-gateway-prod node /tmp/mqtt_test.js
+docker cp /tmp/mqtt_test.js sensa-smart-iot-gateway-prod:/tmp/mqtt_test.js
+docker exec sensa-smart-iot-gateway-prod node /tmp/mqtt_test.js
 
 # MQTT CONNECT SUCCESS → auth webhook hoạt động đúng
 # MQTT ERROR: Not authorized → auth webhook fail
@@ -216,17 +219,17 @@ docker exec aurathink-iot-gateway-prod node /tmp/mqtt_test.js
 
 ```bash
 # Option A: Restart toàn bộ theo đúng thứ tự
-docker restart aurathink-emqx-prod
+docker restart sensa-smart-emqx-prod
 sleep 20  # Đợi EMQX ready
-docker restart aurathink-iot-gateway-prod
+docker restart sensa-smart-iot-gateway-prod
 
 # Option B: Nếu nghi ngờ network issue
 # Kết nối thủ công container vào đúng network
-docker network connect aurathink-prod-network aurathink-iot-gateway-prod
-docker restart aurathink-iot-gateway-prod
+docker network connect sensa-smart-prod-network sensa-smart-iot-gateway-prod
+docker restart sensa-smart-iot-gateway-prod
 
 # Option C: Nuclear option — recreate toàn bộ stack đúng thứ tự
-cd /root/aurathink-server
+cd /root/sensa-smart-server
 docker compose -f docker-compose.prod.yml up -d --no-deps core-api
 # Đợi core-api healthy (check /health trả 200)
 docker compose -f docker-compose.prod.yml up -d --no-deps iot-gateway
@@ -263,7 +266,7 @@ Giải pháp: Route qua nginx (port 3002) với `resolver 127.0.0.11 valid=10s` 
 
 ### Tại sao `docker compose up --no-deps` gây ra network mismatch?
 
-Khi compose thấy network `euro-internal` chưa tồn tại (hoặc label không khớp), nó **tạo network mới** theo config trong compose file. Nếu tên network trong compose khác với tên thực (`aurathink-prod-network` vs `aurathink-network`), hai sets containers sẽ ở 2 networks riêng biệt.
+Khi compose thấy network `sensa-internal` chưa tồn tại (hoặc label không khớp), nó **tạo network mới** theo config trong compose file. Nếu tên network trong compose khác với tên thực (`sensa-smart-prod-network` vs `sensa-smart-network`), hai sets containers sẽ ở 2 networks riêng biệt.
 
 **Giải pháp:** Dùng `external: true` cho network. Compose sẽ dùng network đã tồn tại mà không validate labels.
 

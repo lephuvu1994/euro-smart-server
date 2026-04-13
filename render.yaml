@@ -1,4 +1,4 @@
-# Render Blueprint – aurathink-server monorepo
+# Render Blueprint – sensa-smart-server monorepo
 # All infrastructure (Postgres, Redis, EMQX) is external.
 # Only the 4 Node.js microservices run on Render.
 #
@@ -6,12 +6,12 @@
 #   1. Push this file to your repo
 #   2. Go to https://dashboard.render.com → New → Blueprint
 #   3. Select your repo → Render will auto-detect render.yaml
-#   4. Set the env vars in the "aurathink-env" group on Render Dashboard
+#   4. Set the env vars in the "sensa-smart-env" group on Render Dashboard
 
 services:
   # ── core-api: Main REST API (public) ──
   - type: web
-    name: euro-core-api
+    name: sensa-smart-core-api
     runtime: docker
     dockerfilePath: ./Dockerfile
     dockerContext: .
@@ -22,12 +22,12 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - fromGroup: aurathink-env
+      - fromGroup: sensa-smart-env
     dockerCommand: node dist/apps/core-api/main.js
 
   # ── iot-gateway: MQTT bridge (private – internal only) ──
   - type: pserv
-    name: euro-iot-gateway
+    name: sensa-smart-iot-gateway
     runtime: docker
     dockerfilePath: ./Dockerfile
     dockerContext: .
@@ -39,12 +39,12 @@ services:
         value: production
       - key: IOT_GATEWAY_PORT
         value: "10000"
-      - fromGroup: aurathink-env
+      - fromGroup: sensa-smart-env
     dockerCommand: node dist/apps/iot-gateway/main.js
 
   # ── worker-service: BullMQ job processor (background) ──
   - type: worker
-    name: euro-worker-service
+    name: sensa-smart-worker-service
     runtime: docker
     dockerfilePath: ./Dockerfile
     dockerContext: .
@@ -54,13 +54,13 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - fromGroup: aurathink-env
+      - fromGroup: sensa-smart-env
     dockerCommand: node dist/apps/worker-service/main.js
 
 # ── Environment Variable Group ──
 # Create this group on Render Dashboard with your actual values:
 #
-# Group name: aurathink-env
+# Group name: sensa-smart-env
 #
 # Required variables:
 #   DATABASE_URL          = postgresql://user:pass@host:5432/dbname

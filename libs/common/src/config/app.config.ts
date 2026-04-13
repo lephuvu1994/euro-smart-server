@@ -18,7 +18,7 @@ export default registerAs('app', (): Record<string, any> => {
 
   return {
     env: process.env.APP_ENV ?? APP_ENVIRONMENT.LOCAL,
-    name: process.env.APP_NAME ?? 'aurathinkhome',
+    name: process.env.APP_NAME ?? 'sensa-smart',
 
     versioning: {
       enable: process.env.HTTP_VERSIONING_ENABLE === 'true',

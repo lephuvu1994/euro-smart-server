@@ -11,7 +11,7 @@ Hệ thống deploy HA trên **2 VPS** qua **Docker Compose + Tailscale VPN + CI
             HTTPS (443) │  MQTTS (8883)
               ┌─────────▼──────────────┐
               │  VPS2 "Mặt tiền"      │
-              │  aurathink.ddns.net    │
+              │  sensasmart.ddns.net    │
               │                        │
               │  Nginx (TLS termination)│
               │       ↓                │
@@ -74,7 +74,7 @@ Hệ thống deploy HA trên **2 VPS** qua **Docker Compose + Tailscale VPN + CI
 git push main
     │
     ├─ build-and-push:
-    │    Build Docker image → push ghcr.io/lephuvu1994/aurathink-server
+    │    Build Docker image → push ghcr.io/lephuvu1994/sensa-smart-server
     │
     ├─ deploy-vps1 (Hậu cung): parallel
     │    Pull image → migrate → restart iot-gateway, worker, emqx
@@ -107,8 +107,8 @@ git push main
 
 ```bash
 # Clone & cấu hình
-git clone https://github.com/lephuvu1994/euro-smart-server.git aurathink-server
-cd aurathink-server
+git clone https://github.com/lephuvu1994/sensa-smart-server.git sensa-smart-server
+cd sensa-smart-server
 cp .env.production.example .env
 nano .env
 
@@ -136,7 +136,7 @@ docker compose -f docker-compose.prod.yml -f docker-compose.vps2.yml --profile l
 
 ```bash
 # Let's Encrypt
-certbot --nginx -d aurathink.ddns.net
+certbot --nginx -d sensasmart.ddns.net
 ```
 
 ### MQTTS (HAProxy port 8883)
@@ -158,13 +158,13 @@ Mạng LAN ảo kết nối 2 VPS qua IP riêng:
 
 | Node | Tailscale IP | Hostname |
 |------|-------------|----------|
-| VPS1 | 100.117.220.15 | aurathink-vps1 |
-| VPS2 | 100.85.73.41 | aurathink-vps2 |
+| VPS1 | 100.117.220.15 | sensa-smart-vps1 |
+| VPS2 | 100.85.73.41 | sensa-smart-vps2 |
 
 ```bash
 # Kiểm tra
 tailscale status
-tailscale ping aurathink-vps1
+tailscale ping sensa-smart-vps1
 ```
 
 ---
@@ -176,7 +176,7 @@ tailscale ping aurathink-vps1
 ```env
 EMQX_NODE_NAME=emqx@100.117.220.15
 TAILSCALE_IP=100.117.220.15
-DATABASE_URL=postgresql://postgres:PASSWORD@postgres:5432/aurathink?schema=public
+DATABASE_URL=postgresql://postgres:PASSWORD@postgres:5432/sensa_smart?schema=public
 REDIS_HOST=redis
 MQTT_HOST=mqtt://emqx
 ```
@@ -185,7 +185,7 @@ MQTT_HOST=mqtt://emqx
 
 ```env
 EMQX_NODE_NAME=emqx@100.85.73.41
-DATABASE_URL=postgresql://postgres:PASSWORD@100.117.220.15:5432/aurathink?schema=public
+DATABASE_URL=postgresql://postgres:PASSWORD@100.117.220.15:5432/sensa_smart?schema=public
 REDIS_HOST=100.117.220.15
 MQTT_HOST=mqtt://localhost
 ```
@@ -226,13 +226,13 @@ docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 docker compose -f docker-compose.prod.yml logs -f core-api
 
 # EMQX cluster
-docker exec aurathink-emqx-prod emqx ctl cluster status
+docker exec sensa-smart-emqx-prod emqx ctl cluster status
 
 # Resource usage
 docker stats --no-stream
 
 # Backup Database
-docker exec aurathink-postgres-prod pg_dump \
+docker exec sensa-smart-postgres-prod pg_dump \
   -U $POSTGRES_USER $POSTGRES_DB \
   > backup-$(date +%Y%m%d).sql
 ```
@@ -265,7 +265,7 @@ docker events --since 5m
 ping 100.117.220.15
 
 # Check port binding VPS1
-docker port aurathink-postgres-prod
+docker port sensa-smart-postgres-prod
 # Expected: 100.117.220.15:5432->5432/tcp
 ```
 
@@ -273,13 +273,13 @@ docker port aurathink-postgres-prod
 ```bash
 nc -zv 100.117.220.15 4370    # Erlang dist port
 nc -zv 100.85.73.41 4370
-docker exec aurathink-emqx-prod emqx ctl cluster status
+docker exec sensa-smart-emqx-prod emqx ctl cluster status
 ```
 
 ### MQTTS 8883 không hoạt động
 ```bash
 ls -la deploy/docker/ssl/mqtt.pem   # Cert tồn tại?
-docker exec aurathink-haproxy-prod haproxy -c -f /usr/local/etc/haproxy/haproxy.cfg
+docker exec sensa-smart-haproxy-prod haproxy -c -f /usr/local/etc/haproxy/haproxy.cfg
 ```
 
 ---

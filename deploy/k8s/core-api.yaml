@@ -2,10 +2,10 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: core-api
-  namespace: aurathink
+  namespace: sensa-smart
   labels:
     app: core-api
-    app.kubernetes.io/part-of: aurathink-server
+    app.kubernetes.io/part-of: sensa-smart-server
 spec:
   replicas: 2
   selector:
@@ -24,16 +24,16 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: core-api
-          image: aurathink-server:latest
+          image: sensa-smart-server:latest
           command: ['node', 'dist/apps/core-api/main.js']
           ports:
             - containerPort: 3001
               name: http
           envFrom:
             - configMapRef:
-                name: aurathink-config
+                name: sensa-smart-config
             - secretRef:
-                name: aurathink-secrets
+                name: sensa-smart-secrets
           resources:
             requests:
               memory: '256Mi'
@@ -62,7 +62,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: core-api
-  namespace: aurathink
+  namespace: sensa-smart
 spec:
   selector:
     app: core-api
@@ -76,7 +76,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: core-api-hpa
-  namespace: aurathink
+  namespace: sensa-smart
 spec:
   scaleTargetRef:
     apiVersion: apps/v1

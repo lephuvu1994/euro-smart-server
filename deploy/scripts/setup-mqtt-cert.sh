@@ -5,9 +5,9 @@
 # ══════════════════════════════════════════════════════════════
 set -e
 
-DOMAIN="aurathink.ddns.net"
+DOMAIN="sensasmart.ddns.net"
 CERT_DIR="/etc/letsencrypt/live/$DOMAIN"
-SSL_DIR="/root/aurathink-server/deploy/docker/ssl"
+SSL_DIR="/root/sensa-smart-server/deploy/docker/ssl"
 PEM_FILE="$SSL_DIR/mqtt.pem"
 
 echo "==> Checking Let's Encrypt cert for $DOMAIN..."
@@ -33,10 +33,10 @@ CRON_FILE="/etc/cron.d/renew-mqtt-cert"
 cat > "$CRON_FILE" << 'EOF'
 # Auto-renew Let's Encrypt + update HAProxy mqtt.pem
 0 3 * * * root certbot renew --quiet --deploy-hook "\
-  cat /etc/letsencrypt/live/aurathink.ddns.net/fullchain.pem \
-      /etc/letsencrypt/live/aurathink.ddns.net/privkey.pem \
-  > /root/aurathink-server/deploy/docker/ssl/mqtt.pem && \
-  docker restart aurathink-haproxy-prod 2>/dev/null || true"
+  cat /etc/letsencrypt/live/sensasmart.ddns.net/fullchain.pem \
+      /etc/letsencrypt/live/sensasmart.ddns.net/privkey.pem \
+  > /root/sensa-smart-server/deploy/docker/ssl/mqtt.pem && \
+  docker restart sensa-smart-haproxy-prod 2>/dev/null || true"
 EOF
 
 chmod 644 "$CRON_FILE"

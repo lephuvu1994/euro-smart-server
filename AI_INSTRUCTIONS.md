@@ -143,9 +143,9 @@ import { DatabaseModule } from 'src/common/database/...';  // SAI
 | `@app/database/*`            | `libs/database/src/*`       |
 | `@app/redis-cache`           | `libs/redis-cache/src/index.ts`|
 | `@app/redis-cache/*`         | `libs/redis-cache/src/*`    |
-| `@aurathink-server/common`   | `libs/common/src/index.ts`  |
-| `@aurathink-server/database` | `libs/database/src/index.ts`|
-| `@aurathink-server/redis-cache` | `libs/redis-cache/src/index.ts`|
+| `@sensa-smart/common`   | `libs/common/src/index.ts`  |
+| `@sensa-smart/database` | `libs/database/src/index.ts`|
+| `@sensa-smart/redis-cache` | `libs/redis-cache/src/index.ts`|
 
 ---
 

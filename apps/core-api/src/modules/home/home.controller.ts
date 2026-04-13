@@ -19,7 +19,9 @@ import { IAuthUser } from '@app/common/request/interfaces/request.interface';
 import { UseGuards } from '@nestjs/common';
 import {
   AddMemberDto,
+  AssignEntitiesToRoomDto,
   AssignRoomsDto,
+  AssignScenesToRoomDto,
   CreateFloorDto,
   CreateHomeDto,
   CreateRoomDto,
@@ -330,5 +332,51 @@ export class HomeController {
     @Body() dto: ReorderDto,
   ): Promise<RoomResponseDto[]> {
     return this.homeService.reorderRooms(homeId, user.userId, dto);
+  }
+
+  @Patch('rooms/:roomId/entities')
+  @ApiOperation({
+    summary: 'Gán/gỡ thiết bị (devices) thuộc phòng',
+    description:
+      'Devices trong list sẽ được gán vào phòng. Devices cũ KHÔNG nằm trong list sẽ bị gỡ (roomId → null).',
+  })
+  @DocResponse({
+    serialization: RoomResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'home.success.entitiesAssigned',
+  })
+  async assignEntitiesToRoom(
+    @AuthUser() user: IAuthUser,
+    @Param('roomId') roomId: string,
+    @Body() dto: AssignEntitiesToRoomDto,
+  ): Promise<RoomResponseDto> {
+    return this.homeService.assignEntitiesToRoom(
+      roomId,
+      user.userId,
+      dto.entityIds,
+    );
+  }
+
+  @Patch('rooms/:roomId/scenes')
+  @ApiOperation({
+    summary: 'Gán/gỡ scenes thuộc phòng',
+    description:
+      'Scenes trong list sẽ được gán vào phòng. Scenes cũ KHÔNG nằm trong list sẽ bị gỡ (roomId → null).',
+  })
+  @DocResponse({
+    serialization: RoomResponseDto,
+    httpStatus: HttpStatus.OK,
+    messageKey: 'home.success.scenesAssigned',
+  })
+  async assignScenesToRoom(
+    @AuthUser() user: IAuthUser,
+    @Param('roomId') roomId: string,
+    @Body() dto: AssignScenesToRoomDto,
+  ): Promise<RoomResponseDto> {
+    return this.homeService.assignScenesToRoom(
+      roomId,
+      user.userId,
+      dto.sceneIds,
+    );
   }
 }

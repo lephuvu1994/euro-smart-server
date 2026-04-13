@@ -1,5 +1,5 @@
 # ══════════════════════════════════════════════════════════════════
-# AURATHINK SERVER — Docker Compose (Production)
+# SENSA-SMART SERVER — Docker Compose (Production)
 # ══════════════════════════════════════════════════════════════════
 # Infrastructure (Postgres, Redis, EMQX) chạy cùng trong compose.
 # Nginx reverse proxy expose port 80/443 ra ngoài.

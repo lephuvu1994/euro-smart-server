@@ -1,4 +1,4 @@
-# AI_INSTRUCTIONS — Aurathink Smart Home Server
+# AI_INSTRUCTIONS — Sensa-Smart Smart Home Server
 
 > **Mục đích:** Mô tả kiến trúc, conventions, và design patterns **THỰC TẾ** đang được sử dụng. AI **PHẢI** tuân theo các quy tắc dưới đây khi code tính năng mới.
 

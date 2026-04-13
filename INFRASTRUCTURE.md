@@ -1,4 +1,4 @@
-# 🏗️ Infrastructure Guide — Aurathink Server
+# 🏗️ Infrastructure Guide — Sensa-Smart Server
 
 ## Architecture Overview
 

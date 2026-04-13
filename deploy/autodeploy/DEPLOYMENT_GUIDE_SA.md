@@ -1,6 +1,6 @@
 # 🚀 Cẩm Nang Vận Hành Server Cơ Bản Đến Chuyên Sâu (SA Deployment Guide)
 
-Tài liệu này được soạn thảo theo tiêu chuẩn System Administrator (SA) dành cho Aurathink/Euro Smart Server. Bất kỳ ai không có kiến thức sâu về Docker hoặc System đều có thể đọc, copy-paste và chạy thành công 100%.
+Tài liệu này được soạn thảo theo tiêu chuẩn System Administrator (SA) dành cho Sensa-Smart Smart Server. Bất kỳ ai không có kiến thức sâu về Docker hoặc System đều có thể đọc, copy-paste và chạy thành công 100%.
 
 > [!WARNING]
 > Nếu bạn mới chuyển sang một máy chủ hoàn toàn mới (Clean Server), hãy dùng **Cách 1: Tự động hoá 1-Click**. Nó sẽ gỡ bỏ toàn bộ lỗi lo về cấu hình, SSL và Database.
@@ -141,7 +141,7 @@ Nếu bạn đã dùng **Cách 1: 1-Click Deploy**, hệ thống monitoring đã
 #### Bước 1: Tạo Telegram Bot (Nhận cảnh báo tức thì)
 
 1. Mở Telegram, tìm **@BotFather** và gõ `/newbot`.
-2. Đặt tên Bot (VD: `AurathinkAlert`) → BotFather sẽ trả về **Token**.
+2. Đặt tên Bot (VD: `SensaSmartAlert`) → BotFather sẽ trả về **Token**.
 3. Copy Token đó vào `.env`:
    ```
    TELEGRAM_BOT_TOKEN="7012345678:AAHxxxxxxxxxxxxxxxxx"

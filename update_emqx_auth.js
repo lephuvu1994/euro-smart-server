@@ -3,7 +3,7 @@ const { Client } = require('ssh2');
 const conn = new Client();
 conn.on('ready', () => {
   console.log('Client :: ready');
-  conn.exec('. ~/.bashrc && export PATH=$PATH:/var/lib/docker/rootfs/overlayfs/ebe47324590e724d76317b57eb89caf7660fec4a8a96340fdaee28b7f7c4a03b/usr/local/bin && docker exec aurathink-core-api-prod cat /app/dist/apps/core-api/main.js | grep "PUBLISH(Q0)"', (err, stream) => {
+  conn.exec('. ~/.bashrc && export PATH=$PATH:/var/lib/docker/rootfs/overlayfs/ebe47324590e724d76317b57eb89caf7660fec4a8a96340fdaee28b7f7c4a03b/usr/local/bin && docker exec sensa-smart-core-api-prod cat /app/dist/apps/core-api/main.js | grep "PUBLISH(Q0)"', (err, stream) => {
     if (err) throw err;
     stream.on('close', (code, signal) => {
       console.log('Stream :: close :: code: ' + code + ', signal: ' + signal);

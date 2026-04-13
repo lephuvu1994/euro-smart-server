@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AURATHINK — Email Alert Sender (SA-Grade)
+SENSA-SMART — Email Alert Sender (SA-Grade)
 Sử dụng Python3 built-in smtplib — KHÔNG cần pip install thêm gì.
 Gửi email HTML đẹp mắt tới danh sách nhiều người nhận (comma-separated).
 """
@@ -84,7 +84,7 @@ def build_html_body(subject: str, body: str) -> str:
                 </div>
             </div>
             <div class="footer">
-                Aurathink Server Monitor &bull; {timestamp}<br>
+                Sensa-Smart Server Monitor &bull; {timestamp}<br>
                 Email này được gửi tự động bởi hệ thống giám sát. Không cần trả lời.
             </div>
         </div>
@@ -117,7 +117,7 @@ def send_email(
     msg["To"] = ", ".join(to_list)
 
     # Tạo cả plain text và HTML
-    plain_text = f"{subject}\n\n{body}\n\nAurathink Server Monitor"
+    plain_text = f"{subject}\n\n{body}\n\nSensa-Smart Server Monitor"
     html_content = build_html_body(subject, body)
 
     msg.attach(MIMEText(plain_text, "plain", "utf-8"))
@@ -136,7 +136,7 @@ def send_email(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Aurathink Alert Email Sender")
+    parser = argparse.ArgumentParser(description="Sensa-Smart Alert Email Sender")
     parser.add_argument("--host", required=True, help="SMTP Host")
     parser.add_argument("--port", type=int, default=587, help="SMTP Port")
     parser.add_argument("--user", required=True, help="SMTP Username")

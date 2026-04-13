@@ -1,4 +1,4 @@
-# 🚀 Hướng Dẫn Deploy – Aurathink Server
+# 🚀 Hướng Dẫn Deploy – Sensa-Smart Server
 
 Hệ thống deploy HA trên **2 VPS** qua **Docker Compose + Tailscale VPN + CI/CD GitHub Actions**.
 

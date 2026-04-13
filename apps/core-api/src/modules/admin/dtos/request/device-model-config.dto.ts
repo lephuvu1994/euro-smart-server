@@ -139,6 +139,21 @@ export class BlueprintEntityDto implements IBlueprintEntity {
 // ─── Config DTO (Top-Level) ─────────────────────────
 
 export class DeviceModelConfigDto implements IDeviceModelConfig {
+  @ApiProperty({ description: 'Mã model logic (khác với code DB)', required: false })
+  @IsString()
+  @IsOptional()
+  modelCode?: string;
+
+  @ApiProperty({ description: 'Tên model logic', required: false })
+  @IsString()
+  @IsOptional()
+  modelName?: string;
+
+  @ApiProperty({ description: 'Giao thức giao tiếp (Vd: MQTT)', required: false })
+  @IsString()
+  @IsOptional()
+  protocol?: string;
+
   @ApiProperty({
     description: 'Danh sách entities của Device Model',
     type: [BlueprintEntityDto],
@@ -148,6 +163,6 @@ export class DeviceModelConfigDto implements IDeviceModelConfig {
   @Type(() => BlueprintEntityDto)
   entities: BlueprintEntityDto[];
 
-  // Cho phép extension (Vd: protocol, etc...)
+  // Cho phép extension
   [key: string]: unknown;
 }

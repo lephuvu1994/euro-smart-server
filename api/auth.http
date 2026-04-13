@@ -2,7 +2,7 @@
 # AUTH – Đăng ký, Đăng nhập, Quên mật khẩu
 # ==========================================
 # Base URL – đổi host/port nếu cần
-@baseUrl = https://aurathink.ddns.net/api/v1
+@baseUrl = https://sensasmart.ddns.net/api/v1
 @adminEmail = vulewenlian94@gmail.com
 @adminPassword = Vu31101994@
 @userEmail = cursor2@test.com

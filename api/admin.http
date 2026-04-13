@@ -2,7 +2,7 @@
 # ADMIN – Partner, Device Model, Quota, MQTT Config
 # ==========================================
 # Chạy request "Login Admin" trước để có accessToken
-@baseUrl = https://aurathink.ddns.net/api/v1
+@baseUrl = https://sensasmart.ddns.net/api/v1
 @adminEmail = vulewenlian94@gmail.com
 @adminPassword = Vu31101994@
 @companyCode = BKTech
@@ -253,7 +253,7 @@ Authorization: Bearer {{loginAdmin.response.body.data.accessToken}}
 Content-Type: application/json
 
 {
-    "host": "mqtt://aurathink.ddns.net:1883"
+    "host": "mqtt://sensasmart.ddns.net:1883"
 }
 
 ###
@@ -263,7 +263,7 @@ Authorization: Bearer {{loginAdmin.response.body.data.accessToken}}
 Content-Type: application/json
 
 {
-    "mqttWssUrl": "wss://aurathink.ddns.net/mqtt"
+    "mqttWssUrl": "wss://sensasmart.ddns.net/mqtt"
 }
 
 ###
@@ -278,6 +278,6 @@ Authorization: Bearer {{loginAdmin.response.body.data.accessToken}}
 Content-Type: application/json
 
 {
-    "mqttHost": "mqtt://aurathink.ddns.net:1883",
+    "mqttHost": "mqtt://sensasmart.ddns.net:1883",
     "otpExpire": 10
 }

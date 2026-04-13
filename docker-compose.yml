@@ -1,5 +1,5 @@
 # ══════════════════════════════════════════════════════════════════
-# AURATHINK SERVER — Docker Compose (Development)
+# SENSA-SMART SERVER — Docker Compose (Development)
 # ══════════════════════════════════════════════════════════════════
 # Bao gồm toàn bộ infrastructure + 4 microservices.
 # Dùng cho môi trường local development.

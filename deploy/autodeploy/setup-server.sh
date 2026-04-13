@@ -1,6 +1,6 @@
 #!/bin/bash
 # ══════════════════════════════════════════════════════════════════
-# AURATHINK SERVER - AUTOMATED DEPLOYMENT BOOTSTRAP (SA-GRADE)
+# SENSA-SMART SERVER - AUTOMATED DEPLOYMENT BOOTSTRAP (SA-GRADE)
 # ══════════════════════════════════════════════════════════════════
 # Script này dành cho Server Ubuntu trắng tinh. Chỉ cần chạy 1 lần.
 # Các bước thực hiện:
@@ -209,7 +209,7 @@ BACKUP_CRON="0 3 * * * /bin/bash $BACKUP_SCRIPT >> /var/log/sensa-smart-backup-c
 
 success "Hệ thống Backup đã được cài đặt! Sẽ tự động chạy vào 3:00 AM hàng ngày."
 
-success "Hệ thống Aurathink Server đã sẵn sàng phục vụ!"
+success "Hệ thống Sensa-Smart Server đã sẵn sàng phục vụ!"
 log "------------------------------------------------------"
 log "✅ Nginx HTTPS: https://$APP_DOMAIN"
 log "✅ EMQX Dashboard: http://[Server_IP]:18083 (Tài khoản: $DASH_USER / $DASH_PASS)"

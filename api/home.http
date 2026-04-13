@@ -2,7 +2,7 @@
 # HOME – Nhà, Tầng (Floor), Phòng (Room)
 # ==========================================
 # Chạy "Login User" trước để có accessToken
-@baseUrl = https://aurathink.ddns.net/api/v1
+@baseUrl = https://sensasmart.ddns.net/api/v1
 @userEmail = cursor2@test.com
 @userPassword = Password@123!
 # Điền homeId/floorId/roomId sau khi tạo hoặc lấy từ response (ví dụ getHomes)

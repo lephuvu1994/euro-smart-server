@@ -1,6 +1,6 @@
 #!/bin/bash
 # ══════════════════════════════════════════════════════════════════
-# AURATHINK — System Health Monitor (SA-Grade)
+# SENSA-SMART — System Health Monitor (SA-Grade)
 # ══════════════════════════════════════════════════════════════════
 # Chạy bằng Crontab mỗi 3 phút: */3 * * * * /path/to/server-health.sh
 #

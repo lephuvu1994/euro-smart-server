@@ -367,11 +367,12 @@ services:
 
 networks:
   euro-internal:
-    # external: true — dùng network có sẵn 'aurathink-network' trên VPS
-    # Không để compose tự tạo network mới (gây mất kết nối khi partial deploy)
-    # Network này được tạo khi deploy lần đầu và phải tồn tại trước.
-    external: true
-    name: aurathink-network
+    driver: bridge
+    # Tên cố định để partial deploy (--no-deps) dùng lại đúng network.
+    # KHÔNG dùng external:true vì sẽ fail trên VPS mới chưa có network.
+    # KHÔNG đổi tên này — aurathink-prod-network là network production thực tế
+    # chứa postgres/redis/emqx. Đổi tên sẽ cô lập DB khỏi các services.
+    name: aurathink-prod-network
 
 volumes:
   postgres_data:

@@ -48,12 +48,18 @@ nano .env  # Tự điền các mật khẩu, đặc biệt chú ý DATABASE_URL 
 
 ### Bước 2: Bài Toán SSL (Cực kỳ quan trọng)
 File `docker-compose.prod.yml` chạy Nginx qua cấu hình `nginx.conf`, nhưng ngặt nghèo là `nginx.conf` đòi phải có file SSL (Chứng chỉ bảo mật HTTPS) ngay lúc bật máy. Nếu bạn mới tậu VPS, lấy đâu ra SSL? Container Nginx sẽ "Rơi vào vòng lặp tử thần" (Crash-loop)!
+
+> [!TIP]
+> Script `setup-server.sh` đã được trang bị tính năng **Self-Signed Fallback**. Tức là nếu VPS của bạn chưa nhận domain (DNS delay) khiến quá trình Let's Encrypt thất bại, hệ thống sẽ tự động cấp một chứng chỉ "Tự Khống" (Self-signed) để Nginx vẫn boot lên khoẻ mạnh thay vì chết chùm.
+
 Cách giải bằng tay:
 ```bash
 # 1. Cài Certbot
 sudo apt install certbot -y
 
 # 2. Lấy chứng nhận bằng mode Standalone (Nginx máy host phải đang tắt 100%)
+# Lưu ý: Lệnh này có thể thất bại nếu Domain chưa trỏ IP. Nếu thất bại, bạn có thể chạy:
+# openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout ./deploy/docker/ssl/privkey.pem -out ./deploy/docker/ssl/fullchain.pem -subj "/CN=your-domain.com"
 sudo certbot certonly --standalone -d your-domain.com
 
 # 3. Kéo chứng chỉ về nơi lưu trữ của DOCKER
@@ -110,9 +116,15 @@ Cách Deploy chuẩn nhất:
 ```bash
 git fetch && git reset --hard origin/main
 docker compose -f docker-compose.prod.yml build
+
 # `--no-deps` Giữ cho DB/EMQX/Nginx không bị khởi động lại, chỉ dập chớp chớp Core, Mqtt worker để update tính năng
 docker compose -f docker-compose.prod.yml up -d --no-deps core-api iot-gateway worker-service
 ```
+
+> [!WARNING]
+> Nếu bạn gắn tiến trình Deploy thẳng vào **GitHub Actions**, tuyệt đối TỪ CHỐI sử dụng lệnh `npx prisma db push --accept-data-loss`.
+> Lệnh `db push` KHÔNG tạo bảng lịch sử `_prisma_migrations`, nó sẽ khiến lần Boot sau của `core-api` gặp lỗi **P3005 (The database schema is not empty)**. 
+> Giải pháp: Thay `db push` thành lệnh `npx prisma migrate deploy` trong Github workflow. Lệnh này đã được fix tự động trong `.github/workflows/deploy.yml`.
 
 ### Tracing Lỗi
 Nếu có một Container chết hoặc nghi vấn app chạy lỗi. Hãy soi Log tức thì bằng:

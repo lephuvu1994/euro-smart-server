@@ -5,7 +5,7 @@
 @baseUrl = https://sensasmart.ddns.net/api/v1
 @adminEmail = vulewenlian94@gmail.com
 @adminPassword = Vu31101994@
-@companyCode = BKTech
+@companyCode = sensa-smart
 @deviceModelCode = 1001
 
 ###
@@ -134,7 +134,7 @@ Content-Type: application/json
             {
                 "code": "learn",
                 "name": "Học lệnh RF",
-                "domain": "rf_learn",
+                "domain": "button",
                 "commandKey": "learn_cmd",
                 "commandSuffix": "set",
                 "readOnly": false,

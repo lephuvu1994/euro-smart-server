@@ -514,6 +514,100 @@ export class HomeService {
     return this.getRoomsByHome(homeId, userId);
   }
 
+  /**
+   * Gán devices vào phòng (theo Device level).
+   * - Devices trong list → set roomId = roomId
+   * - Devices TRƯỚC ĐÓ trong phòng nhưng KHÔNG còn trong list → set roomId = null
+   */
+  async assignEntitiesToRoom(
+    roomId: string,
+    userId: string,
+    deviceIds: string[],
+  ): Promise<RoomResponseDto> {
+    await this.ensureUserCanAccessRoom(userId, roomId);
+
+    // Lấy homeId của room để verify devices thuộc cùng home
+    const room = await this.databaseService.room.findUniqueOrThrow({
+      where: { id: roomId },
+      select: { homeId: true },
+    });
+
+    await this.databaseService.$transaction(async (tx) => {
+      // 1. Gỡ devices cũ đang nằm trong phòng này nhưng KHÔNG còn trong list mới
+      await tx.device.updateMany({
+        where: {
+          roomId: roomId,
+          id: { notIn: deviceIds },
+        },
+        data: { roomId: null },
+      });
+
+      // 2. Gán devices mới vào phòng (chỉ devices thuộc cùng home)
+      if (deviceIds.length > 0) {
+        await tx.device.updateMany({
+          where: {
+            id: { in: deviceIds },
+            homeId: room.homeId,
+          },
+          data: { roomId: roomId },
+        });
+      }
+    });
+
+    // Return updated room kèm devices
+    const updatedRoom = await this.databaseService.room.findUniqueOrThrow({
+      where: { id: roomId },
+      include: { devices: true },
+    });
+    return updatedRoom as RoomResponseDto;
+  }
+
+  /**
+   * Gán scenes vào phòng.
+   * - Scenes trong list → set roomId = roomId
+   * - Scenes TRƯỚC ĐÓ trong phòng nhưng KHÔNG còn trong list → set roomId = null
+   */
+  async assignScenesToRoom(
+    roomId: string,
+    userId: string,
+    sceneIds: string[],
+  ): Promise<RoomResponseDto> {
+    await this.ensureUserCanAccessRoom(userId, roomId);
+
+    const room = await this.databaseService.room.findUniqueOrThrow({
+      where: { id: roomId },
+      select: { homeId: true },
+    });
+
+    await this.databaseService.$transaction(async (tx) => {
+      // 1. Gỡ scenes cũ
+      await tx.scene.updateMany({
+        where: {
+          roomId: roomId,
+          id: { notIn: sceneIds },
+        },
+        data: { roomId: null },
+      });
+
+      // 2. Gán scenes mới (chỉ scenes thuộc cùng home)
+      if (sceneIds.length > 0) {
+        await tx.scene.updateMany({
+          where: {
+            id: { in: sceneIds },
+            homeId: room.homeId,
+          },
+          data: { roomId: roomId },
+        });
+      }
+    });
+
+    const updatedRoom = await this.databaseService.room.findUniqueOrThrow({
+      where: { id: roomId },
+      include: { scenes: true },
+    });
+    return updatedRoom as RoomResponseDto;
+  }
+
   // ============================================================
   // ACTIVITY TIMELINE (HOME-WIDE)
   // ============================================================

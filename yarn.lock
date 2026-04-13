@@ -5197,7 +5197,7 @@ __metadata:
     jsonwebtoken: "npm:^9.0.2"
     lint-staged: "npm:^16.2.6"
     lodash: "npm:^4.17.21"
-    mqtt: "npm:^5.15.0"
+    mqtt: "npm:^5.15.1"
     nestjs-command: "npm:^3.1.5"
     nestjs-i18n: "npm:^10.5.1"
     nestjs-pino: "npm:^4.4.1"
@@ -15432,7 +15432,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"mqtt@npm:^5.15.0":
+"mqtt@npm:^5.15.1":
   version: 5.15.1
   resolution: "mqtt@npm:5.15.1"
   dependencies:

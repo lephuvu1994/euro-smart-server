@@ -127,6 +127,31 @@ describe('DeviceControlProcessor', () => {
     });
   });
 
+  describe('handleRunScene', () => {
+    it('should reject if chainDepth exceeds max depth', async () => {
+      const job = {
+        name: DEVICE_JOBS.RUN_SCENE,
+        data: { sceneId: 'scene-1', chainDepth: 5 }, // MAX_SCENE_CHAIN_DEPTH = 5
+      } as unknown as Job;
+
+      const result = await processor.process(job) as any;
+      expect(result.success).toBe(false);
+      expect(result.error).toEqual('chain_depth_exceeded');
+    });
+
+    it('should reject if mutex lock cannot be acquired', async () => {
+      redisService.setnxWithTtl = jest.fn().mockResolvedValue(false); // could not acquire
+      const job = {
+        name: DEVICE_JOBS.RUN_SCENE,
+        data: { sceneId: 'scene-1', chainDepth: 2 },
+      } as unknown as Job;
+
+      const result = await processor.process(job) as any;
+      expect(result.success).toBe(false);
+      expect(result.error).toEqual('already_running');
+    });
+  });
+
   describe('handleCheckDeviceStateTriggers', () => {
     it('should return immediately if no scenes match the device index', async () => {
       sceneTriggerIndexService.getSceneIdsForDevice.mockResolvedValueOnce([]);
@@ -186,7 +211,7 @@ describe('DeviceControlProcessor', () => {
 
       expect(deviceQueue.add).toHaveBeenCalledWith(
         DEVICE_JOBS.RUN_SCENE,
-        { sceneId: 'scene-1' },
+        { sceneId: 'scene-1', chainDepth: 1 },
         expect.any(Object),
       );
 

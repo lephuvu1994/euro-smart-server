@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-non-null-assertion */
 import {
   Injectable,
   OnModuleInit,
@@ -31,10 +32,10 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
   }
 
   private connect() {
-    const host = this.configService.get<string>('MQTT_HOST');
-    const port = this.configService.get<number>('MQTT_PORT');
-    const username = this.configService.get<string>('MQTT_USER');
-    const password = this.configService.get<string>('MQTT_PASS');
+    const host = this.configService.get<string>('MQTT_HOST')!;
+    const port = this.configService.get<number>('MQTT_PORT')!;
+    const username = this.configService.get<string>('MQTT_USER')!;
+    const password = this.configService.get<string>('MQTT_PASS')!;
 
     this.logger.log(`Connecting to MQTT Broker at ${host}:${port}...`);
 
@@ -172,6 +173,35 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  unsubscribe(
+    topic: string,
+    callback?: (topic: string, payload: Buffer) => void,
+  ) {
+    if (!this.client) {
+      return;
+    }
+
+    // Remove from tracking list
+    if (callback) {
+      this.subscriptions = this.subscriptions.filter(
+        (sub) => sub.pattern !== topic || sub.callback !== callback,
+      );
+    } else {
+      this.subscriptions = this.subscriptions.filter(
+        (sub) => sub.pattern !== topic,
+      );
+    }
+
+    // If no more listeners for this exact topic pattern, unsubscribe from broker
+    const hasRemaining = this.subscriptions.some((sub) => sub.pattern === topic);
+    if (!hasRemaining && this.client.connected) {
+      this.client.unsubscribe(topic, {}, (err) => {
+        if (err) this.logger.error(`Unsubscribe error on "${topic}": ${err.message}`);
+        else this.logger.log(`Unsubscribed from: ${topic}`);
+      });
+    }
+  }
+
   private reconnectDelay = 10_000;
 
   private scheduleReconnect(delay: number) {
@@ -189,8 +219,8 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
       this.logger.log('Executing forced MQTT reconnect...');
       try {
         this.client.reconnect();
-      } catch (reconnectErr) {
-        this.logger.error(`Force reconnect failed: ${reconnectErr.message}`);
+      } catch (reconnectErr: unknown) {
+        this.logger.error(`Force reconnect failed: ${(reconnectErr as Error).message}`);
         // If reconnect() threw, schedule another attempt — never give up
         this.scheduleReconnect(this.reconnectDelay);
       }

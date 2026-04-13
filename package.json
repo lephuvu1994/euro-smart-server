@@ -75,7 +75,7 @@
     "ioredis": "^5.9.2",
     "jsonwebtoken": "^9.0.2",
     "lodash": "^4.17.21",
-    "mqtt": "^5.15.0",
+    "mqtt": "^5.15.1",
     "nestjs-command": "^3.1.5",
     "nestjs-i18n": "^10.5.1",
     "nestjs-pino": "^4.4.1",

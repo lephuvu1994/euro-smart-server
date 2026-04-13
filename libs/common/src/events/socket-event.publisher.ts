@@ -26,7 +26,9 @@ export class SocketEventPublisher {
       } catch (error: unknown) {
         if (attempt === 3) {
           const errMsg = error instanceof Error ? error.message : String(error);
-          this.logger.error(`Socket publish failed after 3 attempts: ${errMsg}`);
+          this.logger.error(
+            `Socket publish failed after 3 attempts: ${errMsg}`,
+          );
           return;
         }
         await new Promise((resolve) => setTimeout(resolve, attempt * 100));
@@ -38,7 +40,11 @@ export class SocketEventPublisher {
    * Emit event tới một device room qua Redis Pub/Sub
    * socket-gateway sẽ subscribe channel này và emit cho client
    */
-  async emitToDevice(token: string, event: string, data: unknown): Promise<void> {
+  async emitToDevice(
+    token: string,
+    event: string,
+    data: unknown,
+  ): Promise<void> {
     const payload: ISocketEvent = {
       room: `device_${token}`,
       event,
@@ -48,11 +54,25 @@ export class SocketEventPublisher {
   }
 
   /**
-   * Emit event tới một room tùy chỉnh qua Redis Pub/Sub
+   * Emit event tới home room (tất cả members của home)
+   * Dùng cho SCENE_EXECUTED — 1 event thay cho N × COMMAND_SENT
    */
-  async emitToRoom(room: string, event: string, data: unknown): Promise<void> {
-    const payload: ISocketEvent = { room, event, data };
+  async emitToHome(
+    homeId: string,
+    event: string,
+    data: unknown,
+  ): Promise<void> {
+    const payload: ISocketEvent = { room: `home_${homeId}`, event, data };
     await this.publishWithRetry(payload);
   }
-}
 
+  /**
+   * Emit cùng 1 event tới nhiều rooms trong 1 lần (batch publish).
+   * Hiệu quả hơn việc gọi emitToDevice N lần riêng lẻ.
+   */
+  async emitBulk(rooms: string[], event: string, data: unknown): Promise<void> {
+    await Promise.allSettled(
+      rooms.map((room) => this.publishWithRetry({ room, event, data })),
+    );
+  }
+}

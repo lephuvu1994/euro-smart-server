@@ -278,6 +278,10 @@ model Device {
   entities       DeviceEntity[]
   connectionLogs DeviceConnectionLog[]
 
+  // [SCENE SCALING] Bump khi entity commandKey/commandSuffix thay đổi.
+  // Scene executor so sánh với compiledAt để lazy re-compile.
+  configVersion Int @default(1) @map("config_version")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -439,11 +443,11 @@ model Home {
   ownerId String @map("owner_id") @db.Uuid
   owner   User   @relation("UserHomes", fields: [ownerId], references: [id], onDelete: Cascade)
 
-  members HomeMember[]
-  floors  Floor[]
-  rooms   Room[]
-  devices Device[]
-  scenes  Scene[]
+  members      HomeMember[]
+  floors       Floor[]
+  rooms        Room[]
+  devices      Device[]
+  scenes       Scene[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -522,6 +526,12 @@ model Scene {
   minIntervalSeconds Int?      @default(60)
   lastFiredAt        DateTime?
 
+  // [SCENE SCALING] Pre-compiled actions với đầy đủ protocol/commandKey/commandSuffix.
+  // Được build khi tạo/sửa scene → runtime không cần query DeviceEntity.
+  // Tự động re-compile (lazy) khi device.configVersion mới hơn compiledAt.
+  compiledActions Json?     @map("compiled_actions") @db.JsonB
+  compiledAt      DateTime? @map("compiled_at")
+
   homeId String @map("home_id") @db.Uuid
   home   Home   @relation(fields: [homeId], references: [id], onDelete: Cascade)
 
@@ -533,6 +543,7 @@ model Scene {
 
   @@map("t_scene")
 }
+
 
 model Location {
   id        String   @id @default(uuid()) @db.Uuid

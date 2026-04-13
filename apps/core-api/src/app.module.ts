@@ -82,8 +82,6 @@ import { AutomationModule } from './modules/automation/automation.module';
     AutomationModule,
   ],
   controllers: [HealthController],
-  providers: [
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
-  ],
+  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}

@@ -93,6 +93,12 @@ jobs:
             # Strip surrounding quotes from values (Docker env_file reads them literally)
             sed -i 's/="\(.*\)"/=\1/g' /root/sensa-smart-server/.env
 
+            echo "==> [VPS1] Ensuring Infrastructure is up (Creates network automatically)..."
+            IMAGE=$IMAGE docker compose -f docker-compose.prod.yml up -d postgres redis emqx
+
+            echo "==> [VPS1] Waiting for DB to initialize..."
+            sleep 15
+
             echo "==> [VPS1] Running migrations..."
             docker run --rm \
               --env-file /root/sensa-smart-server/.env \

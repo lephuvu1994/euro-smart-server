@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable, HttpException } from '@nestjs/common';
+import { HttpStatus, Injectable, HttpException, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { DatabaseService } from '@app/database';
@@ -20,6 +20,32 @@ interface SceneActionJson {
   deviceToken: string;
   entityCode: string;
   value: string | number | boolean;
+  delayMs?: number;
+}
+
+/**
+ * Compiled action shape — enriched at save time with MQTT routing metadata.
+ * At runtime the executor uses this directly with ZERO DB queries.
+ */
+export interface CompiledSceneAction {
+  deviceToken: string;
+  entityCode: string;
+  value: string | number | boolean;
+  delayMs?: number;
+  /** Resolved at compile time */
+  protocol: string;
+  commandKey: string | null;
+  commandSuffix: string;
+}
+
+/**
+ * Wrapper stored in scene.compiledActions JSONB.
+ * Contains both the actions and a snapshot of device configVersions
+ * at compile time — used for lazy re-compile invalidation.
+ */
+export interface CompiledActionsPayload {
+  actions: CompiledSceneAction[];
+  versionSnapshot: Record<string, number>;
 }
 
 /**
@@ -29,15 +55,26 @@ interface SceneActionJson {
  *    - SCHEDULE: SceneScheduleCronService (worker) @Cron mỗi phút.
  *    - LOCATION: POST /scenes/triggers/location → SceneTriggerLocationService.
  *    - DEVICE_STATE: MQTT → CHECK_DEVICE_STATE_TRIGGERS → DeviceControlProcessor (Redis index lookup).
+ *
+ * [SCENE SCALING — Hybrid Compiled Actions]
+ * Compiled actions embed protocol/commandKey/commandSuffix at save time → executor never needs
+ * to query DeviceEntity at runtime. Lazy re-compile triggered by device.configVersion drift.
+ * Version snapshot stored alongside actions enables precise cache invalidation.
  */
 @Injectable()
 export class SceneService {
+  private readonly logger = new Logger(SceneService.name);
+
   constructor(
     private readonly databaseService: DatabaseService,
     private readonly sceneTriggerIndexService: SceneTriggerIndexService,
     @InjectQueue(APP_BULLMQ_QUEUES.DEVICE_CONTROL)
     private readonly deviceQueue: Queue,
   ) {}
+
+  // ---------------------------------------------------------------------------
+  // ACCESS GUARDS
+  // ---------------------------------------------------------------------------
 
   private async ensureUserCanAccessHome(
     userId: string,
@@ -77,6 +114,10 @@ export class SceneService {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // RESPONSE MAPPING
+  // ---------------------------------------------------------------------------
+
   private toResponseDto(scene: {
     id: string;
     name: string;
@@ -112,6 +153,86 @@ export class SceneService {
       updatedAt: scene.updatedAt,
     } as unknown as SceneResponseDto;
   }
+
+  // ---------------------------------------------------------------------------
+  // [SCENE SCALING] Compile actions — resolves MQTT routing metadata at save time
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Pre-compiles scene actions by embedding protocol/commandKey/commandSuffix
+   * from DeviceEntity so that the executor can fire MQTT without any DB lookup.
+   *
+   * Returns compiled actions + a snapshot of device configVersions at compile time.
+   * The executor compares this snapshot against current versions to decide if re-compile is needed.
+   */
+  async compileSceneActions(
+    actions: SceneActionJson[],
+  ): Promise<CompiledActionsPayload> {
+    if (!actions || actions.length === 0)
+      return { actions: [], versionSnapshot: {} };
+
+    // Extract unique tokens
+    const deviceTokens = [...new Set(actions.map((a) => a.deviceToken))];
+
+    // Single query — fetch entities (commandKey, commandSuffix)
+    const devices = await this.databaseService.device.findMany({
+      where: { token: { in: deviceTokens } },
+      select: {
+        token: true,
+        protocol: true,
+        configVersion: true,
+        entities: {
+          select: {
+            code: true,
+            commandKey: true,
+            commandSuffix: true,
+          },
+        },
+      },
+    });
+
+    // Index by token for O(1) lookup
+    const deviceMap = new Map(devices.map((d) => [d.token, d]));
+
+    // Snapshot configVersions at compile time
+    const versionSnapshot: Record<string, number> = {};
+    for (const d of devices) {
+      versionSnapshot[d.token] = d.configVersion;
+    }
+
+    const compiled = actions.map((action) => {
+      const device = deviceMap.get(action.deviceToken);
+      if (!device) {
+        this.logger.warn(
+          `[compileSceneActions] Device not found: ${action.deviceToken}`,
+        );
+        return {
+          ...action,
+          protocol: 'MQTT',
+          commandKey: null,
+          commandSuffix: 'set',
+        };
+      }
+
+      const entity = device.entities.find((e) => e.code === action.entityCode);
+
+      return {
+        deviceToken: action.deviceToken,
+        entityCode: action.entityCode,
+        value: action.value,
+        delayMs: action.delayMs,
+        protocol: device.protocol,
+        commandKey: entity?.commandKey ?? null,
+        commandSuffix: (entity?.commandSuffix ?? 'set').replace(/^\//, ''),
+      };
+    });
+
+    return { actions: compiled, versionSnapshot };
+  }
+
+  // ---------------------------------------------------------------------------
+  // CRUD
+  // ---------------------------------------------------------------------------
 
   async getScenesByHome(
     homeId: string,
@@ -160,26 +281,47 @@ export class SceneService {
         HttpStatus.BAD_REQUEST,
       );
     }
+
+    // [SCENE SCALING] Compile actions at create time
+    const rawActions = (dto.actions ?? []) as SceneActionJson[];
+    let compiledPayload: CompiledActionsPayload | null = null;
+    let compiledAt: Date | null = null;
+    try {
+      compiledPayload = await this.compileSceneActions(rawActions);
+      compiledAt = new Date();
+    } catch (err) {
+      this.logger.warn(
+        `[createScene] compileSceneActions failed, will re-compile on first run: ${err}`,
+      );
+    }
+
     const scene = await this.databaseService.scene.create({
       data: {
         homeId,
         name: dto.name,
         active: dto.active ?? true,
-        sortOrder: sceneCount, // Append cuối danh sách
+        sortOrder: sceneCount,
         icon: dto.icon ?? null,
         color: dto.color ?? null,
         roomId: dto.roomId ?? null,
         minIntervalSeconds: dto.minIntervalSeconds ?? 60,
         triggers: (dto.triggers ?? []) as unknown as Prisma.InputJsonValue,
-        actions: dto.actions as unknown as Prisma.InputJsonValue,
+        actions: rawActions as unknown as Prisma.InputJsonValue,
+        ...(compiledPayload
+          ? {
+              compiledActions:
+                compiledPayload as unknown as Prisma.InputJsonValue,
+              compiledAt,
+            }
+          : {}),
       },
     });
 
-    // Build Redis reverse-index for DEVICE_STATE triggers
+    // Build Redis reverse-index for DEVICE_STATE triggers (non-blocking)
     if (dto.triggers && dto.triggers.length > 0) {
       await this.sceneTriggerIndexService
         .rebuildIndex(scene.id, dto.triggers as unknown as SceneTriggerJson[])
-        .catch(() => undefined); // Non-blocking — index can be rebuilt on startup
+        .catch(() => undefined);
     }
 
     return this.toResponseDto(scene);
@@ -191,6 +333,23 @@ export class SceneService {
     dto: UpdateSceneDto,
   ): Promise<SceneResponseDto> {
     await this.ensureUserCanAccessScene(userId, sceneId);
+
+    // [SCENE SCALING] Re-compile when actions change
+    let compiledActionsUpdate: Record<string, unknown> = {};
+    if (dto.actions !== undefined) {
+      try {
+        const compiled = await this.compileSceneActions(
+          dto.actions as SceneActionJson[],
+        );
+        compiledActionsUpdate = {
+          compiledActions: compiled as unknown as Prisma.InputJsonValue,
+          compiledAt: new Date(),
+        };
+      } catch (err) {
+        this.logger.warn(`[updateScene] compileSceneActions failed: ${err}`);
+      }
+    }
+
     const scene = await this.databaseService.scene.update({
       where: { id: sceneId },
       data: {
@@ -201,7 +360,6 @@ export class SceneService {
         }),
         ...(dto.icon !== undefined && { icon: dto.icon }),
         ...(dto.color !== undefined && { color: dto.color }),
-        // roomId: null = xóa gán phòng; string = set phòng; undefined = giữ nguyên
         ...(dto.roomId !== undefined && { roomId: dto.roomId }),
         ...(dto.triggers !== undefined && {
           triggers: dto.triggers as unknown as Prisma.InputJsonValue,
@@ -209,6 +367,7 @@ export class SceneService {
         ...(dto.actions !== undefined && {
           actions: dto.actions as unknown as Prisma.InputJsonValue,
         }),
+        ...compiledActionsUpdate,
       },
     });
 
@@ -225,7 +384,6 @@ export class SceneService {
   async deleteScene(sceneId: string, userId: string): Promise<void> {
     await this.ensureUserCanAccessScene(userId, sceneId);
     await this.databaseService.scene.delete({ where: { id: sceneId } });
-    // Remove Redis index entries for this scene
     await this.sceneTriggerIndexService
       .removeIndex(sceneId)
       .catch(() => undefined);
@@ -233,7 +391,6 @@ export class SceneService {
 
   /**
    * Sắp xếp lại thứ tự hiển thị scenes trong một home.
-   * Mảng sceneIds chứa UUID theo thứ tự mong muốn: index 0 = sortOrder 0, v.v.
    */
   async reorderScenes(
     homeId: string,
@@ -241,8 +398,6 @@ export class SceneService {
     sceneIds: string[],
   ): Promise<void> {
     await this.ensureUserCanAccessHome(userId, homeId);
-
-    // Batch update sortOrder bằng transaction
     await this.databaseService.$transaction(
       sceneIds.map((id, index) =>
         this.databaseService.scene.update({
@@ -254,7 +409,7 @@ export class SceneService {
   }
 
   /**
-   * Đẩy job RUN_SCENE vào queue để worker thực thi lần lượt các action
+   * Đẩy job RUN_SCENE vào queue để worker thực thi lần lượt các action.
    */
   async runScene(
     sceneId: string,
@@ -294,7 +449,6 @@ export class SceneService {
 
   /**
    * Chạy scene do trigger kích hoạt (schedule / location / device state).
-   * Không kiểm tra user; dùng nội bộ bởi trigger executors.
    */
   async runSceneByTrigger(sceneId: string): Promise<void> {
     const scene = await this.databaseService.scene.findUnique({

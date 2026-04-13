@@ -367,12 +367,11 @@ services:
 
 networks:
   euro-internal:
-    driver: bridge
-    # BUG FIX: Tên network phải match với tên thực trên VPS.
-    # Dùng 'external: true' + tên thực để tránh compose tạo network mới,
-    # gây mất kết nối giữa các container khi deploy partial services.
+    # external: true — dùng network có sẵn 'aurathink-network' trên VPS
+    # Không để compose tự tạo network mới (gây mất kết nối khi partial deploy)
+    # Network này được tạo khi deploy lần đầu và phải tồn tại trước.
+    external: true
     name: aurathink-network
-    # Chỉ expose qua nginx, các service không bind port ra host
 
 volumes:
   postgres_data:

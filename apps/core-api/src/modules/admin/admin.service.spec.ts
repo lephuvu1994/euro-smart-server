@@ -44,6 +44,7 @@ const mockTx = {
   licenseQuota: {
     updateMany: jest.fn(),
     upsert: jest.fn(),
+    findUnique: jest.fn(),
   },
   deviceModel: {
     findUnique: jest.fn(),
@@ -88,9 +89,16 @@ describe('AdminService', () => {
   describe('createPartner', () => {
     it('should create a new partner', async () => {
       db.partner.findUnique.mockResolvedValue(null);
-      db.partner.create.mockResolvedValue({ id: 'p1', code: 'ACME', name: 'ACME Corp' });
+      db.partner.create.mockResolvedValue({
+        id: 'p1',
+        code: 'ACME',
+        name: 'ACME Corp',
+      });
 
-      const result = await service.createPartner({ code: 'ACME', name: 'ACME Corp' });
+      const result = await service.createPartner({
+        code: 'ACME',
+        name: 'ACME Corp',
+      });
 
       expect(db.partner.create).toHaveBeenCalledWith({
         data: { code: 'ACME', name: 'ACME Corp', isActive: true },
@@ -101,9 +109,9 @@ describe('AdminService', () => {
     it('should throw ConflictException if partner code already exists', async () => {
       db.partner.findUnique.mockResolvedValue({ id: 'p1' });
 
-      await expect(service.createPartner({ code: 'ACME', name: 'ACME' })).rejects.toThrow(
-        ConflictException,
-      );
+      await expect(
+        service.createPartner({ code: 'ACME', name: 'ACME' }),
+      ).rejects.toThrow(ConflictException);
     });
   });
 
@@ -167,9 +175,15 @@ describe('AdminService', () => {
       db.partner.findUnique.mockResolvedValue(existingPartner);
       mockTx.partner.update.mockResolvedValue({});
       mockTx.licenseQuota.updateMany.mockResolvedValue({});
-      mockTx.partner.findUnique.mockResolvedValue({ ...existingPartner, quotas: [] });
+      mockTx.partner.findUnique.mockResolvedValue({
+        ...existingPartner,
+        quotas: [],
+      });
 
-      const result = await service.updatePartner('ACME', { name: 'New Name', quotas: [] });
+      const result = await service.updatePartner('ACME', {
+        name: 'New Name',
+        quotas: [],
+      });
 
       expect(mockTx.partner.update).toHaveBeenCalledWith({
         where: { code: 'ACME' },
@@ -182,7 +196,10 @@ describe('AdminService', () => {
       db.partner.findUnique.mockResolvedValue(existingPartner);
       mockTx.partner.update.mockResolvedValue({});
       mockTx.licenseQuota.updateMany.mockResolvedValue({});
-      mockTx.partner.findUnique.mockResolvedValue({ ...existingPartner, quotas: [] });
+      mockTx.partner.findUnique.mockResolvedValue({
+        ...existingPartner,
+        quotas: [],
+      });
 
       await service.updatePartner('ACME', { quotas: [] });
 
@@ -196,7 +213,10 @@ describe('AdminService', () => {
       db.partner.findUnique.mockResolvedValue(existingPartner);
       mockTx.deviceModel.findUnique.mockResolvedValue({ id: 'm1' });
       mockTx.licenseQuota.upsert.mockResolvedValue({});
-      mockTx.partner.findUnique.mockResolvedValue({ ...existingPartner, quotas: [] });
+      mockTx.partner.findUnique.mockResolvedValue({
+        ...existingPartner,
+        quotas: [],
+      });
 
       await service.updatePartner('ACME', {
         quotas: [{ deviceModelCode: 'M1', quantity: 100 }],
@@ -223,7 +243,11 @@ describe('AdminService', () => {
   describe('createDeviceModel', () => {
     it('should create a new device model', async () => {
       db.deviceModel.findUnique.mockResolvedValue(null);
-      db.deviceModel.create.mockResolvedValue({ id: 'm1', code: 'M1', name: 'Model 1' });
+      db.deviceModel.create.mockResolvedValue({
+        id: 'm1',
+        code: 'M1',
+        name: 'Model 1',
+      });
 
       const result = await service.createDeviceModel({
         code: 'M1',
@@ -246,7 +270,9 @@ describe('AdminService', () => {
 
   describe('getDeviceModelsForDropdown', () => {
     it('should return models list', async () => {
-      db.deviceModel.findMany.mockResolvedValue([{ code: 'M1', name: 'Model 1' }]);
+      db.deviceModel.findMany.mockResolvedValue([
+        { code: 'M1', name: 'Model 1' },
+      ]);
 
       const result = await service.getDeviceModelsForDropdown();
 
@@ -258,14 +284,18 @@ describe('AdminService', () => {
     it('should throw NOT_FOUND if model does not exist', async () => {
       db.deviceModel.findUnique.mockResolvedValue(null);
 
-      await expect(service.updateDeviceModel('UNKNOWN', { code: 'M1', name: 'X' })).rejects.toThrow(
-        HttpException,
-      );
+      await expect(
+        service.updateDeviceModel('UNKNOWN', { code: 'M1', name: 'X' }),
+      ).rejects.toThrow(HttpException);
     });
 
     it('should update a device model', async () => {
       db.deviceModel.findUnique.mockResolvedValue({ id: 'm1', code: 'M1' });
-      db.deviceModel.update.mockResolvedValue({ id: 'm1', code: 'M1', name: 'Updated' });
+      db.deviceModel.update.mockResolvedValue({
+        id: 'm1',
+        code: 'M1',
+        name: 'Updated',
+      });
 
       const result = await service.updateDeviceModel('M1', {
         code: 'M1',
@@ -280,7 +310,11 @@ describe('AdminService', () => {
 
     it('should update only name if only name changed', async () => {
       db.deviceModel.findUnique.mockResolvedValue({ id: 'm1', code: 'M1' });
-      db.deviceModel.update.mockResolvedValue({ id: 'm1', code: 'M1', name: 'NewName' });
+      db.deviceModel.update.mockResolvedValue({
+        id: 'm1',
+        code: 'M1',
+        name: 'NewName',
+      });
 
       await service.updateDeviceModel('M1', { code: 'M1', name: 'NewName' });
 
@@ -342,7 +376,10 @@ describe('AdminService', () => {
     it('should upsert only provided fields', async () => {
       db.systemConfig.upsert.mockResolvedValue({});
 
-      await service.updateSystemConfigs({ mqttHost: 'new-host', otpExpire: 10 });
+      await service.updateSystemConfigs({
+        mqttHost: 'new-host',
+        otpExpire: 10,
+      });
 
       expect(db.systemConfig.upsert).toHaveBeenCalledTimes(2);
     });
@@ -362,7 +399,9 @@ describe('AdminService', () => {
   describe('getDeviceUiConfig', () => {
     it('should return parsed config from DB', async () => {
       const configs = [{ type: 'LIGHT' }];
-      db.systemConfig.findUnique.mockResolvedValue({ value: JSON.stringify(configs) });
+      db.systemConfig.findUnique.mockResolvedValue({
+        value: JSON.stringify(configs),
+      });
 
       const result = await service.getDeviceUiConfig();
 
@@ -399,7 +438,10 @@ describe('AdminService', () => {
         update: { value: JSON.stringify(configs) },
         create: expect.objectContaining({ key: DEVICE_UI_CONFIG_KEY }),
       });
-      expect(redis.set).toHaveBeenCalledWith(DEVICE_UI_CONFIG_REDIS_KEY, JSON.stringify(configs));
+      expect(redis.set).toHaveBeenCalledWith(
+        DEVICE_UI_CONFIG_REDIS_KEY,
+        JSON.stringify(configs),
+      );
     });
   });
 });

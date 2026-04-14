@@ -188,6 +188,7 @@ services:
       MQTT_PORT: '1883'
       APP_MQTT_SECRET: ${APP_MQTT_SECRET}
       MQTT_WSS_URL: ${MQTT_WSS_URL}
+      MCP_SERVER_URL: http://mcp-server:3005/sse
     command: ['/app/entrypoint.sh', 'dist/apps/core-api/main.js']
     depends_on:
       postgres:
@@ -226,6 +227,40 @@ services:
       options:
         max-size: '50m'
         max-file: '5'
+
+  mcp-server:
+    image: ${IMAGE:-ghcr.io/lephuvu1994/sensa-smart-server:latest}
+    container_name: sensa-smart-mcp-server-prod
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: '3005'
+    command: ['node', 'dist/apps/mcp-server/main.js']
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - sensa-internal
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://127.0.0.1:3005/sse']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
 
 
   iot-gateway:

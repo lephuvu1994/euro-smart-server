@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleInit,
+  OnModuleDestroy,
+} from '@nestjs/common';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 // Using @google/genai SDK (needs to be installed via: yarn add @google/genai)
@@ -11,7 +16,7 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
   private mcpClient: Client;
   private transport: SSEClientTransport;
   private ai: GoogleGenAI;
-  
+
   // Cache of MCP tools formatted for Gemini
   private geminiToolsCache: any = null;
   private mcpToolsList: any[] = [];
@@ -24,7 +29,9 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      this.logger.warn('GEMINI_API_KEY is not set in environment variables! AI Chat will not work.');
+      this.logger.warn(
+        'GEMINI_API_KEY is not set in environment variables! AI Chat will not work.',
+      );
     }
     this.ai = new GoogleGenAI({ apiKey: apiKey || 'dummy-key' });
   }
@@ -40,26 +47,33 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
   private async connectToMcpServer(retryCount = 0) {
     const MAX_RETRIES = 5;
     try {
-      this.logger.log(`Connecting to MCP Server via SSE... (attempt ${retryCount + 1})`);
-      const mcpSecret = process.env.MCP_SECRET || '';
-      this.transport = new SSEClientTransport(
-        new URL('http://localhost:3005/sse'),
-        {
-          requestInit: mcpSecret ? { headers: { 'x-mcp-secret': mcpSecret } } : undefined,
-        } as any,
+      this.logger.log(
+        `Connecting to MCP Server via SSE... (attempt ${retryCount + 1})`,
       );
+      const mcpSecret = process.env.MCP_SECRET || '';
+      const mcpUrl = process.env.MCP_SERVER_URL || 'http://mcp-server:3005/sse';
+      this.transport = new SSEClientTransport(new URL(mcpUrl), {
+        requestInit: mcpSecret
+          ? { headers: { 'x-mcp-secret': mcpSecret } }
+          : undefined,
+      } as any);
       await this.mcpClient.connect(this.transport);
       this.logger.log('MCP Server connected successfully.');
-      
+
       await this.refreshTools();
     } catch (error) {
-      this.logger.error(`Failed to connect to MCP Server (attempt ${retryCount + 1})`, error);
+      this.logger.error(
+        `Failed to connect to MCP Server (attempt ${retryCount + 1})`,
+        error,
+      );
       if (retryCount < MAX_RETRIES) {
         const delay = Math.min(2000 * Math.pow(2, retryCount), 30000);
         this.logger.warn(`Retrying MCP connection in ${delay}ms...`);
         setTimeout(() => this.connectToMcpServer(retryCount + 1), delay);
       } else {
-        this.logger.error(`Max retries (${MAX_RETRIES}) reached. MCP Server is unreachable.`);
+        this.logger.error(
+          `Max retries (${MAX_RETRIES}) reached. MCP Server is unreachable.`,
+        );
       }
     }
   }
@@ -67,14 +81,14 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
   private async refreshTools() {
     const { tools } = await this.mcpClient.listTools();
     this.mcpToolsList = tools;
-    
+
     // Convert MCP Tools (JSON Schema) to Gemini FunctionDeclarations
     const functionDeclarations = tools.map((tool) => {
       // Basic mapping from JSON Schema to Gemini Schema
       const properties: any = {};
       const required: string[] = [];
       const inputSchema: any = tool.inputSchema || { properties: {} };
-      
+
       Object.keys(inputSchema.properties || {}).forEach((key) => {
         properties[key] = {
           type: this.mapType(inputSchema.properties[key].type),
@@ -87,7 +101,8 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
         description: tool.description,
         parameters: {
           type: 'OBJECT',
-          properties: Object.keys(properties).length > 0 ? properties : undefined,
+          properties:
+            Object.keys(properties).length > 0 ? properties : undefined,
           required: inputSchema.required || [],
         },
       };
@@ -97,15 +112,24 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
     this.logger.log(`Loaded ${tools.length} tools from MCP Server.`);
   }
 
-  private mapType(jsonType: string | undefined): 'STRING' | 'NUMBER' | 'INTEGER' | 'BOOLEAN' | 'ARRAY' | 'OBJECT' {
+  private mapType(
+    jsonType: string | undefined,
+  ): 'STRING' | 'NUMBER' | 'INTEGER' | 'BOOLEAN' | 'ARRAY' | 'OBJECT' {
     switch (jsonType?.toLowerCase()) {
-      case 'string': return 'STRING';
-      case 'number': return 'NUMBER';
-      case 'integer': return 'INTEGER';
-      case 'boolean': return 'BOOLEAN';
-      case 'array': return 'ARRAY';
-      case 'object': return 'OBJECT';
-      default: return 'STRING'; // Fallback
+      case 'string':
+        return 'STRING';
+      case 'number':
+        return 'NUMBER';
+      case 'integer':
+        return 'INTEGER';
+      case 'boolean':
+        return 'BOOLEAN';
+      case 'array':
+        return 'ARRAY';
+      case 'object':
+        return 'OBJECT';
+      default:
+        return 'STRING'; // Fallback
     }
   }
 
@@ -133,7 +157,10 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
       for (const call of functionCalls) {
         this.logger.log(`Gemini requested tool call: ${call.name}`);
         const args = { ...(call.args as Record<string, any>), lang };
-        const mcpResult = await this.mcpClient.callTool({ name: call.name, arguments: args });
+        const mcpResult = await this.mcpClient.callTool({
+          name: call.name,
+          arguments: args,
+        });
         let toolOutput = '';
         const contentArray = mcpResult.content as any[];
         if (contentArray && contentArray.length > 0) {
@@ -142,13 +169,21 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
         toolResults.push({ name: call.name, result: toolOutput });
       }
 
-      const contentParts: any[] = [
-        { role: 'user', parts: [{ text: prompt }] },
-      ];
+      const contentParts: any[] = [{ role: 'user', parts: [{ text: prompt }] }];
       for (let i = 0; i < functionCalls.length; i++) {
         contentParts.push(
           { role: 'model', parts: [{ functionCall: functionCalls[i] }] },
-          { role: 'user', parts: [{ functionResponse: { name: toolResults[i].name, response: { result: toolResults[i].result } } }] },
+          {
+            role: 'user',
+            parts: [
+              {
+                functionResponse: {
+                  name: toolResults[i].name,
+                  response: { result: toolResults[i].result },
+                },
+              },
+            ],
+          },
         );
       }
 
@@ -181,7 +216,14 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
     res.setHeader('X-Accel-Buffering', 'no'); // Nginx unbuffering
     res.flushHeaders();
 
+    let isAborted = false;
+    res.on('close', () => {
+      this.logger.warn('[Stream] Client closed connection mid-stream');
+      isAborted = true;
+    });
+
     const sendEvent = (event: string, data: any) => {
+      if (isAborted) return;
       res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     };
 
@@ -206,6 +248,8 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
 
       const functionCalls = response.functionCalls;
 
+      if (isAborted) return;
+
       // 2. If no tool calls, stream the final response directly
       if (!functionCalls || functionCalls.length === 0) {
         // Stream the final response using generateContentStream
@@ -219,12 +263,15 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
         });
 
         for await (const chunk of stream) {
+          if (isAborted) break;
           if (chunk.text) {
             sendEvent('delta', { text: chunk.text });
           }
         }
-        sendEvent('done', {});
-        res.end();
+        if (!isAborted) {
+          sendEvent('done', {});
+          res.end();
+        }
         return;
       }
 
@@ -235,6 +282,7 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
 
       const toolResults: { name: string; result: string }[] = [];
       for (const call of functionCalls) {
+        if (isAborted) break;
         this.logger.log(`[Stream] Tool call: ${call.name}`);
         sendEvent('tool_call', { name: call.name });
 
@@ -251,7 +299,10 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
         }
         toolResults.push({ name: call.name, result: toolOutput });
 
-        sendEvent('tool_result', { name: call.name, preview: toolOutput.substring(0, 200) });
+        sendEvent('tool_result', {
+          name: call.name,
+          preview: toolOutput.substring(0, 200),
+        });
       }
 
       // 4. Build full context with tool results, then stream final answer
@@ -259,10 +310,21 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
       for (let i = 0; i < functionCalls.length; i++) {
         fullContents.push(
           { role: 'model', parts: [{ functionCall: functionCalls[i] }] },
-          { role: 'user', parts: [{ functionResponse: { name: toolResults[i].name, response: { result: toolResults[i].result } } }] },
+          {
+            role: 'user',
+            parts: [
+              {
+                functionResponse: {
+                  name: toolResults[i].name,
+                  response: { result: toolResults[i].result },
+                },
+              },
+            ],
+          },
         );
       }
 
+      if (isAborted) return;
       sendEvent('stream_start', {});
 
       const finalStream = await this.ai.models.generateContentStream({
@@ -271,13 +333,16 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
       });
 
       for await (const chunk of finalStream) {
+        if (isAborted) break;
         if (chunk.text) {
           sendEvent('delta', { text: chunk.text });
         }
       }
 
-      sendEvent('done', {});
-      res.end();
+      if (!isAborted) {
+        sendEvent('done', {});
+        res.end();
+      }
     } catch (error) {
       this.logger.error('[Stream] Error during streaming chat', error);
       sendEvent('error', { message: error.message || 'Internal AI Error' });

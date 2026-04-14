@@ -110,5 +110,29 @@ module.exports = {
         WORKER_SERVICE_PORT: 3004,
       },
     },
+
+    // ── mcp-server: AI Context Protocol Server ──
+    {
+      name: 'mcp-server',
+      script: 'dist/apps/mcp-server/main.js',
+      instances: 1, // Fork mode — single SSE endpoint
+      exec_mode: 'fork',
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '384M',
+      kill_timeout: 5000,
+      env: {
+        NODE_ENV: 'development',
+        PORT: 3005,
+      },
+      env_staging: {
+        NODE_ENV: 'staging',
+        PORT: 3005,
+      },
+      env_production: {
+        NODE_ENV: 'production',
+        PORT: 3005,
+      },
+    },
   ],
 };

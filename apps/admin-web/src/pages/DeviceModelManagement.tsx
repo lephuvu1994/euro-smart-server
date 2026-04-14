@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { api } from '../services/api';
 import { useAuthStore } from '../store/useAuthStore';
 import { Loader2, Server, Plus, Edit2, Cpu, Trash2 } from 'lucide-react';
@@ -103,7 +104,7 @@ export default function DeviceModelManagement() {
         setIsModalOpen(false);
         fetchModels();
       } catch (err: any) {
-        alert(err.response?.data?.message || 'Failed to save model');
+        toast.error(err.response?.data?.message || 'Failed to save model');
       } finally {
         setFormLoading(false);
       }
@@ -117,7 +118,7 @@ export default function DeviceModelManagement() {
         setIsDeleteOpen(false);
         fetchModels();
       } catch (err: any) {
-        alert(err.response?.data?.message || 'Failed to delete model');
+        toast.error(err.response?.data?.message || 'Failed to delete model');
       } finally {
         setFormLoading(false);
       }

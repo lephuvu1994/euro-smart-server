@@ -112,6 +112,25 @@ export class AdminService {
                   HttpStatus.BAD_REQUEST,
                 );
 
+              // Validate: new limit must not be below activated count
+              const existingQuota = await prisma.licenseQuota.findUnique({
+                where: {
+                  partnerId_deviceModelId: {
+                    partnerId: existing.id,
+                    deviceModelId: model.id,
+                  },
+                },
+              });
+              if (
+                existingQuota &&
+                item.quantity < existingQuota.activatedCount
+              ) {
+                throw new HttpException(
+                  `Cannot set limit to ${item.quantity} for model '${item.deviceModelCode}': already ${existingQuota.activatedCount} devices activated`,
+                  HttpStatus.BAD_REQUEST,
+                );
+              }
+
               return prisma.licenseQuota.upsert({
                 where: {
                   partnerId_deviceModelId: {

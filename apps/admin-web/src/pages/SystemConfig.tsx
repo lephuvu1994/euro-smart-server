@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { api } from '../services/api';
 import { useAuthStore } from '../store/useAuthStore';
 import { Loader2, Settings, Save, Server, Shield } from 'lucide-react';
@@ -46,10 +47,10 @@ export default function SystemConfig() {
         mqttHost: formData.mqttHost,
         otpExpire: Number(formData.otpExpire),
       });
-      alert('System configurations updated successfully!');
+      toast.success('System configurations updated successfully!');
       fetchConfigs();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to update configs');
+      toast.error(err.response?.data?.message || 'Failed to update configs');
     } finally {
       setFormLoading(false);
     }

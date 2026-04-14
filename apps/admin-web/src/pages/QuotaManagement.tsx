@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { api } from '../services/api';
 import { useAuthStore } from '../store/useAuthStore';
 import { Loader2, Zap, LayoutGrid, Edit2 } from 'lucide-react';
@@ -79,7 +80,7 @@ export default function QuotaManagement() {
       setIsOpen(false);
       fetchQuotas();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Update failed');
+      toast.error(err.response?.data?.message || 'Update failed');
     } finally {
       setFormLoading(false);
     }

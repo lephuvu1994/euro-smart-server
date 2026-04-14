@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { api } from '../services/api';
 import { useAuthStore } from '../store/useAuthStore';
 import { Loader2, Building, Plus, Maximize2, Zap } from 'lucide-react';
@@ -78,7 +79,7 @@ export default function PartnerManagement() {
         setFormData({ code: '', name: '' });
         fetchPartners();
       } catch (err: any) {
-        alert(err.response?.data?.message || 'Failed to add partner');
+        toast.error(err.response?.data?.message || 'Failed to add partner');
       } finally {
         setFormLoading(false);
       }

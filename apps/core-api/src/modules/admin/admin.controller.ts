@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Delete,
   Param,
   Post,
   Put,
@@ -28,6 +29,8 @@ import { UpdateSystemConfigDto } from './dtos/request/update-system-config.dto';
 import { UpdateDeviceUiConfigDto } from './dtos/request/update-device-ui-config.dto';
 import { PartnerUsageResponseDto } from './dtos/response/partner-usage.response.dto';
 import { SystemConfigResponseDto } from './dtos/response/system-config.response.dto';
+import { DashboardStatsResponseDto } from './dtos/response/dashboard-stats.response.dto';
+import { HardwareResponseDto } from './dtos/response/hardware.response.dto';
 
 @ApiTags('admin.metadata')
 @Controller({ version: '1', path: '/admin' })
@@ -36,6 +39,17 @@ import { SystemConfigResponseDto } from './dtos/response/system-config.response.
 @AllowedRoles([UserRole.ADMIN])
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}
+
+  // ──────────────────────────────────────────────
+  // DASHBOARD
+  // ──────────────────────────────────────────────
+
+  @Get('dashboard/stats')
+  @ApiOperation({ summary: 'Get Dashboard Statistics' })
+  @ApiResponse({ status: 200, type: DashboardStatsResponseDto })
+  getDashboardStats(): Promise<DashboardStatsResponseDto> {
+    return this.adminService.getDashboardStats();
+  }
 
   // ──────────────────────────────────────────────
   // PARTNERS
@@ -73,6 +87,17 @@ export class AdminController {
   }
 
   // ──────────────────────────────────────────────
+  // HARDWARE REGISTRY
+  // ──────────────────────────────────────────────
+
+  @Get('hardwares')
+  @ApiOperation({ summary: 'Get all physical devices (Hardware Registry)' })
+  @ApiResponse({ status: 200, type: [HardwareResponseDto] })
+  getHardwares(): Promise<HardwareResponseDto[]> {
+    return this.adminService.getHardwares();
+  }
+
+  // ──────────────────────────────────────────────
   // DEVICE MODELS
   // ──────────────────────────────────────────────
 
@@ -98,6 +123,12 @@ export class AdminController {
   @ApiOperation({ summary: 'Get Device Models for Dropdown' })
   getDeviceModelOptions() {
     return this.adminService.getDeviceModelsForDropdown();
+  }
+
+  @Delete('device-models/:code')
+  @ApiOperation({ summary: 'Delete a Device Model' })
+  deleteDeviceModel(@Param('code') code: string) {
+    return this.adminService.deleteDeviceModel(code);
   }
 
   // ──────────────────────────────────────────────

@@ -149,6 +149,32 @@ export class AdminService {
   }
 
   // ──────────────────────────────────────────────
+  // HARDWARE REGISTRY
+  // ──────────────────────────────────────────────
+
+  async getHardwares() {
+    const records = await this.db.hardwareRegistry.findMany({
+      orderBy: { activatedAt: 'desc' },
+      include: {
+        partner: { select: { code: true } },
+        deviceModel: { select: { code: true } },
+      },
+      // Include User device mapped if necessary, but keep it simple
+    });
+
+    return records.map((r) => ({
+      id: r.id,
+      identifier: r.identifier,
+      deviceToken: r.deviceToken,
+      partnerCode: r.partner.code,
+      deviceModelCode: r.deviceModel.code,
+      firmwareVer: r.firmwareVer,
+      isBanned: r.isBanned,
+      activatedAt: r.activatedAt,
+    }));
+  }
+
+  // ──────────────────────────────────────────────
   // DEVICE MODELS
   // ──────────────────────────────────────────────
 
@@ -192,6 +218,22 @@ export class AdminService {
         }),
       },
     });
+  }
+
+  async deleteDeviceModel(code: string) {
+    const existing = await this.db.deviceModel.findUnique({ where: { code } });
+    if (!existing)
+      throw new HttpException('admin.error.modelNotFound', HttpStatus.NOT_FOUND);
+
+    // Prisma Cascade delete will handle related quotas and hardwares based on schema constraints, 
+    // but ideally we should restrict deletion if devices exist to avoid accidental wipe.
+    const hardwareCount = await this.db.hardwareRegistry.count({ where: { deviceModelId: existing.id } });
+    if (hardwareCount > 0) {
+      throw new HttpException('admin.error.modelInUse', HttpStatus.BAD_REQUEST);
+    }
+
+    await this.db.deviceModel.delete({ where: { code } });
+    return { message: 'Device model deleted successfully' };
   }
 
   // ──────────────────────────────────────────────
@@ -314,5 +356,27 @@ export class AdminService {
     await this.redis.set(DEVICE_UI_CONFIG_REDIS_KEY, configJson);
 
     return { message: 'Device UI config updated and cache refreshed' };
+  }
+
+  // ──────────────────────────────────────────────
+  // DASHBOARD
+  // ──────────────────────────────────────────────
+
+  async getDashboardStats() {
+    const [totalPartners, totalDevices, totalModels, quotas] = await Promise.all([
+      this.db.partner.count(),
+      this.db.hardwareRegistry.count(),
+      this.db.deviceModel.count(),
+      this.db.licenseQuota.findMany({ select: { isActive: true } }),
+    ]);
+
+    const activeQuotas = quotas.filter((q) => q.isActive).length;
+
+    return {
+      totalPartners,
+      totalDevices,
+      totalDeviceModels: totalModels,
+      activeQuotas,
+    };
   }
 }

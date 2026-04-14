@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import prisma from '../prisma';
 import { createPendingAction } from '../utils/confirm';
+import { t } from '../utils/i18n';
 
 /**
  * Nhóm D: User & System Tools (5 tools)
@@ -22,8 +23,13 @@ export function registerUserTools(server: McpServer): void {
         .enum(['ADMIN', 'USER'])
         .optional()
         .describe('Filter by user role'),
+      lang: z
+        .enum(['vi', 'en'])
+        .optional()
+        .default('vi')
+        .describe('Language for response (vi/en)'),
     },
-    async ({ page, limit, search, role }) => {
+    async ({ page, limit, search, role, lang }) => {
       const skip = (page - 1) * limit;
 
       const where = {
@@ -67,7 +73,7 @@ export function registerUserTools(server: McpServer): void {
           id: u.id,
           name:
             [u.firstName, u.lastName].filter(Boolean).join(' ') ||
-            '(chưa đặt tên)',
+            t(lang, 'user.unnamed'),
           email: u.email,
           phone: u.phone,
           role: u.role,
@@ -81,7 +87,12 @@ export function registerUserTools(server: McpServer): void {
         content: [
           {
             type: 'text' as const,
-            text: `👥 Danh sách user (trang ${page}/${result.totalPages}, tổng ${total}):\n\n${JSON.stringify(result, null, 2)}`,
+            text: t(lang, 'user.list', {
+              page,
+              totalPage: result.totalPages,
+              total,
+              result: JSON.stringify(result, null, 2),
+            }),
           },
         ],
       };
@@ -94,8 +105,14 @@ export function registerUserTools(server: McpServer): void {
   server.tool(
     'count_users',
     'Get user registration statistics: total, new today, this week, this month. Use when admin asks "bao nhiêu user", "user mới hôm nay".',
-    {},
-    async () => {
+    {
+      lang: z
+        .enum(['vi', 'en'])
+        .optional()
+        .default('vi')
+        .describe('Language for response (vi/en)'),
+    },
+    async ({ lang }) => {
       const now = new Date();
       const startOfDay = new Date(
         now.getFullYear(),
@@ -125,7 +142,9 @@ export function registerUserTools(server: McpServer): void {
         content: [
           {
             type: 'text' as const,
-            text: `📊 Thống kê User:\n\n${JSON.stringify(result, null, 2)}`,
+            text: t(lang, 'user.stats', {
+              result: JSON.stringify(result, null, 2),
+            }),
           },
         ],
       };
@@ -138,8 +157,14 @@ export function registerUserTools(server: McpServer): void {
   server.tool(
     'get_system_stats',
     'Get system-wide dashboard statistics: total users, devices, partners, hardware. Use when admin asks for system overview or dashboard stats.',
-    {},
-    async () => {
+    {
+      lang: z
+        .enum(['vi', 'en'])
+        .optional()
+        .default('vi')
+        .describe('Language for response (vi/en)'),
+    },
+    async ({ lang }) => {
       const [
         totalUsers,
         totalDevices,
@@ -171,7 +196,9 @@ export function registerUserTools(server: McpServer): void {
         content: [
           {
             type: 'text' as const,
-            text: `📊 Dashboard hệ thống:\n\n${JSON.stringify(result, null, 2)}`,
+            text: t(lang, 'user.dashboard', {
+              result: JSON.stringify(result, null, 2),
+            }),
           },
         ],
       };
@@ -184,8 +211,14 @@ export function registerUserTools(server: McpServer): void {
   server.tool(
     'get_system_configs',
     'Get all system configuration values (MQTT host, OTP settings, etc). Use when admin asks about system settings.',
-    {},
-    async () => {
+    {
+      lang: z
+        .enum(['vi', 'en'])
+        .optional()
+        .default('vi')
+        .describe('Language for response (vi/en)'),
+    },
+    async ({ lang }) => {
       const configs = await prisma.systemConfig.findMany();
       const result = configs.map((c) => ({
         key: c.key,
@@ -197,7 +230,9 @@ export function registerUserTools(server: McpServer): void {
         content: [
           {
             type: 'text' as const,
-            text: `⚙️ Cấu hình hệ thống:\n\n${JSON.stringify(result, null, 2)}`,
+            text: t(lang, 'user.configs', {
+              result: JSON.stringify(result, null, 2),
+            }),
           },
         ],
       };
@@ -217,17 +252,22 @@ export function registerUserTools(server: McpServer): void {
         .string()
         .optional()
         .describe('Description for this config key'),
+      lang: z
+        .enum(['vi', 'en'])
+        .optional()
+        .default('vi')
+        .describe('Language for response (vi/en)'),
     },
-    async ({ key, value, description }) => {
+    async ({ key, value, description, lang }) => {
       const existing = await prisma.systemConfig.findUnique({
         where: { key },
       });
 
       const actionDesc = existing
-        ? `Cập nhật config "${key}":\n- Giá trị cũ: "${existing.value}"\n- Giá trị mới: "${value}"`
-        : `Tạo config mới:\n- Key: ${key}\n- Value: ${value}`;
+        ? t(lang, 'user.updateAction', { key, old: existing.value, new: value })
+        : t(lang, 'user.createAction', { key, value });
 
-      const msg = createPendingAction(actionDesc, async () => {
+      const msg = createPendingAction(lang, actionDesc, async () => {
         return prisma.systemConfig.upsert({
           where: { key },
           update: { value },

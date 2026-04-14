@@ -1,98 +1,217 @@
 # Tài liệu Hệ thống: Smart Home Server (sensa-smart-server)
 
 ## 1. Tổng quan
-Đây là hệ thống Backend trung tâm dạng Microservices quản trị theo nguyên tắc NX Monorepo. Nền tảng đảm nhiệm việc định tuyến người dùng, xử lý các tín hiệu IoT, lập lịch sự kiện, thực thi hàng đợi tin nhắn và cung cấp khả năng High Availability (HA) trải dài trên 2 máy chủ gốc (VPS) qua kết nối mã hóa Tailscale VPN.
+Hệ thống Backend trung tâm dạng Microservices quản trị theo nguyên tắc NX Monorepo. Nền tảng đảm nhiệm việc định tuyến người dùng, xử lý tín hiệu IoT, lập lịch tự động hóa, thực thi hàng đợi điều khiển thiết bị và cung cấp AI Assistant thông qua MCP Protocol. Hệ thống được thiết kế High Availability (HA) trải dài trên 2 máy chủ (VPS) qua kết nối mã hóa Tailscale VPN.
 
 ## 2. Kiến trúc Monorepo (Apps & Libs)
-Cấu trúc NX được cô lập logic kỹ càng giữa 3 Apps có khả năng tự Deploy và 3 bộ Shared Libraries chia sẻ tài nguyên.
+Cấu trúc NX được cô lập logic giữa **4 Apps** có khả năng tự Deploy và **3 bộ Shared Libraries** chia sẻ tài nguyên.
 
 ### Deployable Apps:
-- **`core-api` (Port 3001)**: Đóng vai trò REST API xử lý Business Entities (Tài khoản, Tổ ấm, Thiết bị, Ngữ cảnh automation). Ngoài ra nó chi phối quyền hạn bảo mật Authentication & ACL cho phép thiết bị nào được join vào Broker EMQX.
-- **`iot-gateway` (Port 3003)**: Trụ cầu giao tiếp MQTT Broker. Gắn listeners lắng nghe message realtime, decode payload sau đó phát hành sang BullMQ để xử lý bất đồng bộ.
-- **`worker-service` (Port 3004)**: Worker pool xử lý BullMQ Job Processes (Chạy các cron schedule, điều khiển device background, gửi Email hay SMS OTP/Cảnh báo).
+
+| App | Port | Mô tả |
+|-----|------|-------|
+| **`core-api`** | 3001 | REST API xử lý Business Entities (Tài khoản, Tổ ấm, Thiết bị, Scene, Automation). Quản lý bảo mật Authentication & ACL cho EMQX Broker. |
+| **`iot-gateway`** | 3003 | Cầu nối MQTT Broker. Lắng nghe message realtime từ thiết bị, decode payload, phát hành sang BullMQ. Hai listener: `mqtt.listener.ts` (MQTT generic) và `zigbee2mqtt.listener.ts` (Zigbee). Hai driver: `MqttGenericDriver` và `ZigbeeGenericDriver`. |
+| **`worker-service`** | 3004 | Worker pool xử lý BullMQ Job Processes — điều khiển device, đồng bộ trạng thái, cron schedule, gửi Email/SMS/Push Notification. |
+| **`mcp-server`** | — | MCP (Model Context Protocol) Server cung cấp 22 tools cho AI Chatbox. Transport: Stdio (Phase 1), SSE HTTP (Phase 2). Không chạy port HTTP riêng ở phase hiện tại. |
 
 ### Shared Libraries:
-- **`@app/common`**: Kho Utils, DTOs, Enums v.v. Chứa các Modules lớn hỗ trợ kết nối Mqtt gốc, tích hợp Vietguys Service, Mailer (Handlebar template). Tất cả file chung phải được export thông qua thùng barrel `index.ts`.
-- **`@app/database`**: Adapter đóng gói Prisma ORM Module (`DatabaseService`).
-- **`@app/redis-cache`**: Kết xuất xử lý liên quan in-memory store dùng thư viện `ioredis`.
+
+| Library | Path Alias | Mô tả |
+|---------|-----------|-------|
+| **`@app/common`** | `libs/common/src` | Kho Utils, DTOs, Enums, Guards, Decorators. Chứa Modules: MQTT Service, Vietguys SMS, Mailer (Handlebars template), Notification, SceneTriggerIndexService, SMS-SIM (serialport). |
+| **`@app/database`** | `libs/database/src` | Adapter đóng gói Prisma ORM Module (`DatabaseService`). |
+| **`@app/redis-cache`** | `libs/redis-cache/src` | Xử lý in-memory store dùng `ioredis`. |
 
 ## 3. Storage & Công cụ tích hợp (Tech Stack)
-- **Runtime Core**: Node.js 22 (Alpine) & NestJS 11 framework chạy thông qua Webpack của NX. Sử dụng Yarn 4.9 Corepack.
-- **Data Persistence**: Prisma v6 thao tác trên CSDL PostgreSQL kèm mở rộng TimescaleDB cho time-series (đo nhiệt độ, lịch sử di chuyển).
-- **Messaging/Queue**: BullMQ vận hành qua Redis quản lý Email/Action Device queue.
-- **Real-time IoT**: MQTT Broker là phần mềm EMQX. Tự động bảo chứng luồng xác thực bằng mã hóa HMAC.
-- **Quy trình DevOps**: Phân phối CI/CD thông qua `docker-compose.prod.yml`, gộp cùng với Deploy HA Topology (HAProxy Layer 4 và Nginx SSL termination) chia cho "VPS1 Hậu cung" và "VPS2 Mặt tiền".
 
-## 4. Chuẩn mực & Coding Code (Conventions & Rules)
+| Hạng mục | Công nghệ | Chi tiết |
+|----------|-----------|----------|
+| **Runtime** | Node.js 22 + NestJS 11 | Webpack bundling qua NX, Yarn 4.9 Corepack |
+| **Database** | PostgreSQL + TimescaleDB | Prisma v6, Hypertable cho time-series (EntityStateHistory, DeviceConnectionLog) |
+| **Queue** | BullMQ + Redis | 2 queues: `DEVICE_CONTROL`, `NOTIFICATION` |
+| **Real-time IoT** | EMQX Broker (Cluster 2-node) | HMAC-SHA256 HTTP Auth, ACL per device/user |
+| **AI/MCP** | `@modelcontextprotocol/sdk` + Zod | MCP Server cho Admin Chatbox (Phase 1: Stdio) |
+| **DevOps** | Docker Compose + GitHub Actions | HA Topology: HAProxy (Layer 4) + Nginx (SSL termination), dual VPS deploy |
+
+## 4. Chuẩn mực & Coding Conventions
+
 1. **Naming & Typing**:
-    - Chuẩn tên File: Kebab-case. Class & Object tuân theo PascalCase. DTO cần hậu tố `Dto`, Controller là `Controller`.
-    - Không import tuyệt đối theo physical path để tránh rác Node resolution. Luôn sử dụng NX Alias (Vd: `@app/common`, `@app/database`).
-2. **Quy tắc Phản hồi API REST**:
-    - Trả về đối tượng Response thống nhất qua Interceptors: `{ statusCode, message, timestamp, data }`.
-    - Lọc dữ liệu Output Response bằng class-transformer qua `@Expose` và `@Exclude` (vd che dấu hiệu Password hash).
-3. **Database Domain Grouping**:
-    - Tên bảng map sang định dạng `snake_case` (ví dụ `@@map("t_user")`). Sử dụng Uuid.
-    - Entities chia nhóm: Catalog (Phần cứng), Device (Kiến trúc HA-style: Device → DeviceEntity → EntityAttribute), Home/Room (Cấu trúc phòng), Quota Control (License).
-4. **Luồng Tương tác chéo App (Cross-app Communication)**:
-    - Không import code chéo giữa các App. Phải liên kết qua hạ tầng System (Redis Pub/Sub hoặc BullMQ Queue), hoặc TCP Socket nếu có gateway.
+    - File: kebab-case. Class & Object: PascalCase. DTO hậu tố `Dto`, Controller hậu tố `Controller`.
+    - Luôn sử dụng NX Alias (`@app/common`, `@app/database`, `@app/redis-cache`). Không import physical path.
+    - Barrel export qua `index.ts` cho mỗi library.
+2. **API Response**:
+    - Trả về đối tượng thống nhất qua Interceptors: `{ statusCode, message, timestamp, data }`.
+    - Lọc output bằng class-transformer (`@Expose`, `@Exclude`).
+    - Decorator chuẩn: `@DocResponse({ serialization, httpStatus, messageKey })`.
+3. **Database Conventions**:
+    - Tên bảng map `snake_case` (`@@map("t_user")`). Primary key: UUID.
+    - Entities chia nhóm: Catalog (Hardware), Device (3-tier: Device → DeviceEntity → EntityAttribute), Home/Room/Floor, Quota Control (License).
+4. **Cross-app Communication**:
+    - Không import code chéo giữa Apps. Liên kết qua BullMQ Queue hoặc Redis Pub/Sub.
+    - MCP Server dùng PrismaClient trực tiếp cho Query tools, gọi HTTP tới core-api cho Mutation tools (Phase 4).
 
 ## 5. Các Tính năng (Features) Hiện Có
 
-Hệ thống hiện tại đang triển khai các modules nghiệp vụ và tác vụ chạy ngầm như sau:
+### A. Core-API Modules (`apps/core-api/src/modules/`)
 
-**A. Về phía API (Core-API Modules)**
-- **Admin**: Module quản lý tổng quát dành cho Quản trị viên hệ thống. Bao gồm quản lý Công ty/Đối tác (Partner), Khuôn mẫu thiết bị (Device Model), Sổ cái phần cứng (Hardware Registry), và đặc biệt là thiết lập hạn mức giấy phép (License Quota) cấp phát độc lập theo từng Model thiết bị của mỗi Đối tác/Công ty khác nhau.
-- **User**: Module chứng thực tài khoản (Auth), quản lý người dùng và hồ sơ cá nhân.
-- **Home & Room**: Quản trị cấu trúc "Tổ ấm" (cấp quyền thành viên, quản trị địa lý) và quản lý phân vùng các "Phòng" trong nhà.
-- **Device**: Quản trị toàn bộ vòng đời thiết bị với kiến trúc 3-tier HA-style (Device → Entity → Attribute). Bao gồm Provisioning (Thêm mới và cấp phát), lưu trữ đa dạng các Entity đại diện (chứ không còn là feature đơn thuần), lưu trữ thuộc tính con/lịch sử thông qua EntityAttribute và EntityStateHistory, và giao thức chia sẻ quyền.
-- **Scene**: Module quản trị cấp độ logic (Smart Automations) thiết lập hệ hành vi nhóm các hành động và kịch bản (Automation Scenes) tùy theo ngữ cảnh.
-- **EMQX-Auth**: Chức năng trọng tâm quản lý bảo mật ACL trực tiếp và chứng thực động cho Broker EMQX (Chỉ cấp phép cho những thiết bị hợp lệ mới được kết nối).
+| Module | Files chính | Chức năng |
+|--------|------------|-----------|
+| **Admin** | `admin.controller.ts`, `admin.service.ts` | CRUD Partner/Company, DeviceModel Blueprint, LicenseQuota (upsert), SystemConfig (MQTT, OTP), Device UI Config (JSON + Redis cache) |
+| **User** | `user/` | Authentication (JWT Access/Refresh), quản lý Profile, Session tracking (pushToken per device) |
+| **Home** | `home.controller.ts`, `home.service.ts` | CRUD Home/Floor/Room, Member management, thứ tự sắp xếp (reorder), gán Device/Scene vào Room, Home Activity timeline |
+| **Device** | `device.controller.ts`, 3 services | **DeviceService**: CRUD device, share (token-based QR/DeepLink), timeline history, Siri Sync, notify config. **DeviceControlService**: điều khiển entity (validate domain → check online Redis → BullMQ queue). **DeviceProvisioningService**: đăng ký + claim thiết bị mới |
+| **Scene** | `scene.controller.ts`, `scene.service.ts` | CRUD Scene, **Compiled Actions** (embed MQTT metadata lúc save → zero DB query lúc run), Run Scene (BullMQ), SceneTriggerIndexService (Redis reverse-index cho DEVICE_STATE trigger), Location trigger, Reorder |
+| **Automation** | `automation.controller.ts`, `automation.service.ts` | CRUD Timer (one-shot countdown), CRUD Schedule (recurring cron), Toggle active/inactive, Execution stats, BullMQ queue metrics |
+| **EMQX-Auth** | `emqx-auth/` | HTTP Auth endpoint cho EMQX Broker (HMAC-SHA256 stateless), ACL check per device ownership/share, Generate MQTT credentials cho mobile app |
 
-**B. Về phía tiến trình nền (Worker-Service & Processors)**
-- **Device-Control Processor**: Hàng đợi BullMQ chuyên thực thi và điều tiết lưu lượng lệnh điều khiển (Control Commands) gửi xuống thiết bị phần cứng thực.
-- **Device-Status Processor**: Hook lắng nghe, bóc tách và đồng bộ các thay đổi trạng thái (Status/Telemetry) báo cáo về Database.
-- **Email & Notification Processors**: Quản trị hàng đợi dịch vụ ngoài, lo việc gửi SMS/Push Notification hay Email (như mã OTP, cảnh báo lỗi thiết bị, hết hạn bản quyền).
-- **Midnight Scheduler**: CronJob hệ thống khởi chạy tự động lúc nửa đêm để bảo trì dữ liệu, dọn dẹp hoặc quét các thiết bị có trạng thái offline bất thường/hết hạn quota.
+### B. Worker-Service (`apps/worker-service/src/`)
 
-## 6. Cơ chế Quản lý Bản quyền (License Quota Flow)
+| Processor/Scheduler | File | Chức năng |
+|---------------------|------|-----------|
+| **Device-Control Processor** | `processors/device-control.processor.ts` (34KB) | Thực thi lệnh điều khiển: single entity, bulk entity, **RUN_SCENE** (compiled actions), **CHECK_DEVICE_STATE_TRIGGERS** (Redis index lookup). Gửi MQTT qua MqttGenericDriver/ZigbeeDriver |
+| **Device-Status Processor** | `processors/device-status.processor.ts` | Đồng bộ trạng thái thiết bị báo cáo từ MQTT → Database (EntityStateHistory) |
+| **Notification Processor** | `processors/notification.processor.ts` | Push Notification qua Expo SDK (iOS/Android), routing logic: Owner + Home Members + Shared Users, loại trừ người thực hiện (initiator) |
+| **Email Processor** | `processors/email.processor.ts` | Gửi Email qua NestJS Mailer (Handlebars template): OTP, cảnh báo, thông báo hệ thống |
+| **Scene Schedule Cron** | `modules/scene/services/scene-schedule-cron.service.ts` | CronJob mỗi phút scan Scene có SCHEDULE trigger → fire `runSceneByTrigger()` |
+| **Automation Cron** | `modules/automation/services/schedule-cron.service.ts` | CronJob mỗi phút scan DeviceSchedule → fire qua BullMQ |
+| **Automation Processor** | `modules/automation/processors/automation.processor.ts` | Thực thi Timer/Schedule jobs: điều khiển device hoặc chạy Scene |
+| **Midnight Scheduler** | `schedulers/midnight.scheduler.ts` | CronJob 00:00 hàng ngày (placeholder cho bảo trì dữ liệu) |
 
-Hệ thống thiết lập một vòng đời quản lý License độc lập kết nối giữa Server và Thiết bị phần cứng:
-- **Khởi tạo và Cấp phát API**: Admin quản lý số hạn mức (`licenseDays` mặc định, vd: 90 ngày) trong Database `LicenseQuota`. Khi Mobile App thực hiện Provisioning thiết bị mới qua API, Backend sẽ rà soát Quota hợp đồng và kéo `licenseDays` xuống đẩy thẳng vào JSON payload cài đặt gốc.
-- **Backend gia hạn Mqtt**: Thông qua Mqtt, Server có quyền chủ động bắn một payload `{"license_days": <days>}` trực tiếp xuống một thiết bị IoT đang chết/hết hạn bất cứ lúc nào để hồi sinh hoặc gia tăng thêm thời hạn hợp đồng.
+### C. IoT Gateway (`apps/iot-gateway/src/`)
 
-## 7. Các Core Module Mở rộng (History, Config & Notification)
+| Component | File | Chức năng |
+|-----------|------|-----------|
+| **MQTT Listener** | `listeners/mqtt.listener.ts` | Lắng nghe topic `device/+/status`, decode payload JSON, push job `CHECK_DEVICE_STATUS` vào BullMQ |
+| **Zigbee2MQTT Listener** | `listeners/zigbee2mqtt.listener.ts` | Lắng nghe bridge Zigbee2MQTT, transform payload, push job |
+| **MQTT Generic Driver** | `drivers/mqtt-generic.driver.ts` | Publish lệnh điều khiển: topic `device/{token}/{suffix}`, payload `{commandKey: value}` |
+| **Zigbee Generic Driver** | `drivers/zigbee.generic.driver.ts` | Publish lệnh qua Zigbee2MQTT bridge |
+| **Device State Service** | `services/device-state.service.ts` | Shadow State management trong Redis (`device:shadow:{token}`), cache 5 phút |
+| **Device Status Service** | `services/device-status.service.ts` | Track online/offline qua Redis key `status:{token}`, lưu DeviceConnectionLog |
 
-Hệ thống Backend (BE) còn đi kèm các cơ chế bổ trợ cực kỳ quan trọng giúp định hình một nền tảng Smart Home vững chắc:
+### D. MCP Server (`apps/mcp-server/src/`) — *Mới, Phase 1*
 
-- **Cơ chế Thông báo Đa kênh (Async Notification)**:
-  Mảng gửi tin được vận hành hoàn toàn bất đồng bộ để tránh nghẽn tải. BE sử dụng hàng đợi BullMQ (Redis) thông qua các Worker như `notification.processor.ts` và `email.processor.ts`. Cơ chế này chịu trách nhiệm push song song các luồng thông báo Push Notification (App iOS/Android), tin nhắn SMS (từ Modules SIM vật lý/Vietguys API) hoặc Email OTP/Cảnh báo tự động về trạng thái lỗi/hết hạn của thiết bị.
-- **Lưu trữ Lịch sử (History & Audit Log với TimescaleDB)**:
-  Sơ đồ cơ sở dữ liệu tích hợp TimescaleDB để giải quyết bài toán Time-series Data chuyên biệt. Hai bảng chính `EntityStateHistory` và `DeviceConnectionLog` vận hành dưới dạng Hypertable. Ưu điểm nổi bật là nó truy vết chéo chính xác **Nguồn sự kiện (Source)**: Hành động đó đến từ đâu (Siri, bấm vật trên App, do Automation Scene, MQTT ngoài) và do **Ai** (`actionByUserId`) thực thi.
-- **Cấu hình Động dạng JSON (Dynamic Component Blueprint)**:
-  - Lớp khuôn mẫu (`DeviceModel`) duy trì một bảng mạch Blueprint định dạng JSONB (`config`) quyết định tập hợp Entities + Attributes chuẩn cho toàn nhóm.
-  - Hệ thống cho cấp quyền "Overrides" linh động trên cấp thiết bị riêng lẻ (`Device`). Cột `customConfig` (JSON) cho phép quản trị viên lưu chèn thông số tùy biến truyền xuống chip mà không cần sửa code hệ điều hành Firmware. (Ví dụ: Định danh Modbus Slave ID riêng, hay tần số phát riêng dùng cho 1 nhà duy nhất).
+| Component | File | Chức năng |
+|-----------|------|-----------|
+| **Entry Point** | `main.ts` | McpServer + StdioServerTransport, register 22 tools + 1 resource |
+| **Prisma** | `prisma.ts` | PrismaClient singleton (standalone, không qua NestJS DI) |
+| **Confirm Util** | `utils/confirm.ts` | Mutation Safety: 2-step confirm, in-memory store, TTL 5 phút |
+| **Partner Tools** | `tools/partner.tools.ts` | 4 tools: list, get, create*, update* |
+| **Device Model Tools** | `tools/device-model.tools.ts` | 4 tools: list, create*, update*, assign_to_partner* |
+| **License Tools** | `tools/license.tools.ts` | 3 tools: list_quotas, set_license*, get_usage |
+| **User Tools** | `tools/user.tools.ts` | 5 tools: list_users, count_users, system_stats, configs, update_config* |
+| **Device Tools** | `tools/device.tools.ts` | 4 tools: list_devices, count_by_partner, list_hardware, update_firmware* |
+| **Schema Resource** | `resources/schema.resource.ts` | Expose `prisma/schema.prisma` cho AI đọc cấu trúc DB |
 
-## 8. Cơ chế Thông báo Theo từng Người dùng (Per-User Notification)
+*`*` = Mutation tool, yêu cầu xác nhận 2 bước trước khi ghi DB*
 
-Hệ thống được thiết lập để hỗ trợ nhận thông báo cá nhân hóa cho từng tài khoản, đảm bảo tính linh động trong môi trường gia đình có nhiều thành viên:
+## 6. Cơ chế Điều khiển Thiết bị (Device Control Pipeline)
 
-- **Quản lý Mã thông báo (Push Token) qua Phiên (Session)**:
-  - Một người dùng có thể đăng nhập trên nhiều thiết bị vật lý khác nhau (ví dụ: một điện thoại cá nhân và một máy tính bảng dùng chung). 
-  - Thay vì lưu token trực tiếp trong bảng `User`, mã `pushToken` được lưu trong bảng `Session`. Khi hệ thống cần gửi thông báo cho "Tài khoản A", nó sẽ truy vấn tất cả các phiên hoạt động có token hợp lệ của tài khoản đó để đẩy tin đi đồng thời.
-- **Phân luồng Gửi tin (Routing Logic)**:
-  - Khi một sự kiện thiết bị xảy ra (ví dụ: rèm cửa bị kẹt), hệ thống sẽ tự động xác định các đối tượng cần nhận tin bao gồm: **Chủ sở hữu (Owner)**, **Thành viên trong nhà (Home Members)** và những **Người được chia sẻ (Shared Users)**. 
-  - Cơ chế này cho phép các thành viên khác nhau trong cùng một "Tổ ấm" đều có thể nhận được cảnh báo kịp thời.
-- **Tùy chỉnh Thông báo (User Preferences - Planned/Extensible)**:
-  - Hiện tại, tính năng bật/tắt thông báo đang được thiết lập ở mức độ thiết bị (`Device.customConfig.notify`). 
-  - Tuy nhiên, kiến trúc hệ thống cho phép mở rộng dễ dàng sang cấu hình riêng cho từng cá nhân (ví dụ: Người dùng A muốn nhận tin báo cửa mở, nhưng người dùng B thì không). Điều này có thể được hiện thực hóa thông qua việc lưu cấu hình JSON vào cột `sortOrder` hoặc mở rộng bảng `DeviceShare` để lưu các cờ (flag) thông báo riêng biệt cho từng người được chia sẻ.
-- **Loại trừ Người thực hiện (Excluding Initiator)**:
-  - Hệ thống hỗ trợ logic thông minh để tránh gửi thông báo phiền hà. Ví dụ, nếu bạn là người trực tiếp bấm nút "Mở cửa" trên App, hệ thống sẽ tự động loại trừ bạn khỏi danh sách nhận thông báo "Cửa đã mở", trong khi các thành viên khác vẫn nhận được tin để đảm bảo an ninh.
+Luồng điều khiển thiết bị là pipeline phức tạp nhất trong hệ thống, đảm bảo validation, audit, và realtime:
 
-## 9. Cơ chế Tối ưu Hiệu năng (Scalability & 200k Devices)
+```
+User/AI Request
+    │
+    ▼
+DeviceControlService (core-api)
+    ├─ Validate entity domain (switch, curtain, light, climate, lock, button, config, update)
+    ├─ Check readOnly flag
+    ├─ Check online status (Redis: status:{token})
+    ├─ Validate position limits (curtain: OPEN when pos=100, CLOSE when pos=0)
+    │
+    ▼
+BullMQ Queue (DEVICE_CONTROL)
+    │ Job: CONTROL_CMD / CONTROL_DEVICE_VALUE_CMD
+    ▼
+Device-Control Processor (worker-service)
+    ├─ Resolve DeviceEntity (commandKey, commandSuffix)
+    ├─ Build MQTT payload: {commandKey: value}
+    ├─ Publish via MqttGenericDriver
+    │     Topic: device/{token}/{suffix}
+    │     QoS: 1
+    ├─ Update Redis Shadow State
+    ├─ Write EntityStateHistory (source: "app"/"ai"/"scene"/"schedule")
+    └─ Emit Socket.IO realtime event
+```
 
-Hệ thống được thiết kế để mở rộng và chịu tải cao (Scalability) lên tới 200,000 thiết bị kết nối đồng thời, cấu trúc tối ưu ở các khía cạnh sau:
+### Entity Domains & Validation:
+| Domain | Giá trị hợp lệ | Ví dụ |
+|--------|----------------|-------|
+| `switch` / `switch_` | `0/1`, `true/false`, `"on"/"off"` | Công tắc bật/tắt |
+| `light` | `0-100` (brightness) | Đèn dimmer |
+| `curtain` | `"OPEN"`, `"CLOSE"`, `"STOP"`, `"DIR_REV"`, `"DIR_FWD"` | Rèm/cửa cuốn |
+| `lock` | `0/1` (child_lock) | Khóa trẻ em |
+| `button` | string hoặc `1/true` (trigger) | Nút bấm RF learn |
+| `config` | JSON object | Config pass-through |
+| `update` | HTTP/HTTPS URL | OTA firmware |
+| `sensor` | *(read-only, không điều khiển được)* | Cảm biến nhiệt độ/độ ẩm |
 
-- **Redis Caching & Reverse Indexing**: Việc tiêu thụ CPU và kết nối Database được giảm thiểu tối đa bằng Cache. `DeviceStateService` caching 5 phút bằng phương pháp Cache-aside. Automations/Scenes áp dụng kiến trúc O(1) Lookup qua `SceneTriggerIndexService`, thiết bị gửi status lên sẽ không cần Full Scan bảng tính mà chỉ dùng Redis Reverse-Index.
-- **BullMQ Distributed Locking & Dead Letter Queue (DLQ)**: Quá trình lập lịch (Worker Cron) có tích hợp Distributed Lock để tránh tình trạng nhiều Node cùng kích hoạt một Scene. Nếu lệnh fail, BullMQ hỗ trợ DLQ để retry (3 attempts với socket `emitToDevice`) nhằm tăng tính bền bỉ.
-- **Quota & Rate Limiting**: Triển khai trực tiếp `minIntervalSeconds` cho mỗi Scene và `maxSchedules / maxTimers` trên Users ở ranh giới Schema để giới hạn lưu lượng rác ngập lụt hệ thống.
-- **Database Performance Indexes**: Lắp ráp `CONCURRENTLY INDEX` cực nhẹ trên Postgres như GIN index đối với JSON `triggers`, đảm bảo các thao tác đọc và check điều kiện được giảm tải OOM triệt để.
+## 7. Cơ chế Scene & Automation
+
+### 7.1 Scene (Kịch bản)
+Scene hoạt động phong cách HA (Home Assistant), chia 2 loại:
+
+- **Manual**: `triggers = []` → chỉ chạy qua API `POST /scenes/:id/run`
+- **Automation**: có trigger(s) → executor tự động:
+  - **SCHEDULE**: Worker CronJob mỗi phút (`SceneScheduleCronService`)
+  - **LOCATION**: API `POST /scenes/triggers/location` (geofence enter/leave)
+  - **DEVICE_STATE**: MQTT → BullMQ → `CHECK_DEVICE_STATE_TRIGGERS` (Redis O(1) reverse-index lookup)
+
+**Compiled Actions** — Tối ưu hiệu năng:
+  - Lúc tạo/sửa Scene, `compileSceneActions()` embed `protocol`, `commandKey`, `commandSuffix` từ DeviceEntity vào `compiledActions` JSONB.
+  - Lúc run Scene → executor dùng compiled data, **ZERO DB query**.
+  - Version snapshot (`configVersion` per device) detect drift → lazy re-compile khi entity thay đổi.
+
+### 7.2 Automation (Timer & Schedule)
+- **Timer (DeviceTimer)**: One-shot countdown, chạy 1 lần rồi xóa.
+- **Schedule (DeviceSchedule)**: Recurring cron (daysOfWeek + timeOfDay), toggle active/inactive.
+- Cả hai target lên `Device` hoặc `Scene` (`targetType: "DEVICE" | "SCENE"`).
+
+## 8. Cơ chế Quản lý Bản quyền (License Quota Flow)
+
+Vòng đời License kết nối Server ↔ Thiết bị phần cứng:
+
+1. **Admin cấp phát**: Tạo `LicenseQuota` (partnerId × deviceModelId) với `maxQuantity` và `licenseDays` (mặc định 90 ngày).
+2. **Provisioning**: Mobile App đăng ký thiết bị → Backend rà soát Quota, đẩy `licenseDays` vào payload cài đặt gốc cho chip.
+3. **Gia hạn MQTT**: Server chủ động publish `{"license_days": <days>}` xuống thiết bị qua MQTT bất cứ lúc nào.
+
+## 9. Cơ chế Thông báo (Notification Pipeline)
+
+### Push Token Management:
+- `pushToken` lưu trong bảng `Session` (1 user → nhiều session trên nhiều device vật lý).
+- Gửi tin: truy vấn tất cả Session có token hợp lệ → push song song.
+
+### Routing Logic:
+- Sự kiện thiết bị → xác định recipients: **Owner** + **Home Members** + **Shared Users**.
+- **Loại trừ Initiator**: Người bấm nút "Mở cửa" trên App sẽ không nhận thông báo "Cửa đã mở".
+
+### Kênh gửi:
+- **Push Notification**: Expo Server SDK (iOS/Android)
+- **SMS**: SIM Module vật lý (`serialport-gsm`) hoặc Vietguys API
+- **Email**: NestJS Mailer + Handlebars templates (OTP, cảnh báo)
+
+## 10. Cơ chế Lịch sử & Audit Log (TimescaleDB)
+
+Hai bảng Hypertable time-series:
+- **`EntityStateHistory`**: Lưu mọi thay đổi trạng thái entity (giá trị cũ → mới), tracking **source** (`"app"`, `"mqtt"`, `"scene"`, `"schedule"`, `"siri"`) và **actionByUserId**.
+- **`DeviceConnectionLog`**: Lưu sự kiện connect/disconnect (`"connected"`, `"disconnected"`).
+
+## 11. Cơ chế Tối ưu Hiệu năng (Scalability & 200k Devices)
+
+| Kỹ thuật | Áp dụng | Chi tiết |
+|----------|---------|----------|
+| **Redis Shadow State** | `device:shadow:{token}` | Cache trạng thái realtime, giảm query DB |
+| **Redis Reverse Index** | `SceneTriggerIndexService` | DEVICE_STATE trigger → O(1) lookup, không Full Scan |
+| **Redis Online Status** | `status:{token}` | Check online/offline trước khi gửi lệnh |
+| **Compiled Actions** | `scene.compiledActions` JSONB | Zero DB query khi run Scene |
+| **BullMQ Priority** | `priority: 1` cho control | Lệnh điều khiển ưu tiên cao nhất |
+| **No Retry for Control** | `attempts: 1` | Lệnh stale có hại → không retry |
+| **Distributed Lock** | Worker Cron | Tránh nhiều Node cùng kích hoạt 1 Scene |
+| **Quota/Rate Limit** | Schema level | `minIntervalSeconds` per Scene, `maxSchedules`/`maxTimers`/`maxScenes` per User |
+| **DB Indexes** | PostgreSQL | GIN index trên `triggers` JSON, CONCURRENTLY index cho time-series |
+
+## 12. Cấu hình Động (Dynamic Blueprint & Override)
+
+- **DeviceModel.config** (JSONB): Blueprint chuẩn định nghĩa tập Entities + Attributes cho toàn nhóm model.
+- **Device.customConfig** (JSON): Override cấp thiết bị riêng lẻ (Modbus Slave ID, tần số, notify flags...) — không cần sửa firmware.
+- **Device UI Config**: JSON config cho app rendering (SystemConfig + Redis cache), admin cập nhật qua API → refresh Redis ngay lập tức.

@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import prisma from '../prisma';
 import { createPendingAction } from '../utils/confirm';
+import { t } from '../utils/i18n';
 
 /**
  * Nhóm C: License & Quota Tools (3 tools)
@@ -17,8 +18,13 @@ export function registerLicenseTools(server: McpServer): void {
     {
       partnerCode: z.string().optional().describe('Filter by partner code'),
       modelCode: z.string().optional().describe('Filter by device model code'),
+      lang: z
+        .enum(['vi', 'en'])
+        .optional()
+        .default('vi')
+        .describe('Language for response (vi/en)'),
     },
-    async ({ partnerCode, modelCode }) => {
+    async ({ partnerCode, modelCode, lang }) => {
       const quotas = await prisma.licenseQuota.findMany({
         where: {
           ...(partnerCode && { partner: { code: partnerCode } }),
@@ -49,7 +55,10 @@ export function registerLicenseTools(server: McpServer): void {
         content: [
           {
             type: 'text' as const,
-            text: `📋 Danh sách ${result.length} quota:\n\n${JSON.stringify(result, null, 2)}`,
+            text: t(lang, 'license.list', {
+              count: result.length,
+              result: JSON.stringify(result, null, 2),
+            }),
           },
         ],
       };
@@ -72,8 +81,13 @@ export function registerLicenseTools(server: McpServer): void {
         .positive()
         .default(90)
         .describe('License duration in days'),
+      lang: z
+        .enum(['vi', 'en'])
+        .optional()
+        .default('vi')
+        .describe('Language for response (vi/en)'),
     },
-    async ({ partnerCode, modelCode, maxQuantity, licenseDays }) => {
+    async ({ partnerCode, modelCode, maxQuantity, licenseDays, lang }) => {
       const partner = await prisma.partner.findUnique({
         where: { code: partnerCode },
       });
@@ -82,7 +96,7 @@ export function registerLicenseTools(server: McpServer): void {
           content: [
             {
               type: 'text' as const,
-              text: `❌ Partner "${partnerCode}" không tồn tại.`,
+              text: t(lang, 'partner.notFound', { code: partnerCode }),
             },
           ],
         };
@@ -96,7 +110,7 @@ export function registerLicenseTools(server: McpServer): void {
           content: [
             {
               type: 'text' as const,
-              text: `❌ Device Model "${modelCode}" không tồn tại.`,
+              text: t(lang, 'deviceModel.notFound', { code: modelCode }),
             },
           ],
         };
@@ -113,10 +127,26 @@ export function registerLicenseTools(server: McpServer): void {
       });
 
       const actionDesc = existing
-        ? `Cập nhật quota:\n- Partner: ${partner.name} (${partnerCode})\n- Model: ${model.name} (${modelCode})\n- Số lượng: ${existing.maxQuantity} → ${maxQuantity}\n- Thời hạn: ${existing.licenseDays} → ${licenseDays} ngày`
-        : `Tạo quota mới:\n- Partner: ${partner.name} (${partnerCode})\n- Model: ${model.name} (${modelCode})\n- Số lượng tối đa: ${maxQuantity}\n- Thời hạn: ${licenseDays} ngày`;
+        ? t(lang, 'license.updateAction', {
+            partnerName: partner.name,
+            partnerCode,
+            modelName: model.name,
+            modelCode,
+            oldMax: existing.maxQuantity,
+            max: maxQuantity,
+            oldDays: existing.licenseDays,
+            days: licenseDays,
+          })
+        : t(lang, 'license.createAction', {
+            partnerName: partner.name,
+            partnerCode,
+            modelName: model.name,
+            modelCode,
+            max: maxQuantity,
+            days: licenseDays,
+          });
 
-      const msg = createPendingAction(actionDesc, async () => {
+      const msg = createPendingAction(lang, actionDesc, async () => {
         return prisma.licenseQuota.upsert({
           where: {
             partnerId_deviceModelId: {
@@ -150,8 +180,13 @@ export function registerLicenseTools(server: McpServer): void {
     'Get quota usage summary for a partner. Shows how many licenses used vs total per model. Use when admin asks "partner X còn bao nhiêu quota?".',
     {
       partnerCode: z.string().describe('Partner code to check usage'),
+      lang: z
+        .enum(['vi', 'en'])
+        .optional()
+        .default('vi')
+        .describe('Language for response (vi/en)'),
     },
-    async ({ partnerCode }) => {
+    async ({ partnerCode, lang }) => {
       const partner = await prisma.partner.findUnique({
         where: { code: partnerCode },
         include: {
@@ -208,7 +243,10 @@ export function registerLicenseTools(server: McpServer): void {
         content: [
           {
             type: 'text' as const,
-            text: `📊 Quota usage cho partner "${partnerCode}":\n\n${JSON.stringify(summary, null, 2)}`,
+            text: t(lang, 'license.usage', {
+              code: partnerCode,
+              result: JSON.stringify(summary, null, 2),
+            }),
           },
         ],
       };

@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import prisma from '../prisma';
 import { createPendingAction } from '../utils/confirm';
+import { t } from '../utils/i18n';
 
 /**
  * Nhóm E: Device & Hardware Tools (4 tools)
@@ -18,8 +19,13 @@ export function registerDeviceTools(server: McpServer): void {
       modelCode: z.string().optional().describe('Filter by device model code'),
       page: z.number().int().positive().default(1).describe('Page number'),
       limit: z.number().int().positive().default(20).describe('Items per page'),
+      lang: z
+        .enum(['vi', 'en'])
+        .optional()
+        .default('vi')
+        .describe('Language for response (vi/en)'),
     },
-    async ({ partnerCode, modelCode, page, limit }) => {
+    async ({ partnerCode, modelCode, page, limit, lang }) => {
       const skip = (page - 1) * limit;
 
       const where = {
@@ -81,7 +87,12 @@ export function registerDeviceTools(server: McpServer): void {
         content: [
           {
             type: 'text' as const,
-            text: `📋 Thiết bị (trang ${page}/${result.totalPages}, tổng ${total}):\n\n${JSON.stringify(result, null, 2)}`,
+            text: t(lang, 'device.list', {
+              page,
+              totalPage: result.totalPages,
+              total,
+              result: JSON.stringify(result, null, 2),
+            }),
           },
         ],
       };
@@ -94,8 +105,14 @@ export function registerDeviceTools(server: McpServer): void {
   server.tool(
     'count_devices_by_partner',
     'Get device count grouped by partner. Use when admin wants a summary of which partner has how many devices.',
-    {},
-    async () => {
+    {
+      lang: z
+        .enum(['vi', 'en'])
+        .optional()
+        .default('vi')
+        .describe('Language for response (vi/en)'),
+    },
+    async ({ lang }) => {
       const partners = await prisma.partner.findMany({
         orderBy: { name: 'asc' },
         select: {
@@ -119,7 +136,10 @@ export function registerDeviceTools(server: McpServer): void {
         content: [
           {
             type: 'text' as const,
-            text: `📊 Thiết bị theo partner (tổng: ${totalDevices}):\n\n${JSON.stringify(result, null, 2)}`,
+            text: t(lang, 'device.countByPartner', {
+              total: totalDevices,
+              result: JSON.stringify(result, null, 2),
+            }),
           },
         ],
       };
@@ -141,8 +161,13 @@ export function registerDeviceTools(server: McpServer): void {
         .describe('Filter banned hardware (true/false)'),
       page: z.number().int().positive().default(1).describe('Page number'),
       limit: z.number().int().positive().default(20).describe('Items per page'),
+      lang: z
+        .enum(['vi', 'en'])
+        .optional()
+        .default('vi')
+        .describe('Language for response (vi/en)'),
     },
-    async ({ partnerCode, modelCode, isBanned, page, limit }) => {
+    async ({ partnerCode, modelCode, isBanned, page, limit, lang }) => {
       const skip = (page - 1) * limit;
 
       const where = {
@@ -180,14 +205,14 @@ export function registerDeviceTools(server: McpServer): void {
         hardware: hardwares.map((h) => ({
           id: h.id,
           identifier: h.identifier,
-          firmware: h.firmwareVer || '(chưa cập nhật)',
-          ipAddress: h.ipAddress || '(không có)',
+          firmware: h.firmwareVer || t(lang, 'device.hardwareUnupdated'),
+          ipAddress: h.ipAddress || t(lang, 'device.hardwareNoIp'),
           isBanned: h.isBanned,
           partner: `${h.partner.name} (${h.partner.code})`,
           model: `${h.deviceModel.name} (${h.deviceModel.code})`,
           linkedDevice: h.device
             ? `${h.device.name} (${h.device.token})`
-            : '(chưa kích hoạt)',
+            : t(lang, 'device.hardwareUnlinked'),
           activatedAt: h.activatedAt.toISOString(),
         })),
       };
@@ -196,7 +221,12 @@ export function registerDeviceTools(server: McpServer): void {
         content: [
           {
             type: 'text' as const,
-            text: `🔧 Hardware (trang ${page}/${result.totalPages}, tổng ${total}):\n\n${JSON.stringify(result, null, 2)}`,
+            text: t(lang, 'device.hardware', {
+              page,
+              totalPage: result.totalPages,
+              total,
+              result: JSON.stringify(result, null, 2),
+            }),
           },
         ],
       };
@@ -216,8 +246,13 @@ export function registerDeviceTools(server: McpServer): void {
       firmwareVersion: z
         .string()
         .describe('New firmware version string (e.g. "v2.1.0")'),
+      lang: z
+        .enum(['vi', 'en'])
+        .optional()
+        .default('vi')
+        .describe('Language for response (vi/en)'),
     },
-    async ({ modelCode, firmwareVersion }) => {
+    async ({ modelCode, firmwareVersion, lang }) => {
       const model = await prisma.deviceModel.findUnique({
         where: { code: modelCode },
       });
@@ -226,7 +261,7 @@ export function registerDeviceTools(server: McpServer): void {
           content: [
             {
               type: 'text' as const,
-              text: `❌ Device Model "${modelCode}" không tồn tại.`,
+              text: t(lang, 'deviceModel.notFound', { code: modelCode }),
             },
           ],
         };
@@ -237,14 +272,24 @@ export function registerDeviceTools(server: McpServer): void {
       });
 
       const msg = createPendingAction(
-        `Cập nhật firmware cho model "${model.name}" (${modelCode}):\n- Firmware mới: ${firmwareVersion}\n- Số hardware bị ảnh hưởng: ${count}`,
+        lang,
+        t(lang, 'device.updateFwAction', {
+          code: modelCode,
+          name: model.name, // Will be ignored by i18n placeholders if not mapped, but safe
+          version: firmwareVersion,
+          count,
+        }),
         async () => {
           const result = await prisma.hardwareRegistry.updateMany({
             where: { deviceModelId: model.id },
             data: { firmwareVer: firmwareVersion },
           });
           return {
-            message: `Đã cập nhật firmware ${firmwareVersion} cho ${result.count} chip thuộc model ${modelCode}`,
+            message: t(lang, 'device.updateFwResult', {
+              version: firmwareVersion,
+              count: result.count,
+              code: modelCode,
+            }),
             count: result.count,
           };
         },

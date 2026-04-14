@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto';
+import { t } from './i18n';
 
 /**
  * Mutation Confirmation Pattern
@@ -13,6 +14,7 @@ import { randomUUID } from 'crypto';
 
 interface PendingAction {
   description: string;
+  lang: string;
   action: () => Promise<unknown>;
   createdAt: number;
 }
@@ -33,16 +35,17 @@ function cleanExpired(): void {
 
 /**
  * Tạo yêu cầu chờ xác nhận — tool Mutation gọi hàm này thay vì ghi DB trực tiếp.
- * @returns Message tiếng Việt mô tả hành động, kèm pendingId.
+ * @returns Message mô tả hành động, kèm pendingId theo ngôn ngữ.
  */
 export function createPendingAction(
+  lang: string,
   description: string,
   action: () => Promise<unknown>,
 ): string {
   cleanExpired();
   const id = randomUUID().slice(0, 8);
-  pendingActions.set(id, { description, action, createdAt: Date.now() });
-  return `⚠️ **Xác nhận hành động**\n\n${description}\n\n🔑 Mã xác nhận: \`${id}\`\nHãy trả lời "xác nhận" để tôi thực hiện.`;
+  pendingActions.set(id, { description, lang, action, createdAt: Date.now() });
+  return t(lang, 'confirm.title', { description, id });
 }
 
 /**
@@ -54,31 +57,32 @@ export async function executeConfirmedAction(
   cleanExpired();
   const pending = pendingActions.get(pendingId);
   if (!pending) {
-    return '❌ Không tìm thấy yêu cầu chờ xác nhận. Có thể đã hết hạn (5 phút).';
+    return t('vi', 'confirm.expired');
   }
 
+  const { lang, action } = pending;
   pendingActions.delete(pendingId);
 
   try {
-    const result = await pending.action();
-    return `✅ Đã thực hiện thành công!\n\n${JSON.stringify(result, null, 2)}`;
+    const result = await action();
+    return t(lang, 'confirm.success', { result: JSON.stringify(result, null, 2) });
   } catch (error: unknown) {
     const message =
-      error instanceof Error ? error.message : 'Lỗi không xác định';
-    return `❌ Lỗi khi thực thi: ${message}`;
+      error instanceof Error ? error.message : 'Unknown error';
+    return t(lang, 'confirm.error', { message });
   }
 }
 
 /**
  * Lấy danh sách pending actions (dùng cho debug / list).
  */
-export function listPendingActions(): string {
+export function listPendingActions(lang = 'vi'): string {
   cleanExpired();
   if (pendingActions.size === 0) {
-    return 'Không có yêu cầu nào đang chờ xác nhận.';
+    return t(lang, 'confirm.empty');
   }
   const lines = Array.from(pendingActions.entries()).map(
     ([id, pa]) => `- \`${id}\`: ${pa.description}`,
   );
-  return `📋 **Yêu cầu đang chờ xác nhận:**\n\n${lines.join('\n')}`;
+  return t(lang, 'confirm.list', { lines: lines.join('\n') });
 }

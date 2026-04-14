@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import prisma from '../prisma';
 import { createPendingAction } from '../utils/confirm';
+import { t } from '../utils/i18n';
 
 /**
  * Nhóm B: Device Model Blueprint Tools (4 tools)
@@ -14,8 +15,14 @@ export function registerDeviceModelTools(server: McpServer): void {
   server.tool(
     'list_device_models',
     'List all Device Model blueprints (product types). Shows code, name, description, and config JSON.',
-    {},
-    async () => {
+    {
+      lang: z
+        .enum(['vi', 'en'])
+        .optional()
+        .default('vi')
+        .describe('Language for response (vi/en)'),
+    },
+    async ({ lang }) => {
       const models = await prisma.deviceModel.findMany({
         orderBy: { name: 'asc' },
         select: {
@@ -41,7 +48,10 @@ export function registerDeviceModelTools(server: McpServer): void {
         content: [
           {
             type: 'text' as const,
-            text: `📋 Danh sách ${result.length} loại thiết bị:\n\n${JSON.stringify(result, null, 2)}`,
+            text: t(lang, 'deviceModel.list', {
+              count: result.length,
+              result: JSON.stringify(result, null, 2),
+            }),
           },
         ],
       };
@@ -70,8 +80,13 @@ export function registerDeviceModelTools(server: McpServer): void {
         .describe(
           'Blueprint JSON as string defining entities and attributes. Leave empty for default.',
         ),
+      lang: z
+        .enum(['vi', 'en'])
+        .optional()
+        .default('vi')
+        .describe('Language for response (vi/en)'),
     },
-    async ({ code, name, description, config }) => {
+    async ({ code, name, description, config, lang }) => {
       const exists = await prisma.deviceModel.findUnique({
         where: { code },
       });
@@ -80,7 +95,7 @@ export function registerDeviceModelTools(server: McpServer): void {
           content: [
             {
               type: 'text' as const,
-              text: `❌ Device Model với mã "${code}" đã tồn tại (${exists.name}).`,
+              text: t(lang, 'deviceModel.exists', { code, name: exists.name }),
             },
           ],
         };
@@ -95,7 +110,7 @@ export function registerDeviceModelTools(server: McpServer): void {
             content: [
               {
                 type: 'text' as const,
-                text: '❌ Config JSON không hợp lệ. Vui lòng kiểm tra lại format.',
+                text: t(lang, 'deviceModel.invalidConfig'),
               },
             ],
           };
@@ -103,7 +118,12 @@ export function registerDeviceModelTools(server: McpServer): void {
       }
 
       const msg = createPendingAction(
-        `Tạo loại thiết bị mới:\n- Mã: ${code}\n- Tên: ${name}\n- Mô tả: ${description || '(không có)'}`,
+        lang,
+        t(lang, 'deviceModel.createAction', {
+          code,
+          name,
+          desc: description || '(none)',
+        }),
         async () => {
           return prisma.deviceModel.create({
             data: {
@@ -136,8 +156,13 @@ export function registerDeviceModelTools(server: McpServer): void {
         .string()
         .optional()
         .describe('New config JSON string (replaces entirely)'),
+      lang: z
+        .enum(['vi', 'en'])
+        .optional()
+        .default('vi')
+        .describe('Language for response (vi/en)'),
     },
-    async ({ code, name, description, config }) => {
+    async ({ code, name, description, config, lang }) => {
       const existing = await prisma.deviceModel.findUnique({
         where: { code },
       });
@@ -146,23 +171,27 @@ export function registerDeviceModelTools(server: McpServer): void {
           content: [
             {
               type: 'text' as const,
-              text: `❌ Không tìm thấy Device Model với mã "${code}"`,
+              text: t(lang, 'deviceModel.notFound', { code }),
             },
           ],
         };
       }
 
       const changes: string[] = [];
-      if (name) changes.push(`Tên: "${existing.name}" → "${name}"`);
-      if (description !== undefined) changes.push(`Mô tả: cập nhật`);
-      if (config) changes.push(`Config: cập nhật Blueprint JSON mới`);
+      if (name)
+        changes.push(
+          t(lang, 'partner.changeName', { old: existing.name, new: name }),
+        );
+      if (description !== undefined)
+        changes.push(t(lang, 'deviceModel.changeDesc'));
+      if (config) changes.push(t(lang, 'deviceModel.changeConfig'));
 
       if (changes.length === 0) {
         return {
           content: [
             {
               type: 'text' as const,
-              text: 'Không có thay đổi nào được chỉ định.',
+              text: t(lang, 'partner.noChanges'),
             },
           ],
         };
@@ -177,7 +206,7 @@ export function registerDeviceModelTools(server: McpServer): void {
             content: [
               {
                 type: 'text' as const,
-                text: '❌ Config JSON không hợp lệ.',
+                text: t(lang, 'deviceModel.invalidConfig'),
               },
             ],
           };
@@ -185,7 +214,11 @@ export function registerDeviceModelTools(server: McpServer): void {
       }
 
       const msg = createPendingAction(
-        `Cập nhật Device Model "${code}":\n${changes.join('\n')}`,
+        lang,
+        t(lang, 'deviceModel.updateAction', {
+          code,
+          changes: changes.join('\n'),
+        }),
         async () => {
           return prisma.deviceModel.update({
             where: { code },
@@ -226,8 +259,13 @@ export function registerDeviceModelTools(server: McpServer): void {
         .positive()
         .default(90)
         .describe('License duration in days (default 90)'),
+      lang: z
+        .enum(['vi', 'en'])
+        .optional()
+        .default('vi')
+        .describe('Language for response (vi/en)'),
     },
-    async ({ partnerCode, modelCode, maxQuantity, licenseDays }) => {
+    async ({ partnerCode, modelCode, maxQuantity, licenseDays, lang }) => {
       const partner = await prisma.partner.findUnique({
         where: { code: partnerCode },
       });
@@ -236,7 +274,7 @@ export function registerDeviceModelTools(server: McpServer): void {
           content: [
             {
               type: 'text' as const,
-              text: `❌ Không tìm thấy partner "${partnerCode}"`,
+              text: t(lang, 'partner.notFound', { code: partnerCode }),
             },
           ],
         };
@@ -250,14 +288,22 @@ export function registerDeviceModelTools(server: McpServer): void {
           content: [
             {
               type: 'text' as const,
-              text: `❌ Không tìm thấy Device Model "${modelCode}"`,
+              text: t(lang, 'deviceModel.notFound', { code: modelCode }),
             },
           ],
         };
       }
 
       const msg = createPendingAction(
-        `Gán license cho partner:\n- Partner: ${partner.name} (${partnerCode})\n- Model: ${model.name} (${modelCode})\n- Số lượng tối đa: ${maxQuantity}\n- Thời hạn: ${licenseDays} ngày`,
+        lang,
+        t(lang, 'deviceModel.assignAction', {
+          partnerName: partner.name,
+          partnerCode,
+          modelName: model.name,
+          modelCode,
+          max: maxQuantity,
+          days: licenseDays,
+        }),
         async () => {
           return prisma.licenseQuota.upsert({
             where: {

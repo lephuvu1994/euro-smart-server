@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import prisma from '../prisma';
 import { createPendingAction } from '../utils/confirm';
+import { t } from '../utils/i18n';
 
 /**
  * Nhóm A: Partner Management Tools (4 tools)
@@ -19,8 +20,13 @@ export function registerPartnerTools(server: McpServer): void {
         .boolean()
         .optional()
         .describe('Filter by active status (true/false). Omit for all.'),
+      lang: z
+        .enum(['vi', 'en'])
+        .optional()
+        .default('vi')
+        .describe('Language for response (vi/en)'),
     },
-    async ({ isActive }) => {
+    async ({ isActive, lang }) => {
       const partners = await prisma.partner.findMany({
         where: isActive !== undefined ? { isActive } : undefined,
         orderBy: { createdAt: 'desc' },
@@ -60,7 +66,10 @@ export function registerPartnerTools(server: McpServer): void {
         content: [
           {
             type: 'text' as const,
-            text: `📋 Danh sách ${result.length} partner:\n\n${JSON.stringify(result, null, 2)}`,
+            text: t(lang, 'partner.list', {
+              count: result.length,
+              result: JSON.stringify(result, null, 2),
+            }),
           },
         ],
       };
@@ -75,8 +84,13 @@ export function registerPartnerTools(server: McpServer): void {
     'Get detailed info of a specific Partner by code. Includes quotas, device count.',
     {
       code: z.string().describe('Partner code (e.g. "COMPANY_A")'),
+      lang: z
+        .enum(['vi', 'en'])
+        .optional()
+        .default('vi')
+        .describe('Language for response (vi/en)'),
     },
-    async ({ code }) => {
+    async ({ code, lang }) => {
       const partner = await prisma.partner.findUnique({
         where: { code },
         include: {
@@ -92,7 +106,7 @@ export function registerPartnerTools(server: McpServer): void {
           content: [
             {
               type: 'text' as const,
-              text: `❌ Không tìm thấy partner với mã "${code}"`,
+              text: t(lang, 'partner.notFound', { code }),
             },
           ],
         };
@@ -122,7 +136,10 @@ export function registerPartnerTools(server: McpServer): void {
         content: [
           {
             type: 'text' as const,
-            text: `📊 Chi tiết partner "${code}":\n\n${JSON.stringify(result, null, 2)}`,
+            text: t(lang, 'partner.detail', {
+              code,
+              result: JSON.stringify(result, null, 2),
+            }),
           },
         ],
       };
@@ -140,8 +157,13 @@ export function registerPartnerTools(server: McpServer): void {
         .string()
         .describe('Unique partner code, uppercase (e.g. "COMPANY_B")'),
       name: z.string().describe('Display name (e.g. "Công ty TNHH ABC")'),
+      lang: z
+        .enum(['vi', 'en'])
+        .optional()
+        .default('vi')
+        .describe('Language for response (vi/en)'),
     },
-    async ({ code, name }) => {
+    async ({ code, name, lang }) => {
       // Check duplicate
       const exists = await prisma.partner.findUnique({ where: { code } });
       if (exists) {
@@ -149,14 +171,15 @@ export function registerPartnerTools(server: McpServer): void {
           content: [
             {
               type: 'text' as const,
-              text: `❌ Partner với mã "${code}" đã tồn tại (${exists.name}).`,
+              text: t(lang, 'partner.exists', { code, name: exists.name }),
             },
           ],
         };
       }
 
       const msg = createPendingAction(
-        `Tạo partner mới:\n- Mã: ${code}\n- Tên: ${name}`,
+        lang,
+        t(lang, 'partner.createAction', { code, name }),
         async () => {
           return prisma.partner.create({
             data: { code, name, isActive: true },
@@ -186,25 +209,36 @@ export function registerPartnerTools(server: McpServer): void {
         .boolean()
         .optional()
         .describe('Set active status (true/false)'),
+      lang: z
+        .enum(['vi', 'en'])
+        .optional()
+        .default('vi')
+        .describe('Language for response (vi/en)'),
     },
-    async ({ code, name, isActive }) => {
+    async ({ code, name, isActive, lang }) => {
       const existing = await prisma.partner.findUnique({ where: { code } });
       if (!existing) {
         return {
           content: [
             {
               type: 'text' as const,
-              text: `❌ Không tìm thấy partner với mã "${code}"`,
+              text: t(lang, 'partner.notFound', { code }),
             },
           ],
         };
       }
 
       const changes: string[] = [];
-      if (name) changes.push(`Tên: "${existing.name}" → "${name}"`);
+      if (name)
+        changes.push(
+          t(lang, 'partner.changeName', { old: existing.name, new: name }),
+        );
       if (isActive !== undefined)
         changes.push(
-          `Trạng thái: ${existing.isActive ? 'Active' : 'Inactive'} → ${isActive ? 'Active' : 'Inactive'}`,
+          t(lang, 'partner.changeStatus', {
+            old: existing.isActive ? 'Active' : 'Inactive',
+            new: isActive ? 'Active' : 'Inactive',
+          }),
         );
 
       if (changes.length === 0) {
@@ -212,14 +246,18 @@ export function registerPartnerTools(server: McpServer): void {
           content: [
             {
               type: 'text' as const,
-              text: 'Không có thay đổi nào được chỉ định.',
+              text: t(lang, 'partner.noChanges'),
             },
           ],
         };
       }
 
       const msg = createPendingAction(
-        `Cập nhật partner "${code}":\n${changes.join('\n')}`,
+        lang,
+        t(lang, 'partner.updateAction', {
+          code,
+          changes: changes.join('\n'),
+        }),
         async () => {
           return prisma.partner.update({
             where: { code },

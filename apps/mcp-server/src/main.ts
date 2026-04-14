@@ -65,9 +65,15 @@ async function main(): Promise<void> {
   server.tool(
     'list_pending_actions',
     'List all pending mutation actions waiting for confirmation. Use when user asks what actions are waiting.',
-    {},
-    async () => {
-      const result = listPendingActions();
+    {
+      lang: z
+        .enum(['vi', 'en'])
+        .optional()
+        .default('vi')
+        .describe('Language for response (vi/en)'),
+    },
+    async ({ lang }) => {
+      const result = listPendingActions(lang);
       return {
         content: [{ type: 'text' as const, text: result }],
       };

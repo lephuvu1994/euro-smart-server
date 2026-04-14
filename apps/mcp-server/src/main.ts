@@ -1,5 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import express from 'express';
 import { z } from 'zod';
 
 // Tools
@@ -21,9 +22,9 @@ import { executeConfirmedAction, listPendingActions } from './utils/confirm';
  * Cung cấp 20 Admin Tools + 1 confirm tool + 1 schema resource
  * cho AI Chatbox quản trị hệ thống nhà thông minh.
  *
- * Transport: Stdio (Phase 1) → SSE HTTP (Phase 2)
+ * Transport: SSE HTTP (Phase 2)
  */
-async function main(): Promise<void> {
+export async function bootstrapMcpServer() {
   const server = new McpServer({
     name: 'sensa-smart-mcp',
     version: '1.0.0',
@@ -86,14 +87,40 @@ async function main(): Promise<void> {
   registerSchemaResource(server);
 
   // ─────────────────────────────────────────
-  // Start Stdio Transport
+  // Start SSE Transport via Express
   // ─────────────────────────────────────────
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+  const app = express();
+  let transport: SSEServerTransport | null = null;
 
-  console.error(
-    '[sensa-smart-mcp] Server started with Stdio transport. Ready for connections.',
-  );
+  app.get('/sse', async (req, res) => {
+    transport = new SSEServerTransport('/message', res as any);
+    await server.connect(transport);
+    console.error('[sensa-smart-mcp] SSE connection established.');
+    transport.onclose = () => {
+      transport = null;
+      console.error('[sensa-smart-mcp] SSE connection closed.');
+    };
+  });
+
+  app.post('/message', async (req, res) => {
+    if (transport) {
+      await transport.handlePostMessage(req as any, res as any);
+    } else {
+      res.status(400).send('No active SSE connection');
+    }
+  });
+
+  return { app, server };
+}
+
+async function main(): Promise<void> {
+  const { app } = await bootstrapMcpServer();
+  const PORT = process.env.PORT || 3005;
+  app.listen(PORT, () => {
+    console.error(
+      `[sensa-smart-mcp] Server started with SSE HTTP transport on http://localhost:${PORT}.`,
+    );
+  });
 }
 
 main().catch((error) => {

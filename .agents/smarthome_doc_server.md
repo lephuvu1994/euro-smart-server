@@ -215,3 +215,47 @@ Hai bảng Hypertable time-series:
 - **DeviceModel.config** (JSONB): Blueprint chuẩn định nghĩa tập Entities + Attributes cho toàn nhóm model.
 - **Device.customConfig** (JSON): Override cấp thiết bị riêng lẻ (Modbus Slave ID, tần số, notify flags...) — không cần sửa firmware.
 - **Device UI Config**: JSON config cho app rendering (SystemConfig + Redis cache), admin cập nhật qua API → refresh Redis ngay lập tức.
+
+## 13. Cấu trúc AI Admin Chatbox (MCP Phase 2)
+
+Để hỗ trợ quản trị hệ thống bằng trợ lý ảo phản hồi tự nhiên, mô hình AI (LLM) được tích hợp thông qua kiến trúc Model Context Protocol (MCP) sử dụng kết nối mạng Server-Sent Events (SSE). Mục đích của thiết kế này là phân tách rõ rệt vùng bảo mật cơ sở dữ liệu (MCP Server) ra khỏi tầng REST API mặt tiền (Core API) và cung cấp bối cảnh chuẩn theo thời gian thực (realtime context) cho tác tử AI.
+
+### Sơ đồ giao tiếp (Interaction Flow)
+```text
+[React Admin Dashboard] (Client)
+      |
+      | (REST / SSE)  <- Gửi câu lệnh (VD: "xóa user X", "thống kê thiết bị") & nhận stream text
+      v
+[Core API - AiModule] (NestJS Agent)
+      | 
+      | (1) Khởi tạo `SSEClientTransport` kết nối nội bộ tới `mcp-server:3005`
+      | (2) Lấy cấu trúc 22+ Tools thông qua `client.listTools()`
+      | (3) Khởi tạo Session với External LLM (Gemini / Claude / OpenAI)
+      |
+      v
+[External AI Model] (LLM Engine)
+      | 
+      | (4) Phân tích Prompt + Tool definitions -> gọi Tool call
+      v
+[MCP Server] (Node.js/Express)
+      | (Chạy độc lập port 3005)
+      | (5) Map Tool name vào Prisma Query/Mutation
+      | (6) Trả kết quả (JSON / i18n Markdown) qua mạng nội bộ cho Core API
+      |
+      v
+[Database PostgreSQL]
+```
+
+### Các Layer thiết yếu
+
+#### 1. MCP Server - SSE Transport (`apps/mcp-server`)
+- Được nâng cấp từ Standard IO sang kết nối HTTP/SSE qua **Express**. Mở cố định cổng nội bộ `3005`.
+- **GET `/sse`**: Khởi tạo `SSEServerTransport`, định danh Session Client, ghim Stream open.
+- **POST `/message`**: Endpoint nhận JSON-RPC (ví dụ Tool Call request) từ Core API gửi sang, xử lý kết quả và push event ngược về kênh SSE cho Client.
+- Tích hợp nội bộ **i18n** (Tiếng Việt & Tiếng Anh) qua tệp cấu hình `libs/common/src/message/languages/.../mcp.json` sử dụng key config cho mọi response trả ra từ tools, giúp AI nhận biết context cực chuẩn mà không cần dịch thuật on-the-fly.
+- Sử dụng mô hình kiểm soát an toàn **2-Step Confirm Pattern** đối với các mutate actions (Create, Update, Delete) — yêu cầu LLM xác nhận mã ID ngẫu nhiên.
+
+#### 2. Core API - AI Module (`apps/core-api/src/modules/ai/`)
+- Cung cấp API trực tiếp cho Admin Frontend, đóng vai trò là "The Agent".
+- **Bảo mật**: Các thao tác chỉ khả dụng khi người gọi (caller) vượt qua JwtAdminGuard. Do đó AI sẽ không bao giờ leak hệ thống ra public frontend app của User.
+- **Vận hành**: Abstract hoàn thiện quy trình (Orchestration Loop) giữa người dùng (Prompt) -> LLM Server -> MCP Backend. Nếu LLM yêu cầu gọi `list_users`, AI Module tự động forward cho MCP Server, lấy data JSON trả ngược về cho LLM phân tích, và finally output text string trả lại cho người thiết lập (React Dashboard).

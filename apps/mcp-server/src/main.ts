@@ -90,23 +90,49 @@ export async function bootstrapMcpServer() {
   // Start SSE Transport via Express
   // ─────────────────────────────────────────
   const app = express();
-  let transport: SSEServerTransport | null = null;
+
+  // Auth middleware — require MCP_SECRET header
+  const MCP_SECRET = process.env.MCP_SECRET || '';
+  app.use((req, res, next) => {
+    if (MCP_SECRET) {
+      const provided = req.headers['x-mcp-secret'] as string;
+      if (provided !== MCP_SECRET) {
+        res.status(401).json({ error: 'Unauthorized: invalid MCP secret' });
+        return;
+      }
+    }
+    next();
+  });
+
+  // Multi-session SSE support
+  const transports = new Map<string, SSEServerTransport>();
 
   app.get('/sse', async (req, res) => {
-    transport = new SSEServerTransport('/message', res as any);
+    const transport = new SSEServerTransport('/message', res as any);
+    const sessionId = Math.random().toString(36).slice(2, 10);
+    transports.set(sessionId, transport);
     await server.connect(transport);
-    console.error('[sensa-smart-mcp] SSE connection established.');
+    console.error(`[sensa-smart-mcp] SSE session ${sessionId} connected. Active: ${transports.size}`);
     transport.onclose = () => {
-      transport = null;
-      console.error('[sensa-smart-mcp] SSE connection closed.');
+      transports.delete(sessionId);
+      console.error(`[sensa-smart-mcp] SSE session ${sessionId} closed. Active: ${transports.size}`);
     };
   });
 
   app.post('/message', async (req, res) => {
-    if (transport) {
-      await transport.handlePostMessage(req as any, res as any);
+    // Route to the correct transport based on the sessionId query param
+    // The SSEServerTransport includes sessionId in the POST URL automatically
+    const sessionId = req.query.sessionId as string;
+    if (sessionId && transports.has(sessionId)) {
+      await transports.get(sessionId)?.handlePostMessage(req as any, res as any);
+    } else if (transports.size === 1) {
+      // Fallback for single-session compatibility
+      const transport = transports.values().next().value;
+      if (transport) {
+        await transport.handlePostMessage(req as any, res as any);
+      }
     } else {
-      res.status(400).send('No active SSE connection');
+      res.status(400).send('No active SSE connection for this session');
     }
   });
 

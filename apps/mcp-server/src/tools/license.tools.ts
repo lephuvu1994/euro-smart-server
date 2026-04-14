@@ -203,7 +203,7 @@ export function registerLicenseTools(server: McpServer): void {
           content: [
             {
               type: 'text' as const,
-              text: `❌ Partner "${partnerCode}" không tồn tại.`,
+              text: t(lang, 'partner.notFound', { code: partnerCode }),
             },
           ],
         };

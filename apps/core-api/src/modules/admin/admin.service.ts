@@ -112,6 +112,25 @@ export class AdminService {
                   HttpStatus.BAD_REQUEST,
                 );
 
+              // Validate: new limit must not be below activated count
+              const existingQuota = await prisma.licenseQuota.findUnique({
+                where: {
+                  partnerId_deviceModelId: {
+                    partnerId: existing.id,
+                    deviceModelId: model.id,
+                  },
+                },
+              });
+              if (
+                existingQuota &&
+                item.quantity < existingQuota.activatedCount
+              ) {
+                throw new HttpException(
+                  `Cannot set limit to ${item.quantity} for model '${item.deviceModelCode}': already ${existingQuota.activatedCount} devices activated`,
+                  HttpStatus.BAD_REQUEST,
+                );
+              }
+
               return prisma.licenseQuota.upsert({
                 where: {
                   partnerId_deviceModelId: {
@@ -146,6 +165,44 @@ export class AdminService {
         include: { quotas: { include: { deviceModel: true } } },
       });
     });
+  }
+
+  // ──────────────────────────────────────────────
+  // HARDWARE REGISTRY
+  // ──────────────────────────────────────────────
+
+  async getHardwares(page = 1, limit = 50) {
+    const skip = (page - 1) * limit;
+
+    const [records, total] = await Promise.all([
+      this.db.hardwareRegistry.findMany({
+        skip,
+        take: limit,
+        orderBy: { activatedAt: 'desc' },
+        include: {
+          partner: { select: { code: true } },
+          deviceModel: { select: { code: true } },
+        },
+      }),
+      this.db.hardwareRegistry.count(),
+    ]);
+
+    return {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+      data: records.map((r) => ({
+        id: r.id,
+        identifier: r.identifier,
+        deviceToken: r.deviceToken,
+        partnerCode: r.partner.code,
+        deviceModelCode: r.deviceModel.code,
+        firmwareVer: r.firmwareVer,
+        isBanned: r.isBanned,
+        activatedAt: r.activatedAt,
+      })),
+    };
   }
 
   // ──────────────────────────────────────────────
@@ -192,6 +249,22 @@ export class AdminService {
         }),
       },
     });
+  }
+
+  async deleteDeviceModel(code: string) {
+    const existing = await this.db.deviceModel.findUnique({ where: { code } });
+    if (!existing)
+      throw new HttpException('admin.error.modelNotFound', HttpStatus.NOT_FOUND);
+
+    // Prisma Cascade delete will handle related quotas and hardwares based on schema constraints, 
+    // but ideally we should restrict deletion if devices exist to avoid accidental wipe.
+    const hardwareCount = await this.db.hardwareRegistry.count({ where: { deviceModelId: existing.id } });
+    if (hardwareCount > 0) {
+      throw new HttpException('admin.error.modelInUse', HttpStatus.BAD_REQUEST);
+    }
+
+    await this.db.deviceModel.delete({ where: { code } });
+    return { message: 'Device model deleted successfully' };
   }
 
   // ──────────────────────────────────────────────
@@ -314,5 +387,25 @@ export class AdminService {
     await this.redis.set(DEVICE_UI_CONFIG_REDIS_KEY, configJson);
 
     return { message: 'Device UI config updated and cache refreshed' };
+  }
+
+  // ──────────────────────────────────────────────
+  // DASHBOARD
+  // ──────────────────────────────────────────────
+
+  async getDashboardStats() {
+    const [totalPartners, totalDevices, totalModels, activeQuotas] = await Promise.all([
+      this.db.partner.count(),
+      this.db.hardwareRegistry.count(),
+      this.db.deviceModel.count(),
+      this.db.licenseQuota.count({ where: { isActive: true } }),
+    ]);
+
+    return {
+      totalPartners,
+      totalDevices,
+      totalDeviceModels: totalModels,
+      activeQuotas,
+    };
   }
 }

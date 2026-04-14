@@ -19,9 +19,11 @@ export default function Login() {
     
     try {
       // In Sensa Smart, backend expects 'identifier', not 'email'
-      const req = await api.post('/auth/login', { identifier: email, password });
-      if (req.data?.accessToken) {
-        setAuth(req.data.accessToken, req.data.user);
+      const res = await api.post('/auth/login', { identifier: email, password });
+      const payload = res.data?.data || res.data;
+      
+      if (payload?.accessToken) {
+        setAuth(payload.accessToken, payload.user);
       } else {
         throw new Error('No access token returned');
       }

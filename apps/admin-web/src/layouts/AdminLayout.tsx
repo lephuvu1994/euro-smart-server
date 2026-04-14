@@ -1,3 +1,4 @@
+import React from 'react';
 import { Navigate, Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/useAuthStore';
 import { 
@@ -8,7 +9,9 @@ import {
   Server, 
   Component, 
   Zap,
-  LogOut
+  LogOut,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '../components/ui/avatar';
 import { Button } from '../components/ui/button';
@@ -21,6 +24,20 @@ export default function AdminLayout() {
     return <Navigate to="/login" replace />;
   }
 
+  const [isDark, setIsDark] = React.useState(() => {
+    return localStorage.getItem('theme') !== 'light';
+  });
+
+  React.useEffect(() => {
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  }, [isDark]);
+
   const menu = [
     { name: 'Dashboard', path: '/dashboard', icon: <LayoutDashboard size={20} /> },
     { name: 'AI Assistant', path: '/ai-chat', icon: <Bot size={20} /> },
@@ -32,7 +49,7 @@ export default function AdminLayout() {
   ];
 
   return (
-    <div className="flex h-screen w-full bg-background overflow-hidden dark">
+    <div className={`flex h-screen w-full bg-background overflow-hidden ${isDark ? 'dark' : ''}`}>
       {/* Sidebar */}
       <aside className="w-64 flex-shrink-0 border-r border-border bg-card/50 backdrop-blur-md flex flex-col">
         <div className="h-16 flex items-center px-6 border-b border-border">
@@ -70,10 +87,20 @@ export default function AdminLayout() {
               <p className="text-xs text-muted-foreground uppercase">{user?.role || 'Admin'}</p>
             </div>
           </div>
-          <Button variant="outline" className="w-full justify-start gap-2" onClick={logout}>
-            <LogOut size={16} />
-            Logout
-          </Button>
+          <div className="flex items-center gap-2 w-full mt-2">
+            <Button variant="outline" className="flex-1 justify-start gap-2" onClick={logout}>
+              <LogOut size={16} />
+              Logout
+            </Button>
+            <Button 
+               variant="outline" 
+               size="icon" 
+               onClick={() => setIsDark(!isDark)}
+               title="Toggle Theme"
+            >
+              {isDark ? <Sun size={16} /> : <Moon size={16} />}
+            </Button>
+          </div>
         </div>
       </aside>
 

@@ -36,17 +36,30 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
     await this.mcpClient.close();
   }
 
-  private async connectToMcpServer() {
+  private async connectToMcpServer(retryCount = 0) {
+    const MAX_RETRIES = 5;
     try {
-      this.logger.log('Connecting to MCP Server via SSE...');
-      this.transport = new SSEClientTransport(new URL('http://localhost:3005/sse'));
+      this.logger.log(`Connecting to MCP Server via SSE... (attempt ${retryCount + 1})`);
+      const mcpSecret = process.env.MCP_SECRET || '';
+      this.transport = new SSEClientTransport(
+        new URL('http://localhost:3005/sse'),
+        {
+          requestInit: mcpSecret ? { headers: { 'x-mcp-secret': mcpSecret } } : undefined,
+        } as any,
+      );
       await this.mcpClient.connect(this.transport);
       this.logger.log('MCP Server connected successfully.');
       
       await this.refreshTools();
     } catch (error) {
-      this.logger.error('Failed to connect to MCP Server', error);
-      // Optional: implement retry logic here
+      this.logger.error(`Failed to connect to MCP Server (attempt ${retryCount + 1})`, error);
+      if (retryCount < MAX_RETRIES) {
+        const delay = Math.min(2000 * Math.pow(2, retryCount), 30000);
+        this.logger.warn(`Retrying MCP connection in ${delay}ms...`);
+        setTimeout(() => this.connectToMcpServer(retryCount + 1), delay);
+      } else {
+        this.logger.error(`Max retries (${MAX_RETRIES}) reached. MCP Server is unreachable.`);
+      }
     }
   }
 
@@ -107,39 +120,46 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
         },
       });
 
-      // 2. Check if Gemini requested to call a tool
+      // 2. Check if Gemini requested to call tool(s)
       const functionCalls = response.functionCalls;
       if (!functionCalls || functionCalls.length === 0) {
         return response.text; // Natural response without tool call
       }
 
-      // 3. For simplicity, we process the first tool call (in a real app, loop all)
-      const call = functionCalls[0];
-      this.logger.log(`Gemini requested tool call: ${call.name}`);
-      
-      const args = call.args as Record<string, any>;
-      args.lang = lang; // Force language into tool args
+      // 3. Process ALL tool calls (not just the first one)
+      const toolResults: { name: string; result: string }[] = [];
+      for (const call of functionCalls) {
+        this.logger.log(`Gemini requested tool call: ${call.name}`);
+        const args = { ...(call.args as Record<string, any>), lang };
 
-      // 4. Call MCP Server
-      const mcpResult = await this.mcpClient.callTool({
-        name: call.name,
-        arguments: args,
-      });
+        const mcpResult = await this.mcpClient.callTool({
+          name: call.name,
+          arguments: args,
+        });
 
-      let toolOutput = '';
-      const contentArray = mcpResult.content as any[];
-      if (contentArray && contentArray.length > 0) {
-        toolOutput = contentArray[0].text || JSON.stringify(contentArray);
+        let toolOutput = '';
+        const contentArray = mcpResult.content as any[];
+        if (contentArray && contentArray.length > 0) {
+          toolOutput = contentArray[0].text || JSON.stringify(contentArray);
+        }
+        toolResults.push({ name: call.name, result: toolOutput });
       }
 
-      // 5. Send tool response back to Gemini to get final answer
+      // 4. Send all tool responses back to Gemini to get final answer
+      const contentParts: any[] = [
+        { role: 'user', parts: [{ text: prompt }] },
+      ];
+      // Add each function call + response pair
+      for (let i = 0; i < functionCalls.length; i++) {
+        contentParts.push(
+          { role: 'model', parts: [{ functionCall: functionCalls[i] }] },
+          { role: 'user', parts: [{ functionResponse: { name: toolResults[i].name, response: { result: toolResults[i].result } } }] },
+        );
+      }
+
       const finalResponse = await this.ai.models.generateContent({
         model: 'gemini-2.5-flash',
-        contents: [
-          { role: 'user', parts: [{ text: prompt }] },
-          { role: 'model', parts: [{ functionCall: call }] },
-          { role: 'user', parts: [{ functionResponse: { name: call.name, response: { result: toolOutput } } }] }
-        ],
+        contents: contentParts,
       });
 
       return finalResponse.text;

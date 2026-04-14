@@ -25,6 +25,8 @@
     "createAction": "Tạo loại thiết bị mới:\n- Mã: {code}\n- Tên: {name}\n- Mô tả: {desc}",
     "notFound": "❌ Không tìm thấy Device Model với mã \"{code}\"",
     "changeDesc": "Mô tả: cập nhật",
+    "changeName": "Tên: \"{old}\" → \"{new}\"",
+    "noChanges": "Không có thay đổi nào được chỉ định.",
     "changeConfig": "Config: cập nhật Blueprint JSON mới",
     "updateAction": "Cập nhật Device Model \"{code}\":\n{changes}",
     "assignAction": "Gán license cho partner:\n- Partner: {partnerName} ({partnerCode})\n- Model: {modelName} ({modelCode})\n- Số lượng tối đa: {max}\n- Thời hạn: {days} ngày"

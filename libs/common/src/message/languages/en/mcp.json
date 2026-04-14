@@ -25,6 +25,8 @@
     "createAction": "Create new device model:\n- Code: {code}\n- Name: {name}\n- Description: {desc}",
     "notFound": "❌ Device Model with code \"{code}\" not found.",
     "changeDesc": "Description: updated",
+    "changeName": "Name: \"{old}\" → \"{new}\"",
+    "noChanges": "No changes specified.",
     "changeConfig": "Config: updated new Blueprint JSON",
     "updateAction": "Update Device Model \"{code}\":\n{changes}",
     "assignAction": "Assign license to partner:\n- Partner: {partnerName} ({partnerCode})\n- Model: {modelName} ({modelCode})\n- Max Quantity: {max}\n- Duration: {days} days"

@@ -302,6 +302,32 @@ services:
         max-size: '30m'
         max-file: '5'
 
+  admin-web:
+    image: ${IMAGE:-ghcr.io/lephuvu1994/sensa-smart-server:latest}
+    container_name: sensa-smart-admin-web-prod
+    restart: unless-stopped
+    env_file:
+      - .env
+    command: ["npx", "serve", "-s", "dist/apps/admin-web", "-p", "4200"]
+    depends_on:
+      core-api:
+        condition: service_healthy
+    networks:
+      - sensa-internal
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+
   # ─────────────────────────────────────────────
   # HAPROXY LOAD BALANCER (GĐ2: VPS2 Mặt tiền)
   # ─────────────────────────────────────────────

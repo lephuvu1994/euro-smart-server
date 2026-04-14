@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "sensa-smart": {
+      "command": "node",
+      "args": [
+        "/Users/YOUR_USERNAME/Documents/smarthome/sensa-smart-server/dist/apps/mcp-server/main.js"
+      ],
+      "env": {
+        "DATABASE_URL": "postgresql://USER:PASSWORD@localhost:5432/sensa_smart?schema=public"
+      }
+    }
+  }
+}

@@ -18,8 +18,8 @@ export default function Login() {
     setError('');
     
     try {
-      // In Sensa Smart, replace '/auth/login' with actual admin login endpoint if differs
-      const req = await api.post('/auth/login', { email, password });
+      // In Sensa Smart, backend expects 'identifier', not 'email'
+      const req = await api.post('/auth/login', { identifier: email, password });
       if (req.data?.accessToken) {
         setAuth(req.data.accessToken, req.data.user);
       } else {

@@ -8,19 +8,17 @@ describe('App', () => {
     const { baseElement } = render(
       <BrowserRouter>
         <App />
-      </BrowserRouter>,
+      </BrowserRouter>
     );
     expect(baseElement).toBeTruthy();
   });
 
-  it('should have a greeting as the title', () => {
-    const { getAllByText } = render(
+  it('should render the login page initially', () => {
+    const { getByText } = render(
       <BrowserRouter>
         <App />
-      </BrowserRouter>,
+      </BrowserRouter>
     );
-    expect(
-      getAllByText(new RegExp('Welcome admin-web', 'gi')).length > 0,
-    ).toBeTruthy();
+    expect(getByText(/Welcome back/i)).toBeTruthy();
   });
 });

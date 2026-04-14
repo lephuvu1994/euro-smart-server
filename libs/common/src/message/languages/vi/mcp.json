@@ -1,0 +1,57 @@
+{
+  "confirm": {
+    "title": "⚠️ **Xác nhận hành động**\n\n{description}\n\n🔑 Mã xác nhận: `{id}`\nHãy trả lời \"xác nhận\" để tôi thực hiện.",
+    "expired": "❌ Không tìm thấy yêu cầu chờ xác nhận. Có thể đã hết hạn (5 phút).",
+    "success": "✅ Đã thực hiện thành công!\n\n{result}",
+    "error": "❌ Lỗi khi thực thi: {message}",
+    "empty": "Không có yêu cầu nào đang chờ xác nhận.",
+    "list": "📋 **Yêu cầu đang chờ xác nhận:**\n\n{lines}"
+  },
+  "partner": {
+    "list": "📋 Danh sách {count} partner:\n\n{result}",
+    "notFound": "❌ Không tìm thấy partner với mã \"{code}\"",
+    "detail": "📊 Chi tiết partner \"{code}\":\n\n{result}",
+    "exists": "❌ Partner với mã \"{code}\" đã tồn tại ({name}).",
+    "createAction": "Tạo partner mới:\n- Mã: {code}\n- Tên: {name}",
+    "noChanges": "Không có thay đổi nào được chỉ định.",
+    "changeName": "Tên: \"{old}\" → \"{new}\"",
+    "changeStatus": "Trạng thái: {old} → {new}",
+    "updateAction": "Cập nhật partner \"{code}\":\n{changes}"
+  },
+  "deviceModel": {
+    "list": "📋 Danh sách {count} loại thiết bị:\n\n{result}",
+    "exists": "❌ Device Model với mã \"{code}\" đã tồn tại ({name}).",
+    "invalidConfig": "❌ Config JSON không hợp lệ. Vui lòng kiểm tra lại format.",
+    "createAction": "Tạo loại thiết bị mới:\n- Mã: {code}\n- Tên: {name}\n- Mô tả: {desc}",
+    "notFound": "❌ Không tìm thấy Device Model với mã \"{code}\"",
+    "changeDesc": "Mô tả: cập nhật",
+    "changeConfig": "Config: cập nhật Blueprint JSON mới",
+    "updateAction": "Cập nhật Device Model \"{code}\":\n{changes}",
+    "assignAction": "Gán license cho partner:\n- Partner: {partnerName} ({partnerCode})\n- Model: {modelName} ({modelCode})\n- Số lượng tối đa: {max}\n- Thời hạn: {days} ngày"
+  },
+  "license": {
+    "list": "📋 Danh sách {count} quota:\n\n{result}",
+    "createAction": "Tạo quota mới:\n- Partner: {partnerName} ({partnerCode})\n- Model: {modelName} ({modelCode})\n- Số lượng tối đa: {max}\n- Thời hạn: {days} ngày",
+    "updateAction": "Cập nhật quota:\n- Partner: {partnerName} ({partnerCode})\n- Model: {modelName} ({modelCode})\n- Số lượng: {oldMax} → {max}\n- Thời hạn: {oldDays} → {days} ngày",
+    "usage": "📊 Quota usage cho partner \"{code}\":\n\n{result}"
+  },
+  "user": {
+    "list": "👥 Danh sách user (trang {page}/{totalPage}, tổng {total}):\n\n{result}",
+    "unnamed": "(chưa đặt tên)",
+    "stats": "📊 Thống kê User:\n\n{result}",
+    "dashboard": "📊 Dashboard hệ thống:\n\n{result}",
+    "configs": "⚙️ Cấu hình hệ thống:\n\n{result}",
+    "updateAction": "Cập nhật config \"{key}\":\n- Giá trị cũ: \"{old}\"\n- Giá trị mới: \"{new}\"",
+    "createAction": "Tạo config mới:\n- Key: {key}\n- Value: {value}"
+  },
+  "device": {
+    "list": "📋 Thiết bị (trang {page}/{totalPage}, tổng {total}):\n\n{result}",
+    "countByPartner": "📊 Thiết bị theo partner (tổng: {total}):\n\n{result}",
+    "hardware": "🔧 Hardware (trang {page}/{totalPage}, tổng {total}):\n\n{result}",
+    "hardwareUnupdated": "(chưa cập nhật)",
+    "hardwareNoIp": "(không có)",
+    "hardwareUnlinked": "(chưa kích hoạt)",
+    "updateFwAction": "Cập nhật firmware cho model \"{code}\":\n- Firmware mới: {version}\n- Số hardware bị ảnh hưởng: {count}",
+    "updateFwResult": "Đã cập nhật firmware {version} cho {count} chip thuộc model {code}"
+  }
+}

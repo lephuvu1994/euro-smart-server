@@ -26,6 +26,7 @@ import { HomeModule } from './modules/home/home.module';
 import { SceneModule } from './modules/scene/scene.module';
 import { EmqxAuthModule } from './modules/emqx-auth/emqx-auth.module';
 import { AutomationModule } from './modules/automation/automation.module';
+import { AiModule } from './modules/ai/ai.module';
 
 @Module({
   imports: [
@@ -80,6 +81,7 @@ import { AutomationModule } from './modules/automation/automation.module';
     SceneModule,
     EmqxAuthModule,
     AutomationModule,
+    AiModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

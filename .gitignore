@@ -49,3 +49,5 @@ Thumbs.db
 deploy/docker/ssl/*.pem
 deploy/docker/ssl/*.key
 deploy/docker/ssl/*.crt
+
+vite.config.*.timestamp*

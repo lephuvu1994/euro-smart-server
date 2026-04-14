@@ -1,0 +1,57 @@
+{
+  "confirm": {
+    "title": "⚠️ **Confirm Action**\n\n{description}\n\n🔑 Confirmation Code: `{id}`\nReply with \"confirm\" or \"yes\" to execute.",
+    "expired": "❌ Pending request not found. It might have expired (5 minutes timeout).",
+    "success": "✅ Successfully executed!\n\n{result}",
+    "error": "❌ Execution error: {message}",
+    "empty": "No pending requests waiting for confirmation.",
+    "list": "📋 **Pending Requests:**\n\n{lines}"
+  },
+  "partner": {
+    "list": "📋 List of {count} partners:\n\n{result}",
+    "notFound": "❌ Partner with code \"{code}\" not found.",
+    "detail": "📊 Partner details \"{code}\":\n\n{result}",
+    "exists": "❌ Partner with code \"{code}\" already exists ({name}).",
+    "createAction": "Create new partner:\n- Code: {code}\n- Name: {name}",
+    "noChanges": "No changes specified.",
+    "changeName": "Name: \"{old}\" → \"{new}\"",
+    "changeStatus": "Status: {old} → {new}",
+    "updateAction": "Update partner \"{code}\":\n{changes}"
+  },
+  "deviceModel": {
+    "list": "📋 List of {count} device models:\n\n{result}",
+    "exists": "❌ Device Model with code \"{code}\" already exists ({name}).",
+    "invalidConfig": "❌ Invalid Config JSON format.",
+    "createAction": "Create new device model:\n- Code: {code}\n- Name: {name}\n- Description: {desc}",
+    "notFound": "❌ Device Model with code \"{code}\" not found.",
+    "changeDesc": "Description: updated",
+    "changeConfig": "Config: updated new Blueprint JSON",
+    "updateAction": "Update Device Model \"{code}\":\n{changes}",
+    "assignAction": "Assign license to partner:\n- Partner: {partnerName} ({partnerCode})\n- Model: {modelName} ({modelCode})\n- Max Quantity: {max}\n- Duration: {days} days"
+  },
+  "license": {
+    "list": "📋 List of {count} quotas:\n\n{result}",
+    "createAction": "Create new quota:\n- Partner: {partnerName} ({partnerCode})\n- Model: {modelName} ({modelCode})\n- Max Quantity: {max}\n- Duration: {days} days",
+    "updateAction": "Update quota:\n- Partner: {partnerName} ({partnerCode})\n- Model: {modelName} ({modelCode})\n- Quantity: {oldMax} → {max}\n- Duration: {oldDays} → {days} days",
+    "usage": "📊 Quota usage for partner \"{code}\":\n\n{result}"
+  },
+  "user": {
+    "list": "👥 User list (page {page}/{totalPage}, total {total}):\n\n{result}",
+    "unnamed": "(unnamed)",
+    "stats": "📊 User Statistics:\n\n{result}",
+    "dashboard": "📊 System Dashboard:\n\n{result}",
+    "configs": "⚙️ System Configurations:\n\n{result}",
+    "updateAction": "Update config \"{key}\":\n- Old value: \"{old}\"\n- New value: \"{new}\"",
+    "createAction": "Create new config:\n- Key: {key}\n- Value: {value}"
+  },
+  "device": {
+    "list": "📋 Devices (page {page}/{totalPage}, total {total}):\n\n{result}",
+    "countByPartner": "📊 Devices by partner (total: {total}):\n\n{result}",
+    "hardware": "🔧 Hardware (page {page}/{totalPage}, total {total}):\n\n{result}",
+    "hardwareUnupdated": "(not updated)",
+    "hardwareNoIp": "(no IP)",
+    "hardwareUnlinked": "(unlinked)",
+    "updateFwAction": "Update firmware for model \"{code}\":\n- New firmware: {version}\n- Affected hardware count: {count}",
+    "updateFwResult": "Successfully updated firmware {version} for {count} chips of model {code}"
+  }
+}

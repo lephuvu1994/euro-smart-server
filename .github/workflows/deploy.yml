@@ -112,7 +112,7 @@ jobs:
             IMAGE=$IMAGE docker compose \
               -f docker-compose.prod.yml \
               up -d --no-build --force-recreate --no-deps \
-              core-api iot-gateway worker-service
+              core-api iot-gateway worker-service admin-web
 
             echo "==> [VPS1] Cleanup..."
             docker image prune -f

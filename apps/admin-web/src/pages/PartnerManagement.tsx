@@ -51,6 +51,7 @@ export default function PartnerManagement() {
   const token = useAuthStore((state) => state.token);
 
   useEffect(() => {
+    if (!token) return;
     fetchPartners();
   }, [token]);
 

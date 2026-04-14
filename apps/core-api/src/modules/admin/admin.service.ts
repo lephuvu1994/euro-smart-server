@@ -152,26 +152,38 @@ export class AdminService {
   // HARDWARE REGISTRY
   // ──────────────────────────────────────────────
 
-  async getHardwares() {
-    const records = await this.db.hardwareRegistry.findMany({
-      orderBy: { activatedAt: 'desc' },
-      include: {
-        partner: { select: { code: true } },
-        deviceModel: { select: { code: true } },
-      },
-      // Include User device mapped if necessary, but keep it simple
-    });
+  async getHardwares(page = 1, limit = 50) {
+    const skip = (page - 1) * limit;
 
-    return records.map((r) => ({
-      id: r.id,
-      identifier: r.identifier,
-      deviceToken: r.deviceToken,
-      partnerCode: r.partner.code,
-      deviceModelCode: r.deviceModel.code,
-      firmwareVer: r.firmwareVer,
-      isBanned: r.isBanned,
-      activatedAt: r.activatedAt,
-    }));
+    const [records, total] = await Promise.all([
+      this.db.hardwareRegistry.findMany({
+        skip,
+        take: limit,
+        orderBy: { activatedAt: 'desc' },
+        include: {
+          partner: { select: { code: true } },
+          deviceModel: { select: { code: true } },
+        },
+      }),
+      this.db.hardwareRegistry.count(),
+    ]);
+
+    return {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+      data: records.map((r) => ({
+        id: r.id,
+        identifier: r.identifier,
+        deviceToken: r.deviceToken,
+        partnerCode: r.partner.code,
+        deviceModelCode: r.deviceModel.code,
+        firmwareVer: r.firmwareVer,
+        isBanned: r.isBanned,
+        activatedAt: r.activatedAt,
+      })),
+    };
   }
 
   // ──────────────────────────────────────────────
@@ -363,14 +375,12 @@ export class AdminService {
   // ──────────────────────────────────────────────
 
   async getDashboardStats() {
-    const [totalPartners, totalDevices, totalModels, quotas] = await Promise.all([
+    const [totalPartners, totalDevices, totalModels, activeQuotas] = await Promise.all([
       this.db.partner.count(),
       this.db.hardwareRegistry.count(),
       this.db.deviceModel.count(),
-      this.db.licenseQuota.findMany({ select: { isActive: true } }),
+      this.db.licenseQuota.count({ where: { isActive: true } }),
     ]);
-
-    const activeQuotas = quotas.filter((q) => q.isActive).length;
 
     return {
       totalPartners,

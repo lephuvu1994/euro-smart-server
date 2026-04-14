@@ -17,6 +17,7 @@ export default function SystemConfig() {
   const token = useAuthStore((state) => state.token);
 
   useEffect(() => {
+    if (!token) return;
     fetchConfigs();
   }, [token]);
 

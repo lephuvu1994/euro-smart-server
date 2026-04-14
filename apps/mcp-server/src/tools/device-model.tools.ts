@@ -180,7 +180,7 @@ export function registerDeviceModelTools(server: McpServer): void {
       const changes: string[] = [];
       if (name)
         changes.push(
-          t(lang, 'partner.changeName', { old: existing.name, new: name }),
+          t(lang, 'deviceModel.changeName', { old: existing.name, new: name }),
         );
       if (description !== undefined)
         changes.push(t(lang, 'deviceModel.changeDesc'));
@@ -191,7 +191,7 @@ export function registerDeviceModelTools(server: McpServer): void {
           content: [
             {
               type: 'text' as const,
-              text: t(lang, 'partner.noChanges'),
+              text: t(lang, 'deviceModel.noChanges'),
             },
           ],
         };

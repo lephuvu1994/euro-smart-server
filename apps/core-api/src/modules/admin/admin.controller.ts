@@ -6,6 +6,7 @@ import {
   Param,
   Post,
   Put,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -91,10 +92,15 @@ export class AdminController {
   // ──────────────────────────────────────────────
 
   @Get('hardwares')
-  @ApiOperation({ summary: 'Get all physical devices (Hardware Registry)' })
-  @ApiResponse({ status: 200, type: [HardwareResponseDto] })
-  getHardwares(): Promise<HardwareResponseDto[]> {
-    return this.adminService.getHardwares();
+  @ApiOperation({ summary: 'Get physical devices (Hardware Registry) with pagination' })
+  getHardwares(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.adminService.getHardwares(
+      Math.max(1, parseInt(page || '1', 10)),
+      Math.min(100, Math.max(1, parseInt(limit || '50', 10))),
+    );
   }
 
   // ──────────────────────────────────────────────

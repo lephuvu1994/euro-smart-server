@@ -39,6 +39,7 @@ export default function QuotaManagement() {
   const token = useAuthStore((state) => state.token);
 
   useEffect(() => {
+    if (!token) return;
     fetchQuotas();
   }, [token]);
 

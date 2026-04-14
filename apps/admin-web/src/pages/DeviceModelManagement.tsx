@@ -48,6 +48,7 @@ export default function DeviceModelManagement() {
   const token = useAuthStore((state) => state.token);
 
   useEffect(() => {
+    if (!token) return;
     fetchModels();
   }, [token]);
 

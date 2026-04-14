@@ -40,8 +40,8 @@ export default function Login() {
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary mb-4 shadow-lg shadow-primary/20">
           <Bot size={32} className="text-primary-foreground" />
         </div>
-        <h1 className="text-2xl font-bold tracking-tight text-white">Welcome back</h1>
-        <p className="text-sm text-slate-400 mt-1">Sign in to Sensa Admin Dashboard</p>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">Welcome back</h1>
+        <p className="text-sm text-muted-foreground mt-1">Sign in to Sensa Admin Dashboard</p>
       </div>
 
       <form onSubmit={handleLogin} className="w-full space-y-4">

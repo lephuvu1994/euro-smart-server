@@ -11,14 +11,14 @@ jest.mock('@google/genai');
 
 describe('AiService', () => {
   let service: AiService;
-  
+
   let mockMcpClient: jest.Mocked<Client>;
   let mockGoogleGenAI: any;
 
   beforeEach(async () => {
     // Reset mocks
     jest.clearAllMocks();
-    
+
     // Default environment
     process.env.GEMINI_API_KEY = 'test-key';
 
@@ -27,7 +27,7 @@ describe('AiService', () => {
     }).compile();
 
     service = module.get<AiService>(AiService);
-    
+
     // Access internal instances created inside constructor
     mockMcpClient = (service as any).mcpClient;
     mockGoogleGenAI = (service as any).ai;
@@ -40,19 +40,25 @@ describe('AiService', () => {
   it('should be defined', () => {
     expect(service).toBeDefined();
   });
-  
+
   describe('Constructor', () => {
     it('should warn if GEMINI_API_KEY is not set', async () => {
       delete process.env.GEMINI_API_KEY;
-      
-      const loggerWarnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => { /* empty */ });
-      
+
+      const loggerWarnSpy = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => {
+          /* empty */
+        });
+
       const testModule = await Test.createTestingModule({
         providers: [AiService],
       }).compile();
       const testService = testModule.get<AiService>(AiService);
-      
-      expect(loggerWarnSpy).toHaveBeenCalledWith('GEMINI_API_KEY is not set in environment variables! AI Chat will not work.');
+
+      expect(loggerWarnSpy).toHaveBeenCalledWith(
+        'GEMINI_API_KEY is not set in environment variables! AI Chat will not work.',
+      );
       expect(testService).toBeDefined();
     });
   });
@@ -61,9 +67,9 @@ describe('AiService', () => {
     it('should connect to MCP server and refresh tools', async () => {
       mockMcpClient.connect = jest.fn().mockResolvedValue(undefined);
       mockMcpClient.listTools = jest.fn().mockResolvedValue({ tools: [] });
-      
+
       await service.onModuleInit();
-      
+
       expect(SSEClientTransport).toHaveBeenCalledTimes(1);
       expect(mockMcpClient.connect).toHaveBeenCalled();
       expect(mockMcpClient.listTools).toHaveBeenCalled();
@@ -71,11 +77,16 @@ describe('AiService', () => {
 
     it('should handle connection error gracefully', async () => {
       const loggerErrorSpy = jest.spyOn((service as any).logger, 'error');
-      mockMcpClient.connect = jest.fn().mockRejectedValue(new Error('Connection failed'));
-      
+      mockMcpClient.connect = jest
+        .fn()
+        .mockRejectedValue(new Error('Connection failed'));
+
       await service.onModuleInit();
-      
-      expect(loggerErrorSpy).toHaveBeenCalledWith('Failed to connect to MCP Server', expect.any(Error));
+
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        'Failed to connect to MCP Server (attempt 1)',
+        expect.any(Error),
+      );
     });
   });
 
@@ -111,7 +122,7 @@ describe('AiService', () => {
           {
             name: 'empty_tool',
             description: 'Empty tool',
-          }
+          },
         ],
       });
 
@@ -119,16 +130,20 @@ describe('AiService', () => {
 
       const cache = (service as any).geminiToolsCache[0];
       expect(cache.functionDeclarations).toHaveLength(2);
-      
+
       const testToolDecl = cache.functionDeclarations[0];
       expect(testToolDecl.name).toBe('test_tool');
-      expect(testToolDecl.parameters.properties.paramString.type).toBe('STRING');
+      expect(testToolDecl.parameters.properties.paramString.type).toBe(
+        'STRING',
+      );
       expect(testToolDecl.parameters.properties.paramNum.type).toBe('NUMBER');
       expect(testToolDecl.parameters.properties.paramInt.type).toBe('INTEGER');
       expect(testToolDecl.parameters.properties.paramBool.type).toBe('BOOLEAN');
       expect(testToolDecl.parameters.properties.paramArr.type).toBe('ARRAY');
       expect(testToolDecl.parameters.properties.paramObj.type).toBe('OBJECT');
-      expect(testToolDecl.parameters.properties.paramUnknown.type).toBe('STRING'); // fallback
+      expect(testToolDecl.parameters.properties.paramUnknown.type).toBe(
+        'STRING',
+      ); // fallback
     });
   });
 
@@ -142,7 +157,7 @@ describe('AiService', () => {
       };
 
       const result = await service.chat('Hello', 'vi');
-      
+
       expect(result).toBe('Natural response');
       expect(mockGoogleGenAI.models.generateContent).toHaveBeenCalledTimes(1);
     });
@@ -153,15 +168,16 @@ describe('AiService', () => {
         text: '',
         functionCalls: [{ name: 'get_users', args: { limit: 5 } }],
       };
-      
+
       // Final genAI call returns final answer
       const finalResponse = {
         text: 'Dưới đây là 5 users.',
         functionCalls: [],
       };
-      
+
       mockGoogleGenAI.models = {
-        generateContent: jest.fn()
+        generateContent: jest
+          .fn()
           .mockResolvedValueOnce(firstResponse)
           .mockResolvedValueOnce(finalResponse),
       };
@@ -177,31 +193,32 @@ describe('AiService', () => {
         name: 'get_users',
         arguments: { limit: 5, lang: 'vi' }, // check if lang was forced
       });
-      
+
       expect(mockGoogleGenAI.models.generateContent).toHaveBeenCalledTimes(2);
       expect(result).toBe('Dưới đây là 5 users.');
     });
 
     it('should handle tool empty string result correctly', async () => {
-       // First genAI call returns a tool request
-       const firstResponse = {
+      // First genAI call returns a tool request
+      const firstResponse = {
         text: '',
         functionCalls: [{ name: 'get_users', args: {} }],
       };
-      
+
       const finalResponse = {
         text: 'Final result',
       };
-      
+
       mockGoogleGenAI.models = {
-        generateContent: jest.fn()
+        generateContent: jest
+          .fn()
           .mockResolvedValueOnce(firstResponse)
           .mockResolvedValueOnce(finalResponse),
       };
 
       // Empty content from MCP
       mockMcpClient.callTool = jest.fn().mockResolvedValue({
-         content: [],
+        content: [],
       });
 
       const result = await service.chat('Get users', 'en');
@@ -219,6 +236,126 @@ describe('AiService', () => {
       };
 
       await expect(service.chat('Hello')).rejects.toThrow('GenAI Error');
+    });
+  });
+
+  describe('chatStream', () => {
+    let mockRes: any;
+
+    beforeEach(() => {
+      mockRes = {
+        setHeader: jest.fn(),
+        flushHeaders: jest.fn(),
+        write: jest.fn(),
+        end: jest.fn(),
+        on: jest.fn(),
+      };
+    });
+
+    it('should stream final response directly if no tool calls', async () => {
+      mockGoogleGenAI.models = {
+        generateContent: jest.fn().mockResolvedValue({
+          text: '',
+          functionCalls: [],
+        }),
+        generateContentStream: jest.fn().mockResolvedValue(
+          (async function* () {
+            yield { text: 'Chunk 1 ' };
+            yield { text: 'Chunk 2' };
+          })(),
+        ),
+      };
+
+      await service.chatStream(mockRes, 'Hello', []);
+
+      expect(mockRes.setHeader).toHaveBeenCalledWith(
+        'Content-Type',
+        'text/event-stream',
+      );
+      expect(mockRes.setHeader).toHaveBeenCalledWith('X-Accel-Buffering', 'no');
+      expect(mockRes.write).toHaveBeenCalledWith(
+        expect.stringContaining('event: delta\ndata: {"text":"Chunk 1 "}'),
+      );
+      expect(mockRes.write).toHaveBeenCalledWith(
+        expect.stringContaining('event: delta\ndata: {"text":"Chunk 2"}'),
+      );
+      expect(mockRes.write).toHaveBeenCalledWith(
+        expect.stringContaining('event: done\ndata: {}'),
+      );
+      expect(mockRes.end).toHaveBeenCalledTimes(1);
+    });
+
+    it('should handle tool calls and emit SSE events', async () => {
+      mockGoogleGenAI.models = {
+        generateContent: jest.fn().mockResolvedValue({
+          text: '',
+          functionCalls: [{ name: 'get_users', args: { limit: 2 } }],
+        }),
+        generateContentStream: jest.fn().mockResolvedValue(
+          (async function* () {
+            yield { text: 'Final Answer' };
+          })(),
+        ),
+      };
+
+      mockMcpClient.callTool = jest.fn().mockResolvedValue({
+        content: [{ text: 'User1, User2' }],
+      });
+
+      await service.chatStream(mockRes, 'Get users', [
+        { role: 'user', content: 'prev' },
+      ]);
+
+      expect(mockRes.write).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'event: tool_start\ndata: {"tools":["get_users"]}',
+        ),
+      );
+      expect(mockMcpClient.callTool).toHaveBeenCalledWith({
+        name: 'get_users',
+        arguments: { limit: 2, lang: 'vi' },
+      });
+      expect(mockRes.write).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'event: tool_result\ndata: {"name":"get_users","preview":"User1, User2"}',
+        ),
+      );
+      expect(mockRes.write).toHaveBeenCalledWith(
+        expect.stringContaining('event: stream_start\ndata: {}'),
+      );
+      expect(mockRes.write).toHaveBeenCalledWith(
+        expect.stringContaining('event: delta\ndata: {"text":"Final Answer"}'),
+      );
+      expect(mockRes.end).toHaveBeenCalledTimes(1);
+    });
+
+    it('should handle client disconnection and abort processing', async () => {
+      // Simulate client disconnecting (triggering 'close' event)
+      mockRes.on.mockImplementation((event, cb) => {
+        if (event === 'close') {
+          // Immediately call the close callback to simulate abort
+          cb();
+        }
+      });
+
+      mockGoogleGenAI.models = {
+        generateContent: jest.fn().mockResolvedValue({
+          functionCalls: [],
+        }),
+        generateContentStream: jest.fn().mockResolvedValue(
+          (async function* () {
+            yield { text: 'Chunk 1' };
+            // It should break here because isAborted is true
+            yield { text: 'Chunk 2' };
+          })(),
+        ),
+      };
+
+      await service.chatStream(mockRes, 'Hello', []);
+
+      // Because it aborted immediately, write should not be called with Chunk 1 or done
+      expect(mockRes.write).not.toHaveBeenCalled();
+      expect(mockRes.end).not.toHaveBeenCalled();
     });
   });
 });

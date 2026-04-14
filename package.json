@@ -36,6 +36,7 @@
   "private": true,
   "dependencies": {
     "@faker-js/faker": "^10.3.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@nestjs-modules/mailer": "^2.0.2",
     "@nestjs/bullmq": "^11.0.4",
     "@nestjs/cache-manager": "^3.0.1",

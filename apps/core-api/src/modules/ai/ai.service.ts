@@ -3,6 +3,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 // Using @google/genai SDK (needs to be installed via: yarn add @google/genai)
 import { GoogleGenAI } from '@google/genai';
+import { Response } from 'express';
 
 @Injectable()
 export class AiService implements OnModuleInit, OnModuleDestroy {
@@ -108,9 +109,12 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  // ──────────────────────────────────────────────
+  // Legacy synchronous chat (kept for backward compat)
+  // ──────────────────────────────────────────────
+
   public async chat(prompt: string, lang: 'vi' | 'en' = 'vi'): Promise<string> {
     try {
-      // 1. Send prompt to Gemini with tool definitions
       const response = await this.ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: prompt,
@@ -120,23 +124,16 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
         },
       });
 
-      // 2. Check if Gemini requested to call tool(s)
       const functionCalls = response.functionCalls;
       if (!functionCalls || functionCalls.length === 0) {
-        return response.text; // Natural response without tool call
+        return response.text;
       }
 
-      // 3. Process ALL tool calls (not just the first one)
       const toolResults: { name: string; result: string }[] = [];
       for (const call of functionCalls) {
         this.logger.log(`Gemini requested tool call: ${call.name}`);
         const args = { ...(call.args as Record<string, any>), lang };
-
-        const mcpResult = await this.mcpClient.callTool({
-          name: call.name,
-          arguments: args,
-        });
-
+        const mcpResult = await this.mcpClient.callTool({ name: call.name, arguments: args });
         let toolOutput = '';
         const contentArray = mcpResult.content as any[];
         if (contentArray && contentArray.length > 0) {
@@ -145,11 +142,9 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
         toolResults.push({ name: call.name, result: toolOutput });
       }
 
-      // 4. Send all tool responses back to Gemini to get final answer
       const contentParts: any[] = [
         { role: 'user', parts: [{ text: prompt }] },
       ];
-      // Add each function call + response pair
       for (let i = 0; i < functionCalls.length; i++) {
         contentParts.push(
           { role: 'model', parts: [{ functionCall: functionCalls[i] }] },
@@ -166,6 +161,127 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
     } catch (error) {
       this.logger.error('Error during chat completion', error);
       throw error;
+    }
+  }
+
+  // ──────────────────────────────────────────────
+  // Phase 6: SSE Streaming Chat with conversation history
+  // ──────────────────────────────────────────────
+
+  public async chatStream(
+    res: Response,
+    prompt: string,
+    history: Array<{ role: string; content: string }>,
+    lang: 'vi' | 'en' = 'vi',
+  ): Promise<void> {
+    // Set SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // Nginx unbuffering
+    res.flushHeaders();
+
+    const sendEvent = (event: string, data: any) => {
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
+    try {
+      // Build conversation context from history
+      const contents: any[] = history.map((msg) => ({
+        role: msg.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: msg.content }],
+      }));
+      // Add current prompt
+      contents.push({ role: 'user', parts: [{ text: prompt }] });
+
+      // 1. First call: get initial response (may include tool calls)
+      const response = await this.ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents,
+        config: {
+          systemInstruction: `You are an admin assistant for Sensa Smart Home. You can control the system using tools. The user asked to reply in language: ${lang}. When making tool calls, always pass lang: "${lang}" if the tool supports it. Focus on giving exact answers based on tool responses.`,
+          tools: this.geminiToolsCache || [],
+        },
+      });
+
+      const functionCalls = response.functionCalls;
+
+      // 2. If no tool calls, stream the final response directly
+      if (!functionCalls || functionCalls.length === 0) {
+        // Stream the final response using generateContentStream
+        const stream = await this.ai.models.generateContentStream({
+          model: 'gemini-2.5-flash',
+          contents,
+          config: {
+            systemInstruction: `You are an admin assistant for Sensa Smart Home. You can control the system using tools. The user asked to reply in language: ${lang}. When making tool calls, always pass lang: "${lang}" if the tool supports it. Focus on giving exact answers based on tool responses.`,
+            tools: this.geminiToolsCache || [],
+          },
+        });
+
+        for await (const chunk of stream) {
+          if (chunk.text) {
+            sendEvent('delta', { text: chunk.text });
+          }
+        }
+        sendEvent('done', {});
+        res.end();
+        return;
+      }
+
+      // 3. Has tool calls — notify frontend, then execute tools
+      sendEvent('tool_start', {
+        tools: functionCalls.map((c) => c.name),
+      });
+
+      const toolResults: { name: string; result: string }[] = [];
+      for (const call of functionCalls) {
+        this.logger.log(`[Stream] Tool call: ${call.name}`);
+        sendEvent('tool_call', { name: call.name });
+
+        const args = { ...(call.args as Record<string, any>), lang };
+        const mcpResult = await this.mcpClient.callTool({
+          name: call.name,
+          arguments: args,
+        });
+
+        let toolOutput = '';
+        const contentArray = mcpResult.content as any[];
+        if (contentArray && contentArray.length > 0) {
+          toolOutput = contentArray[0].text || JSON.stringify(contentArray);
+        }
+        toolResults.push({ name: call.name, result: toolOutput });
+
+        sendEvent('tool_result', { name: call.name, preview: toolOutput.substring(0, 200) });
+      }
+
+      // 4. Build full context with tool results, then stream final answer
+      const fullContents: any[] = [...contents];
+      for (let i = 0; i < functionCalls.length; i++) {
+        fullContents.push(
+          { role: 'model', parts: [{ functionCall: functionCalls[i] }] },
+          { role: 'user', parts: [{ functionResponse: { name: toolResults[i].name, response: { result: toolResults[i].result } } }] },
+        );
+      }
+
+      sendEvent('stream_start', {});
+
+      const finalStream = await this.ai.models.generateContentStream({
+        model: 'gemini-2.5-flash',
+        contents: fullContents,
+      });
+
+      for await (const chunk of finalStream) {
+        if (chunk.text) {
+          sendEvent('delta', { text: chunk.text });
+        }
+      }
+
+      sendEvent('done', {});
+      res.end();
+    } catch (error) {
+      this.logger.error('[Stream] Error during streaming chat', error);
+      sendEvent('error', { message: error.message || 'Internal AI Error' });
+      res.end();
     }
   }
 }

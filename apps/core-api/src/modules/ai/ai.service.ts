@@ -9,6 +9,7 @@ import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 // Using @google/genai SDK (needs to be installed via: yarn add @google/genai)
 import { GoogleGenAI } from '@google/genai';
 import { Response } from 'express';
+import { AI_MODEL } from './ai.constant';
 
 @Injectable()
 export class AiService implements OnModuleInit, OnModuleDestroy {
@@ -140,7 +141,7 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
   public async chat(prompt: string, lang: 'vi' | 'en' = 'vi'): Promise<string> {
     try {
       const response = await this.ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: AI_MODEL,
         contents: prompt,
         config: {
           systemInstruction: `You are an admin assistant for Sensa Smart Home. You can control the system using tools. The user asked to reply in language: ${lang}. When making tool calls, always pass lang: "${lang}" if the tool supports it. Focus on giving exact answers based on tool responses.`,
@@ -188,7 +189,7 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
       }
 
       const finalResponse = await this.ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: AI_MODEL,
         contents: contentParts,
       });
 
@@ -238,7 +239,7 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
 
       // 1. First call: get initial response (may include tool calls)
       const response = await this.ai.models.generateContent({
-        model: 'gemini-2.5-flash',
+        model: AI_MODEL,
         contents,
         config: {
           systemInstruction: `You are an admin assistant for Sensa Smart Home. You can control the system using tools. The user asked to reply in language: ${lang}. When making tool calls, always pass lang: "${lang}" if the tool supports it. Focus on giving exact answers based on tool responses.`,
@@ -254,7 +255,7 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
       if (!functionCalls || functionCalls.length === 0) {
         // Stream the final response using generateContentStream
         const stream = await this.ai.models.generateContentStream({
-          model: 'gemini-2.5-flash',
+          model: AI_MODEL,
           contents,
           config: {
             systemInstruction: `You are an admin assistant for Sensa Smart Home. You can control the system using tools. The user asked to reply in language: ${lang}. When making tool calls, always pass lang: "${lang}" if the tool supports it. Focus on giving exact answers based on tool responses.`,
@@ -328,7 +329,7 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
       sendEvent('stream_start', {});
 
       const finalStream = await this.ai.models.generateContentStream({
-        model: 'gemini-2.5-flash',
+        model: AI_MODEL,
         contents: fullContents,
       });
 

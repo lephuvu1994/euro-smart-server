@@ -1,6 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 
-jest.mock('expo-server-sdk', () => ({ __esModule: true, default: jest.fn(), Expo: jest.fn() }));
+jest.mock('expo-server-sdk', () => ({
+  __esModule: true,
+  default: jest.fn(),
+  Expo: jest.fn(),
+}));
 
 import { DeviceControlService } from './device-control.service';
 import { DatabaseService } from '@app/database';
@@ -48,10 +52,22 @@ const createMockDatabaseService = () => ({
   },
 });
 
+const mockPipeline = {
+  get: jest.fn().mockReturnThis(),
+  hgetall: jest.fn().mockReturnThis(),
+  exec: jest.fn().mockResolvedValue([
+    [null, 'online'],
+    [null, {}],
+  ]),
+};
+
 const createMockRedisService = () => ({
   get: jest.fn(),
   hget: jest.fn(),
   hgetall: jest.fn(),
+  getClient: jest.fn().mockReturnValue({
+    pipeline: jest.fn().mockReturnValue(mockPipeline),
+  }),
 });
 
 const createMockQueue = () => ({
@@ -114,7 +130,10 @@ describe('DeviceControlService', () => {
     describe('domain validation', () => {
       beforeEach(() => {
         db.device.findFirst.mockResolvedValue(mockDevice);
-        redis.get.mockResolvedValue('online'); // isOnline
+        mockPipeline.exec.mockResolvedValue([
+          [null, 'online'],
+          [null, {}],
+        ]); // isOnline
       });
 
       it('should validate switch_ domain', async () => {
@@ -173,7 +192,13 @@ describe('DeviceControlService', () => {
         );
         expect(queue.add).toHaveBeenCalledWith(
           DEVICE_JOBS.CONTROL_CMD,
-          expect.objectContaining({ token: mockDeviceToken, entityCode: 'curtain_1', value: 'OPEN', userId: mockUserId, source: 'app' }),
+          expect.objectContaining({
+            token: mockDeviceToken,
+            entityCode: 'curtain_1',
+            value: 'OPEN',
+            userId: mockUserId,
+            source: 'app',
+          }),
           expect.any(Object),
         );
       });
@@ -181,7 +206,7 @@ describe('DeviceControlService', () => {
 
     it('should throw HttpException if device is offline', async () => {
       db.device.findFirst.mockResolvedValue(mockDevice);
-      redis.get.mockResolvedValue(null);
+      mockPipeline.exec.mockResolvedValue([[null, null]]);
       await expect(
         service.sendControlCommand(mockDeviceToken, mockUserId, 'switch_1', 1),
       ).rejects.toThrow(HttpException);
@@ -191,7 +216,10 @@ describe('DeviceControlService', () => {
   describe('sendDeviceValueCommand', () => {
     it('should validate multiple entities and add bulk job to queue', async () => {
       db.device.findFirst.mockResolvedValue(mockDevice);
-      redis.get.mockResolvedValue('online'); // isOnline
+      mockPipeline.exec.mockResolvedValue([
+        [null, 'online'],
+        [null, {}],
+      ]); // isOnline
 
       const values = [
         { entityCode: 'switch_1', value: 1 },

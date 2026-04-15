@@ -40,7 +40,7 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
   async onModuleDestroy() {
     try {
       await this.mcpClient?.close();
-    } catch (_) {
+    } catch {
       // ignore close errors
     }
   }
@@ -75,14 +75,18 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
 
           try {
             await this.mcpClient?.close();
-          } catch (_) {}
+          } catch {
+            // ignore close errors
+          }
 
           this.mcpClient = new Client({
             name: 'core-api-ai',
             version: '1.0.0',
           });
 
-          const authHeaders = mcpSecret ? { 'x-mcp-secret': mcpSecret } : undefined;
+          const authHeaders = mcpSecret
+            ? { 'x-mcp-secret': mcpSecret }
+            : undefined;
 
           const transport = new SSEClientTransport(new URL(mcpUrl), {
             eventSourceInit: authHeaders ? { headers: authHeaders } : undefined,
@@ -94,7 +98,10 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
             setTimeout(() => reject(new Error('MCP Connect Timeout')), 5000),
           );
 
-          await Promise.race([this.mcpClient.connect(transport), timeoutPromise]);
+          await Promise.race([
+            this.mcpClient.connect(transport),
+            timeoutPromise,
+          ]);
           this.logger.log('✅ MCP Server connected successfully.');
 
           await this.refreshTools();
@@ -282,7 +289,9 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
       contents.push({ role: 'user', parts: [{ text: prompt }] });
 
       if (this.geminiToolsCache) {
-        this.logger.log(`Gemini Tools Cache Payload: ${JSON.stringify(this.geminiToolsCache, null, 2)}`);
+        this.logger.log(
+          `Gemini Tools Cache Payload: ${JSON.stringify(this.geminiToolsCache, null, 2)}`,
+        );
       }
 
       // 1. First call: get initial response (may include tool calls)
@@ -291,11 +300,14 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
         contents,
         config: {
           systemInstruction: `You are an admin assistant for Sensa Smart Home. ALWAYS use the provided functions/tools to fetch information from the system database before answering the user. If the tool is available, DO NOT guess or hallucinate. Reply in language: ${lang}.`,
-          ...(this.geminiToolsCache && this.geminiToolsCache[0]?.functionDeclarations?.length > 0
+          ...(this.geminiToolsCache &&
+          this.geminiToolsCache[0]?.functionDeclarations?.length > 0
             ? {
                 tools: this.geminiToolsCache,
                 toolConfig: {
-                  functionCallingConfig: { mode: FunctionCallingConfigMode.AUTO },
+                  functionCallingConfig: {
+                    mode: FunctionCallingConfigMode.AUTO,
+                  },
                 },
               }
             : {}),

@@ -31,7 +31,6 @@ import { UpdateDeviceUiConfigDto } from './dtos/request/update-device-ui-config.
 import { PartnerUsageResponseDto } from './dtos/response/partner-usage.response.dto';
 import { SystemConfigResponseDto } from './dtos/response/system-config.response.dto';
 import { DashboardStatsResponseDto } from './dtos/response/dashboard-stats.response.dto';
-import { HardwareResponseDto } from './dtos/response/hardware.response.dto';
 
 @ApiTags('admin.metadata')
 @Controller({ version: '1', path: '/admin' })
@@ -92,11 +91,10 @@ export class AdminController {
   // ──────────────────────────────────────────────
 
   @Get('hardwares')
-  @ApiOperation({ summary: 'Get physical devices (Hardware Registry) with pagination' })
-  getHardwares(
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-  ) {
+  @ApiOperation({
+    summary: 'Get physical devices (Hardware Registry) with pagination',
+  })
+  getHardwares(@Query('page') page?: string, @Query('limit') limit?: string) {
     return this.adminService.getHardwares(
       Math.max(1, parseInt(page || '1', 10)),
       Math.min(100, Math.max(1, parseInt(limit || '50', 10))),

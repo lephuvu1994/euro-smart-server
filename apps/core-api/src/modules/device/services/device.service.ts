@@ -747,31 +747,28 @@ export class DeviceService {
 
     const { token, id } = device;
 
-    // 2. Soft-delete — set unboundAt timestamp
-    //    iot-gateway sẽ detect khi chip gửi status → publish unbind → hard delete
-    await this.db.device.update({
-      where: { id: deviceId },
-      data: { unboundAt: new Date() },
-    });
-
-    // 3. Redis cleanup ngay (user không thấy device trên App nữa)
+    // 2. Soft-delete + Redis cleanup in parallel (independent operations)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const cleanupTasks: Promise<any>[] = [
+      // DB soft-delete
+      this.db.device.update({
+        where: { id: deviceId },
+        data: { unboundAt: new Date() },
+      }),
+      // Redis status + shadow cleanup
       this.redis.del(`status:${token}`).catch(() => undefined),
       this.redis.del(`device:shadow:${token}`).catch(() => undefined),
-    ];
-
-    const trackingKey = `device:${id}:_ekeys`;
-    cleanupTasks.push(
+      // Redis entity keys cleanup
       this.redis
-        .smembers(trackingKey)
-        .then((keys) =>
-          keys.length > 0
+        .smembers(`device:${id}:_ekeys`)
+        .then((keys) => {
+          const trackingKey = `device:${id}:_ekeys`;
+          return keys.length > 0
             ? this.redis.del([...keys, trackingKey])
-            : this.redis.del(trackingKey),
-        )
+            : this.redis.del(trackingKey);
+        })
         .catch(() => undefined),
-    );
+    ];
 
     await Promise.all(cleanupTasks);
   }
@@ -790,14 +787,26 @@ export class DeviceService {
       where: { deviceId },
       include: {
         user: {
-          select: { id: true, firstName: true, lastName: true, email: true, phone: true, avatar: true },
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phone: true,
+            avatar: true,
+          },
         },
       },
       orderBy: { createdAt: 'asc' },
     });
   }
 
-  async addDeviceShare(deviceId: string, ownerId: string, targetUserInput: string, permission: SharePermission = SharePermission.EDITOR) {
+  async addDeviceShare(
+    deviceId: string,
+    ownerId: string,
+    targetUserInput: string,
+    permission: SharePermission = SharePermission.EDITOR,
+  ) {
     const device = await this.db.device.findUnique({ where: { id: deviceId } });
     if (!device || device.ownerId !== ownerId) {
       throw new NotFoundException('Device not found or unauthorized');
@@ -841,7 +850,11 @@ export class DeviceService {
     });
   }
 
-  async removeDeviceShare(deviceId: string, ownerId: string, targetUserId: string) {
+  async removeDeviceShare(
+    deviceId: string,
+    ownerId: string,
+    targetUserId: string,
+  ) {
     const device = await this.db.device.findUnique({ where: { id: deviceId } });
     if (!device || device.ownerId !== ownerId) {
       throw new NotFoundException('Device not found or unauthorized');
@@ -859,7 +872,11 @@ export class DeviceService {
 
   // --- DEVICE SHARE TOKEN (DEEP LINK) ---
 
-  async createShareToken(deviceId: string, ownerId: string, permission: SharePermission) {
+  async createShareToken(
+    deviceId: string,
+    ownerId: string,
+    permission: SharePermission,
+  ) {
     const device = await this.db.device.findUnique({ where: { id: deviceId } });
     if (!device || device.ownerId !== ownerId) {
       throw new HttpException('Forbidden', HttpStatus.FORBIDDEN);
@@ -889,9 +906,12 @@ export class DeviceService {
       throw new NotFoundException('Token invalid or expired');
     }
 
-    const ownerName = [record.owner.firstName, record.owner.lastName]
-      .filter(Boolean)
-      .join(' ') || record.owner.email || 'Someone';
+    const ownerName =
+      [record.owner.firstName, record.owner.lastName]
+        .filter(Boolean)
+        .join(' ') ||
+      record.owner.email ||
+      'Someone';
 
     return {
       deviceName: record.device?.name || 'Unknown Device',
@@ -933,4 +953,3 @@ export class DeviceService {
     return { success: true };
   }
 }
-

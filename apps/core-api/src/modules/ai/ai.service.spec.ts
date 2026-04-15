@@ -19,6 +19,15 @@ describe('AiService', () => {
     // Reset mocks
     jest.clearAllMocks();
 
+    mockMcpClient = {
+      connect: jest.fn().mockResolvedValue(undefined),
+      close: jest.fn().mockResolvedValue(undefined),
+      listTools: jest.fn().mockResolvedValue({ tools: [] }),
+      callTool: jest.fn().mockResolvedValue({ content: [] }),
+    } as unknown as jest.Mocked<Client>;
+
+    (Client as jest.Mock).mockImplementation(() => mockMcpClient);
+
     // Default environment
     process.env.GEMINI_API_KEY = 'test-key';
 
@@ -29,7 +38,6 @@ describe('AiService', () => {
     service = module.get<AiService>(AiService);
 
     // Access internal instances created inside constructor
-    mockMcpClient = (service as any).mcpClient;
     mockGoogleGenAI = (service as any).ai;
   });
 
@@ -69,6 +77,9 @@ describe('AiService', () => {
       mockMcpClient.listTools = jest.fn().mockResolvedValue({ tools: [] });
 
       await service.onModuleInit();
+      if ((service as any).connectionPromise) {
+        await (service as any).connectionPromise;
+      }
 
       expect(SSEClientTransport).toHaveBeenCalledTimes(1);
       expect(mockMcpClient.connect).toHaveBeenCalled();
@@ -81,17 +92,30 @@ describe('AiService', () => {
         .fn()
         .mockRejectedValue(new Error('Connection failed'));
 
+      // Skip actual delay for retries to prevent test timeout
+      const setTimeoutSpy = jest
+        .spyOn(global, 'setTimeout')
+        .mockImplementation((cb: any) => {
+          cb();
+          return {} as any;
+        });
+
       await service.onModuleInit();
+      if ((service as any).connectionPromise) {
+        await (service as any).connectionPromise;
+      }
 
       expect(loggerErrorSpy).toHaveBeenCalledWith(
-        'Failed to connect to MCP Server (attempt 1)',
-        expect.any(Error),
+        'Failed to connect to MCP Server (attempt 1/10): Connection failed',
       );
+
+      setTimeoutSpy.mockRestore();
     });
   });
 
   describe('onModuleDestroy', () => {
     it('should close the MCP client', async () => {
+      (service as any).mcpClient = mockMcpClient;
       mockMcpClient.close = jest.fn().mockResolvedValue(undefined);
       await service.onModuleDestroy();
       expect(mockMcpClient.close).toHaveBeenCalled();
@@ -127,6 +151,9 @@ describe('AiService', () => {
       });
 
       await service.onModuleInit();
+      if ((service as any).connectionPromise) {
+        await (service as any).connectionPromise;
+      }
 
       const cache = (service as any).geminiToolsCache[0];
       expect(cache.functionDeclarations).toHaveLength(2);

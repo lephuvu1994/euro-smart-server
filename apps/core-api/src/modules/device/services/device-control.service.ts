@@ -65,13 +65,22 @@ export class DeviceControlService {
     entityCode: string,
     value: string | number | boolean,
   ) {
-    const device = await this.databaseService.device.findFirst({
-      where: { token: deviceToken, ownerId: userId },
-      include: {
-        partner: { select: { code: true } },
-        entities: true,
-      },
-    });
+    // DB query + Redis pipeline in parallel (deviceToken known upfront)
+    const needShadow = value === 'OPEN' || value === 'CLOSE';
+    const redisPipeline = this.redisService.getClient().pipeline();
+    redisPipeline.get(`status:${deviceToken}`);
+    if (needShadow) redisPipeline.hgetall(`device:shadow:${deviceToken}`);
+
+    const [device, redisResults] = await Promise.all([
+      this.databaseService.device.findFirst({
+        where: { token: deviceToken, ownerId: userId },
+        include: {
+          partner: { select: { code: true } },
+          entities: true,
+        },
+      }),
+      redisPipeline.exec(),
+    ]);
 
     if (!device) {
       throw new ForbiddenException(
@@ -91,9 +100,8 @@ export class DeviceControlService {
     // Validate value theo entity domain
     this.validateEntityValue(entity.domain, value);
 
-    // Check online status via dedicated status key (set by iot-gateway on connect/disconnect)
-    const statusValue = await this.redisService.get(`status:${device.token}`);
-
+    // Check online status (already fetched in parallel)
+    const statusValue = redisResults?.[0]?.[1] as string | null;
     if (statusValue !== 'online') {
       throw new HttpException(
         'Thiết bị đang ngoại tuyến',
@@ -102,9 +110,10 @@ export class DeviceControlService {
     }
 
     // Validate position limit: block redundant OPEN/CLOSE when curtain already at limit
-    if (value === 'OPEN' || value === 'CLOSE') {
-      const shadow = await this.redisService.hgetall(`device:shadow:${device.token}`);
-      const pos = shadow?.position !== undefined ? Number(shadow.position) : null;
+    if (needShadow) {
+      const shadow = (redisResults?.[1]?.[1] as Record<string, string>) || {};
+      const pos =
+        shadow?.position !== undefined ? Number(shadow.position) : null;
       if (pos !== null && !Number.isNaN(pos)) {
         if (value === 'CLOSE' && pos <= 0) {
           throw new BadRequestException('device.error.alreadyClosed');
@@ -128,7 +137,7 @@ export class DeviceControlService {
       },
       {
         priority: 1,
-        attempts: 1,       // No retry for real-time control — stale commands are harmful
+        attempts: 1, // No retry for real-time control — stale commands are harmful
         removeOnComplete: true,
       },
     );
@@ -150,13 +159,24 @@ export class DeviceControlService {
     userId: string,
     values: { entityCode: string; value: string | number | boolean }[],
   ) {
-    const device = await this.databaseService.device.findFirst({
-      where: { token: deviceToken, ownerId: userId },
-      include: {
-        partner: { select: { code: true } },
-        entities: true,
-      },
-    });
+    // DB query + Redis pipeline in parallel (deviceToken known upfront)
+    const hasCurtainCmds = values.some(
+      (v) => v.value === 'OPEN' || v.value === 'CLOSE',
+    );
+    const redisPipeline = this.redisService.getClient().pipeline();
+    redisPipeline.get(`status:${deviceToken}`);
+    if (hasCurtainCmds) redisPipeline.hgetall(`device:shadow:${deviceToken}`);
+
+    const [device, redisResults] = await Promise.all([
+      this.databaseService.device.findFirst({
+        where: { token: deviceToken, ownerId: userId },
+        include: {
+          partner: { select: { code: true } },
+          entities: true,
+        },
+      }),
+      redisPipeline.exec(),
+    ]);
 
     if (!device) {
       throw new ForbiddenException(
@@ -164,9 +184,8 @@ export class DeviceControlService {
       );
     }
 
-    // Check online status via dedicated status key (set by iot-gateway on connect/disconnect)
-    const statusValue = await this.redisService.get(`status:${device.token}`);
-
+    // Check online status (already fetched in parallel)
+    const statusValue = redisResults?.[0]?.[1] as string | null;
     if (statusValue !== 'online') {
       throw new HttpException(
         'Thiết bị đang ngoại tuyến',
@@ -175,11 +194,14 @@ export class DeviceControlService {
     }
 
     // Validate position limit for bulk curtain commands
-    const curtainCmds = values.filter(v => v.value === 'OPEN' || v.value === 'CLOSE');
-    if (curtainCmds.length > 0) {
-      const shadow = await this.redisService.hgetall(`device:shadow:${device.token}`);
-      const pos = shadow?.position !== undefined ? Number(shadow.position) : null;
+    if (hasCurtainCmds) {
+      const shadow = (redisResults?.[1]?.[1] as Record<string, string>) || {};
+      const pos =
+        shadow?.position !== undefined ? Number(shadow.position) : null;
       if (pos !== null && !Number.isNaN(pos)) {
+        const curtainCmds = values.filter(
+          (v) => v.value === 'OPEN' || v.value === 'CLOSE',
+        );
         for (const v of curtainCmds) {
           if (v.value === 'CLOSE' && pos <= 0) {
             throw new BadRequestException('device.error.alreadyClosed');
@@ -220,7 +242,7 @@ export class DeviceControlService {
       },
       {
         priority: 1,
-        attempts: 1,       // No retry for real-time control — stale commands are harmful
+        attempts: 1, // No retry for real-time control — stale commands are harmful
         removeOnComplete: true,
       },
     );

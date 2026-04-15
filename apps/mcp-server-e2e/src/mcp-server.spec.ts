@@ -8,28 +8,19 @@ import prisma from '../../../apps/mcp-server/src/prisma';
 describe('MCP Server API (e2e)', () => {
   let app: any;
   let server: http.Server;
-  let mcpServer: any;
 
   beforeAll(async () => {
     const bootstrap = await bootstrapMcpServer();
     app = bootstrap.app;
-    mcpServer = bootstrap.server;
-    
+
     await new Promise<void>((resolve) => {
       server = app.listen(0, resolve);
     });
   });
 
   afterAll(async () => {
-    if (mcpServer && typeof mcpServer.close === 'function') {
-      try {
-        mcpServer.close();
-      } catch (e) {
-        // ignore
-      }
-    }
     await prisma.$disconnect();
-    
+
     await new Promise<void>((resolve) => {
       server.close(() => {
         resolve();
@@ -52,7 +43,7 @@ describe('MCP Server API (e2e)', () => {
         req.destroy();
         done();
       });
-      
+
       req.on('error', done);
     });
   });
@@ -62,7 +53,7 @@ describe('MCP Server API (e2e)', () => {
       const res = await request(server)
         .post('/message')
         .send({ title: 'Invalid structure' });
-      
+
       expect([200, 202, 400, 500]).toContain(res.status);
     });
   });

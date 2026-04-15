@@ -39,13 +39,11 @@ export class DeviceProvisioningService {
   async registerAndClaim(userId: string, dto: RegisterDeviceDto) {
     if (!userId) throw new BadRequestException('device.error.invalidUser');
 
-    // Fetch MQTT Host from admin DB config (fallback to ENV)
-    const mqttConfig = await this.databaseService.systemConfig.findUnique({
-      where: { key: 'MQTT_HOST' },
-    });
-    const mqttHost = mqttConfig?.value || process.env.MQTT_HOST || 'localhost';
-
-    const [model, partner] = await Promise.all([
+    // Fetch MQTT Host, DeviceModel, Partner in parallel (3 queries → 1 roundtrip)
+    const [mqttConfig, model, partner] = await Promise.all([
+      this.databaseService.systemConfig.findUnique({
+        where: { key: 'MQTT_HOST' },
+      }),
       this.databaseService.deviceModel.findUnique({
         where: { code: dto.deviceCode },
       }),
@@ -53,6 +51,7 @@ export class DeviceProvisioningService {
         where: { code: dto.partnerCode },
       }),
     ]);
+    const mqttHost = mqttConfig?.value || process.env.MQTT_HOST || 'localhost';
 
     if (!model || !partner)
       throw new BadRequestException('device.error.invalidModelOrPartner');
@@ -64,17 +63,34 @@ export class DeviceProvisioningService {
       async (tx) => {
         const newDeviceToken = uuidv4();
 
-        let hardware = await tx.hardwareRegistry.findUnique({
-          where: { identifier: dto.identifier },
-        });
+        // Query quota + hardware in parallel (2 independent queries → 1 roundtrip)
+        const [quota, existingHardware] = await Promise.all([
+          tx.licenseQuota.findUnique({
+            where: {
+              partnerId_deviceModelId: {
+                partnerId: partner.id,
+                deviceModelId: model.id,
+              },
+            },
+          }),
+          tx.hardwareRegistry.findUnique({
+            where: { identifier: dto.identifier },
+          }),
+        ]);
+
+        if (!quota || !quota.isActive) {
+          throw new BadRequestException('device.error.quotaInactive');
+        }
+
+        let hardware = existingHardware;
 
         if (hardware) {
           const oldDevice = await tx.device.findUnique({
-            where: { 
-              identifier_protocol: { 
+            where: {
+              identifier_protocol: {
                 identifier: dto.identifier,
-                protocol: dto.protocol
-              } 
+                protocol: dto.protocol,
+              },
             },
           });
 
@@ -98,6 +114,17 @@ export class DeviceProvisioningService {
             },
           });
         } else {
+          // Check quota limit for new hardware
+          if (quota.activatedCount >= quota.maxQuantity) {
+            throw new BadRequestException('device.error.quotaExceeded');
+          }
+
+          // Increment activated count
+          await tx.licenseQuota.update({
+            where: { id: quota.id },
+            data: { activatedCount: { increment: 1 } },
+          });
+
           hardware = await tx.hardwareRegistry.create({
             data: {
               identifier: dto.identifier,
@@ -112,28 +139,38 @@ export class DeviceProvisioningService {
         // ─── Parse entities from DeviceModel.config (Blueprint) ───
         const rawEntities = this.extractEntities(model.config);
 
-        const entitiesToCreate = rawEntities.map((e: IBlueprintEntity, idx: number) => ({
-          code: e.code,
-          name: e.name,
-          domain: e.domain as EntityDomain,
-          commandKey: (e.commandKey ?? e.command_key ?? null) as string | null,
-          commandSuffix: (e.commandSuffix ?? e.command_suffix ?? 'set') as string | null,
-          readOnly: (e.readOnly ?? e.read_only ?? false) as boolean,
-          sortOrder: idx,
-          attributes: {
-            create: ((e.attributes ?? []) as IBlueprintAttribute[]).map((a) => ({
-              key: a.key as string,
-              name: a.name as string,
-              valueType: (a.valueType ?? a.value_type ?? 'STRING') as AttributeValueType,
-              min: (a.min ?? null) as number | null,
-              max: (a.max ?? null) as number | null,
-              unit: (a.unit ?? null) as string | null,
-              readOnly: (a.readOnly ?? a.read_only ?? false) as boolean,
-              enumValues: (a.enumValues ?? a.enum_values ?? []) as string[],
-              config: (a.config ?? {}) as Prisma.InputJsonValue,
-            })),
-          },
-        }));
+        const entitiesToCreate = rawEntities.map(
+          (e: IBlueprintEntity, idx: number) => ({
+            code: e.code,
+            name: e.name,
+            domain: e.domain as EntityDomain,
+            commandKey: (e.commandKey ?? e.command_key ?? null) as
+              | string
+              | null,
+            commandSuffix: (e.commandSuffix ?? e.command_suffix ?? 'set') as
+              | string
+              | null,
+            readOnly: (e.readOnly ?? e.read_only ?? false) as boolean,
+            sortOrder: idx,
+            attributes: {
+              create: ((e.attributes ?? []) as IBlueprintAttribute[]).map(
+                (a) => ({
+                  key: a.key as string,
+                  name: a.name as string,
+                  valueType: (a.valueType ??
+                    a.value_type ??
+                    'STRING') as AttributeValueType,
+                  min: (a.min ?? null) as number | null,
+                  max: (a.max ?? null) as number | null,
+                  unit: (a.unit ?? null) as string | null,
+                  readOnly: (a.readOnly ?? a.read_only ?? false) as boolean,
+                  enumValues: (a.enumValues ?? a.enum_values ?? []) as string[],
+                  config: (a.config ?? {}) as Prisma.InputJsonValue,
+                }),
+              ),
+            },
+          }),
+        );
 
         const newDevice = await tx.device.create({
           data: {
@@ -157,16 +194,7 @@ export class DeviceProvisioningService {
           },
         });
 
-        // Query license days from quota
-        const quota = await tx.licenseQuota.findUnique({
-          where: {
-            partnerId_deviceModelId: {
-              partnerId: partner.id,
-              deviceModelId: model.id,
-            },
-          },
-          select: { licenseDays: true },
-        });
+        // License days are already queried above
 
         return {
           device: {

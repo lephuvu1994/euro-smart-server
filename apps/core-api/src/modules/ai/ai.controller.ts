@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   Post,
   Res,
   UseGuards,
@@ -35,6 +36,12 @@ export class AiController {
     }
     const response = await this.aiService.chat(body.prompt, body.lang || 'vi');
     return { response };
+  }
+
+  @Get('tools')
+  @ApiOperation({ summary: 'Get loaded MCP tools in Gemini format' })
+  getTools() {
+    return (this.aiService as any).geminiToolsCache || [];
   }
 
   @Post('chat/stream')

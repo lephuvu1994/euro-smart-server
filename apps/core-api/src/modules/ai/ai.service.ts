@@ -7,27 +7,22 @@ import {
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 // Using @google/genai SDK (needs to be installed via: yarn add @google/genai)
-import { GoogleGenAI } from '@google/genai';
+import { FunctionCallingConfigMode, GoogleGenAI } from '@google/genai';
 import { Response } from 'express';
 import { AI_MODEL } from './ai.constant';
 
 @Injectable()
 export class AiService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AiService.name);
-  private mcpClient: Client;
-  private transport: SSEClientTransport;
+  private mcpClient: Client | null = null;
   private ai: GoogleGenAI;
+  private connectionPromise: Promise<void> | null = null;
 
   // Cache of MCP tools formatted for Gemini
   private geminiToolsCache: any = null;
   private mcpToolsList: any[] = [];
 
   constructor() {
-    this.mcpClient = new Client({
-      name: 'core-api-ai',
-      version: '1.0.0',
-    });
-
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       this.logger.warn(
@@ -38,49 +33,96 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleInit() {
-    await this.connectToMcpServer();
+    // Fire-and-forget: don't block app startup
+    this.connectToMcpServer();
   }
 
   async onModuleDestroy() {
-    await this.mcpClient.close();
-  }
-
-  private async connectToMcpServer(retryCount = 0) {
-    const MAX_RETRIES = 5;
     try {
-      this.logger.log(
-        `Connecting to MCP Server via SSE... (attempt ${retryCount + 1})`,
-      );
-      const mcpSecret = process.env.MCP_SECRET || '';
-      const mcpUrl = process.env.MCP_SERVER_URL || 'http://mcp-server:3005/sse';
-      this.transport = new SSEClientTransport(new URL(mcpUrl), {
-        requestInit: mcpSecret
-          ? { headers: { 'x-mcp-secret': mcpSecret } }
-          : undefined,
-      } as any);
-      await this.mcpClient.connect(this.transport);
-      this.logger.log('MCP Server connected successfully.');
-
-      await this.refreshTools();
-    } catch (error) {
-      this.logger.error(
-        `Failed to connect to MCP Server (attempt ${retryCount + 1})`,
-        error,
-      );
-      if (retryCount < MAX_RETRIES) {
-        const delay = Math.min(2000 * Math.pow(2, retryCount), 30000);
-        this.logger.warn(`Retrying MCP connection in ${delay}ms...`);
-        setTimeout(() => this.connectToMcpServer(retryCount + 1), delay);
-      } else {
-        this.logger.error(
-          `Max retries (${MAX_RETRIES}) reached. MCP Server is unreachable.`,
-        );
-      }
+      await this.mcpClient?.close();
+    } catch (_) {
+      // ignore close errors
     }
   }
 
+  /**
+   * Ensure MCP is connected and tools are loaded.
+   * Called lazily before every chat request.
+   */
+  private async ensureMcpConnection(): Promise<void> {
+    if (this.geminiToolsCache && this.mcpToolsList.length > 0) {
+      return; // Already connected & tools loaded
+    }
+    this.logger.warn('MCP tools not loaded — attempting reconnect...');
+    await this.connectToMcpServer();
+  }
+
+  private async connectToMcpServer(retryCount = 0): Promise<void> {
+    if (this.connectionPromise) {
+      return this.connectionPromise;
+    }
+
+    this.connectionPromise = (async () => {
+      const MAX_RETRIES = 10;
+      const mcpSecret = process.env.MCP_SECRET || '';
+      const mcpUrl = process.env.MCP_SERVER_URL || 'http://localhost:3005/sse';
+
+      for (let attempt = retryCount; attempt < MAX_RETRIES; attempt++) {
+        try {
+          this.logger.log(
+            `Connecting to MCP Server via SSE... (attempt ${attempt + 1}/${MAX_RETRIES})`,
+          );
+
+          try {
+            await this.mcpClient?.close();
+          } catch (_) {}
+
+          this.mcpClient = new Client({
+            name: 'core-api-ai',
+            version: '1.0.0',
+          });
+
+          const authHeaders = mcpSecret ? { 'x-mcp-secret': mcpSecret } : undefined;
+
+          const transport = new SSEClientTransport(new URL(mcpUrl), {
+            eventSourceInit: authHeaders ? { headers: authHeaders } : undefined,
+            requestInit: authHeaders ? { headers: authHeaders } : undefined,
+          } as any);
+
+          // Timeout to prevent hanging forever
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('MCP Connect Timeout')), 5000),
+          );
+
+          await Promise.race([this.mcpClient.connect(transport), timeoutPromise]);
+          this.logger.log('✅ MCP Server connected successfully.');
+
+          await this.refreshTools();
+          this.connectionPromise = null;
+          return;
+        } catch (error) {
+          this.logger.error(
+            `Failed to connect to MCP Server (attempt ${attempt + 1}/${MAX_RETRIES}): ${error?.message || error}`,
+          );
+          if (attempt < MAX_RETRIES - 1) {
+            const delay = Math.min(3000 * Math.pow(2, attempt), 30000);
+            this.logger.warn(`Retrying MCP connection in ${delay}ms...`);
+            await new Promise((r) => setTimeout(r, delay));
+          }
+        }
+      }
+
+      this.connectionPromise = null;
+      this.logger.error(
+        `Max retries (${MAX_RETRIES}) reached. MCP Server is unreachable. Will retry on next chat request.`,
+      );
+    })();
+
+    return this.connectionPromise;
+  }
+
   private async refreshTools() {
-    const { tools } = await this.mcpClient.listTools();
+    const { tools } = await this.mcpClient!.listTools();
     this.mcpToolsList = tools;
 
     // Convert MCP Tools (JSON Schema) to Gemini FunctionDeclarations
@@ -139,6 +181,7 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
   // ──────────────────────────────────────────────
 
   public async chat(prompt: string, lang: 'vi' | 'en' = 'vi'): Promise<string> {
+    await this.ensureMcpConnection();
     try {
       const response = await this.ai.models.generateContent({
         model: AI_MODEL,
@@ -158,7 +201,7 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
       for (const call of functionCalls) {
         this.logger.log(`Gemini requested tool call: ${call.name}`);
         const args = { ...(call.args as Record<string, any>), lang };
-        const mcpResult = await this.mcpClient.callTool({
+        const mcpResult = await this.mcpClient!.callTool({
           name: call.name,
           arguments: args,
         });
@@ -210,6 +253,7 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
     history: Array<{ role: string; content: string }>,
     lang: 'vi' | 'en' = 'vi',
   ): Promise<void> {
+    await this.ensureMcpConnection();
     // Set SSE headers
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -237,13 +281,24 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
       // Add current prompt
       contents.push({ role: 'user', parts: [{ text: prompt }] });
 
+      if (this.geminiToolsCache) {
+        this.logger.log(`Gemini Tools Cache Payload: ${JSON.stringify(this.geminiToolsCache, null, 2)}`);
+      }
+
       // 1. First call: get initial response (may include tool calls)
       const response = await this.ai.models.generateContent({
         model: AI_MODEL,
         contents,
         config: {
-          systemInstruction: `You are an admin assistant for Sensa Smart Home. You can control the system using tools. The user asked to reply in language: ${lang}. When making tool calls, always pass lang: "${lang}" if the tool supports it. Focus on giving exact answers based on tool responses.`,
-          tools: this.geminiToolsCache || [],
+          systemInstruction: `You are an admin assistant for Sensa Smart Home. ALWAYS use the provided functions/tools to fetch information from the system database before answering the user. If the tool is available, DO NOT guess or hallucinate. Reply in language: ${lang}.`,
+          ...(this.geminiToolsCache && this.geminiToolsCache[0]?.functionDeclarations?.length > 0
+            ? {
+                tools: this.geminiToolsCache,
+                toolConfig: {
+                  functionCallingConfig: { mode: FunctionCallingConfigMode.AUTO },
+                },
+              }
+            : {}),
         },
       });
 
@@ -258,7 +313,7 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
           model: AI_MODEL,
           contents,
           config: {
-            systemInstruction: `You are an admin assistant for Sensa Smart Home. You can control the system using tools. The user asked to reply in language: ${lang}. When making tool calls, always pass lang: "${lang}" if the tool supports it. Focus on giving exact answers based on tool responses.`,
+            systemInstruction: `You are an admin assistant for Sensa Smart Home. ALWAYS use the provided functions/tools to fetch information from the system database before answering the user. If the tool is available, DO NOT guess or hallucinate. Reply in language: ${lang}.`,
             tools: this.geminiToolsCache || [],
           },
         });
@@ -288,7 +343,7 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
         sendEvent('tool_call', { name: call.name });
 
         const args = { ...(call.args as Record<string, any>), lang };
-        const mcpResult = await this.mcpClient.callTool({
+        const mcpResult = await this.mcpClient!.callTool({
           name: call.name,
           arguments: args,
         });

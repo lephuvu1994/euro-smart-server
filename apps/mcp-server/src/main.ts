@@ -24,15 +24,14 @@ import { executeConfirmedAction, listPendingActions } from './utils/confirm';
  *
  * Transport: SSE HTTP (Phase 2)
  */
-export async function bootstrapMcpServer() {
+// Helper factory to create a new MCP Server instance.
+// The MCP SDK requires a 1:1 Server to Transport ratio, so we must build a fresh instance for every SSE session.
+function createMcpServerInstance() {
   const server = new McpServer({
     name: 'sensa-smart-mcp',
     version: '1.0.0',
   });
 
-  // ─────────────────────────────────────────
-  // Register ALL tool groups
-  // ─────────────────────────────────────────
   registerPartnerTools(server);
   registerDeviceModelTools(server);
   registerLicenseTools(server);
@@ -86,9 +85,10 @@ export async function bootstrapMcpServer() {
   // ─────────────────────────────────────────
   registerSchemaResource(server);
 
-  // ─────────────────────────────────────────
-  // Start SSE Transport via Express
-  // ─────────────────────────────────────────
+  return server;
+}
+
+export async function bootstrapMcpServer() {
   const app = express();
 
   // Auth middleware — require MCP_SECRET header
@@ -111,8 +111,18 @@ export async function bootstrapMcpServer() {
     const transport = new SSEServerTransport('/message', res as any);
     const sessionId = Math.random().toString(36).slice(2, 10);
     transports.set(sessionId, transport);
-    await server.connect(transport);
-    console.error(`[sensa-smart-mcp] SSE session ${sessionId} connected. Active: ${transports.size}`);
+    
+    // Create a fresh server instance exclusively for this transport
+    const sessionServer = createMcpServerInstance();
+
+    try {
+      await sessionServer.connect(transport);
+      console.error(`[sensa-smart-mcp] SSE session ${sessionId} connected. Active: ${transports.size}`);
+    } catch (err) {
+      console.error(`[sensa-smart-mcp] ERROR in server.connect:`, err);
+      res.status(500).send('Internal Server Error connecting MCP');
+      return;
+    }
     transport.onclose = () => {
       transports.delete(sessionId);
       console.error(`[sensa-smart-mcp] SSE session ${sessionId} closed. Active: ${transports.size}`);
@@ -136,7 +146,7 @@ export async function bootstrapMcpServer() {
     }
   });
 
-  return { app, server };
+  return { app };
 }
 
 async function main(): Promise<void> {

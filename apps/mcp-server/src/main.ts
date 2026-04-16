@@ -9,6 +9,8 @@ import { registerDeviceModelTools } from './tools/device-model.tools';
 import { registerLicenseTools } from './tools/license.tools';
 import { registerUserTools } from './tools/user.tools';
 import { registerDeviceTools } from './tools/device.tools';
+import { registerDeviceControlTools } from './tools/device-control.tools';
+import { registerSceneTools } from './tools/scene.tools';
 
 // Resources
 import { registerSchemaResource } from './resources/schema.resource';
@@ -37,6 +39,8 @@ function createMcpServerInstance() {
   registerLicenseTools(server);
   registerUserTools(server);
   registerDeviceTools(server);
+  registerDeviceControlTools(server);
+  registerSceneTools(server);
 
   // ─────────────────────────────────────────
   // Confirm Action Tool (dùng chung cho mọi Mutation)
@@ -111,13 +115,15 @@ export async function bootstrapMcpServer() {
     const transport = new SSEServerTransport('/message', res as any);
     const sessionId = Math.random().toString(36).slice(2, 10);
     transports.set(sessionId, transport);
-    
+
     // Create a fresh server instance exclusively for this transport
     const sessionServer = createMcpServerInstance();
 
     try {
       await sessionServer.connect(transport);
-      console.error(`[sensa-smart-mcp] SSE session ${sessionId} connected. Active: ${transports.size}`);
+      console.error(
+        `[sensa-smart-mcp] SSE session ${sessionId} connected. Active: ${transports.size}`,
+      );
     } catch (err) {
       console.error(`[sensa-smart-mcp] ERROR in server.connect:`, err);
       res.status(500).send('Internal Server Error connecting MCP');
@@ -125,7 +131,9 @@ export async function bootstrapMcpServer() {
     }
     transport.onclose = () => {
       transports.delete(sessionId);
-      console.error(`[sensa-smart-mcp] SSE session ${sessionId} closed. Active: ${transports.size}`);
+      console.error(
+        `[sensa-smart-mcp] SSE session ${sessionId} closed. Active: ${transports.size}`,
+      );
     };
   });
 
@@ -134,7 +142,9 @@ export async function bootstrapMcpServer() {
     // The SSEServerTransport includes sessionId in the POST URL automatically
     const sessionId = req.query.sessionId as string;
     if (sessionId && transports.has(sessionId)) {
-      await transports.get(sessionId)?.handlePostMessage(req as any, res as any);
+      await transports
+        .get(sessionId)
+        ?.handlePostMessage(req as any, res as any);
     } else if (transports.size === 1) {
       // Fallback for single-session compatibility
       const transport = transports.values().next().value;

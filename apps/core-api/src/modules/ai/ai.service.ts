@@ -194,8 +194,8 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
         model: AI_MODEL,
         contents: prompt,
         config: {
-          systemInstruction: `You are an admin assistant for Sensa Smart Home. You can control the system using tools. The user asked to reply in language: ${lang}. When making tool calls, always pass lang: "${lang}" if the tool supports it. Focus on giving exact answers based on tool responses.`,
-          tools: this.geminiToolsCache || [],
+          systemInstruction: `You are an AI Assistant for Sensa Smart Home. ALWAYS use the provided tools for smart home info without hallucinating. For general knowledge external to the system (like weather, lunar calendar, general queries), use your broad knowledge or the built-in Google Search tool. DO NOT refuse to answer general questions. Reply in language: ${lang}. When making tool calls, always pass lang: "${lang}" if the tool supports it. Focus on giving exact answers based on tool responses.`,
+          tools: [...(this.geminiToolsCache || []), { googleSearch: {} }],
         },
       });
 
@@ -299,18 +299,18 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
         model: AI_MODEL,
         contents,
         config: {
-          systemInstruction: `You are an admin assistant for Sensa Smart Home. ALWAYS use the provided functions/tools to fetch information from the system database before answering the user. If the tool is available, DO NOT guess or hallucinate. Reply in language: ${lang}.`,
+          systemInstruction: `You are an AI Assistant for Sensa Smart Home. ALWAYS use the provided tools for smart home info without hallucinating. For general knowledge external to the system (like weather, lunar calendar, general queries), use your broad knowledge or the built-in Google Search tool. DO NOT refuse to answer general questions. Reply in language: ${lang}.`,
           ...(this.geminiToolsCache &&
           this.geminiToolsCache[0]?.functionDeclarations?.length > 0
             ? {
-                tools: this.geminiToolsCache,
+                tools: [...this.geminiToolsCache, { googleSearch: {} }],
                 toolConfig: {
                   functionCallingConfig: {
                     mode: FunctionCallingConfigMode.AUTO,
                   },
                 },
               }
-            : {}),
+            : { tools: [{ googleSearch: {} }] }),
         },
       });
 
@@ -325,8 +325,8 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
           model: AI_MODEL,
           contents,
           config: {
-            systemInstruction: `You are an admin assistant for Sensa Smart Home. ALWAYS use the provided functions/tools to fetch information from the system database before answering the user. If the tool is available, DO NOT guess or hallucinate. Reply in language: ${lang}.`,
-            tools: this.geminiToolsCache || [],
+            systemInstruction: `You are an AI Assistant for Sensa Smart Home. ALWAYS use the provided tools for smart home info without hallucinating. For general knowledge external to the system (like weather, lunar calendar, general queries), use your broad knowledge or the built-in Google Search tool. DO NOT refuse to answer general questions. Reply in language: ${lang}.`,
+            tools: [...(this.geminiToolsCache || []), { googleSearch: {} }],
           },
         });
 

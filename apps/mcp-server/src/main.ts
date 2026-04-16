@@ -113,7 +113,10 @@ export async function bootstrapMcpServer() {
 
   app.get('/sse', async (req, res) => {
     const transport = new SSEServerTransport('/message', res as any);
-    const sessionId = Math.random().toString(36).slice(2, 10);
+    // Use the SDK's UUID sessionId as the Map key so POST /message routing works correctly.
+    // The SDK sends this UUID in the endpoint event (e.g. /message?sessionId=<uuid>),
+    // so the POST handler's req.query.sessionId will match this key.
+    const sessionId = transport.sessionId;
     transports.set(sessionId, transport);
 
     // Create a fresh server instance exclusively for this transport

@@ -194,10 +194,12 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
         model: AI_MODEL,
         contents: prompt,
         config: {
-          systemInstruction: `You are an AI Assistant for Sensa Smart Home. ALWAYS use the provided tools for smart home info without hallucinating. For general knowledge external to the system (like weather, lunar calendar, general queries), use your broad knowledge. DO NOT refuse to answer general questions. Reply in language: ${lang}. When making tool calls, always pass lang: "${lang}" if the tool supports it. Focus on giving exact answers based on tool responses.`,
-          tools: this.geminiToolsCache && this.geminiToolsCache[0]?.functionDeclarations?.length > 0
-            ? this.geminiToolsCache
-            : [{ googleSearch: {} }],
+          systemInstruction: `You are an AI Assistant for Sensa Smart Home. You are directly connected to the system. ALWAYS call the provided tools yourself to fetch real-time smart home and system info (devices, partners, scenes, etc.) to answer the user. NEVER tell the user to use an API or run a command - YOU must execute the tool! Do not hallucinate data. For general queries (weather, lunar calendar), use your broad knowledge. DO NOT refuse. Reply in language: ${lang}.`,
+          tools:
+            this.geminiToolsCache &&
+            this.geminiToolsCache[0]?.functionDeclarations?.length > 0
+              ? this.geminiToolsCache
+              : [{ googleSearch: {} }],
         },
       });
 
@@ -301,7 +303,7 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
         model: AI_MODEL,
         contents,
         config: {
-          systemInstruction: `You are an AI Assistant for Sensa Smart Home. ALWAYS use the provided tools for smart home info without hallucinating. For general knowledge external to the system (like weather, lunar calendar, general queries), use your broad knowledge or the built-in Google Search tool. DO NOT refuse to answer general questions. Reply in language: ${lang}.`,
+          systemInstruction: `You are an AI Assistant for Sensa Smart Home. You are directly connected to the system. ALWAYS call the provided tools yourself to fetch real-time smart home and system info (devices, partners, scenes, etc.) to answer the user. NEVER tell the user to use an API or run a command - YOU must execute the tool! Do not hallucinate data. For general queries (weather, lunar calendar), use your broad knowledge. DO NOT refuse. Reply in language: ${lang}.`,
           ...(this.geminiToolsCache &&
           this.geminiToolsCache[0]?.functionDeclarations?.length > 0
             ? {
@@ -327,10 +329,12 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
           model: AI_MODEL,
           contents,
           config: {
-            systemInstruction: `You are an AI Assistant for Sensa Smart Home. ALWAYS use the provided tools for smart home info without hallucinating. For general knowledge external to the system (like weather, lunar calendar, general queries), use your broad knowledge. DO NOT refuse to answer general questions. Reply in language: ${lang}.`,
-            tools: this.geminiToolsCache && this.geminiToolsCache[0]?.functionDeclarations?.length > 0
-              ? this.geminiToolsCache
-              : [{ googleSearch: {} }],
+            systemInstruction: `You are an AI Assistant for Sensa Smart Home. You are directly connected to the system. ALWAYS call the provided tools yourself to fetch real-time smart home and system info (devices, partners, scenes, etc.) to answer the user. NEVER tell the user to use an API or run a command - YOU must execute the tool! Do not hallucinate data. For general queries (weather, lunar calendar), use your broad knowledge. DO NOT refuse. Reply in language: ${lang}.`,
+            tools:
+              this.geminiToolsCache &&
+              this.geminiToolsCache[0]?.functionDeclarations?.length > 0
+                ? this.geminiToolsCache
+                : [{ googleSearch: {} }],
           },
         });
 

@@ -292,11 +292,12 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
       // Add current prompt
       contents.push({ role: 'user', parts: [{ text: prompt }] });
 
-      if (this.geminiToolsCache) {
-        this.logger.log(
-          `Gemini Tools Cache Payload: ${JSON.stringify(this.geminiToolsCache, null, 2)}`,
-        );
-      }
+      // CRITICAL: Use WARN so it appears in production logs (LOG level is filtered)
+      this.logger.warn(
+        `[DEBUG] chatStream tools state: geminiToolsCache=${this.geminiToolsCache ? 'SET' : 'NULL'}, ` +
+          `toolCount=${this.geminiToolsCache?.[0]?.functionDeclarations?.length ?? 0}, ` +
+          `mcpToolsList=${this.mcpToolsList?.length ?? 0}`,
+      );
 
       // 1. First call: get initial response (may include tool calls)
       const response = await this.ai.models.generateContent({

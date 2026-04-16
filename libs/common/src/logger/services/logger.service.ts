@@ -127,13 +127,15 @@ export const createLoggerConfig = (configService: ConfigService): Params => {
       },
     },
 
-    // Exclude health check and static endpoints from logging
+    // Exclude health check, static, and high-frequency internal endpoints from logging
     exclude: [
       '/health',
       '/health/live',
       '/health/ready',
       '/metrics',
       '/favicon.ico',
+      '/v1/internal/emqx/auth',
+      '/v1/internal/emqx/acl',
     ],
   };
 };

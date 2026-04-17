@@ -327,111 +327,98 @@ For general queries, use your broad knowledge. DO NOT refuse. Reply in language:
           }
         : { tools: [{ googleSearch: {} }] };
 
-      // ── STEP 1: Single streaming call — collect text OR tool calls ────────
-      const firstStream = await this.ai.models.generateContentStream({
-        model: AI_MODEL,
-        contents,
-        config: { systemInstruction: baseSystemInstruction, ...toolsConfig },
-      });
+      // ── MULTI-TURN TOOL CALL LOOP (max 5 rounds) ─────────────────────────
+      const MAX_TOOL_ROUNDS = 5;
+      const runningContents: any[] = [...contents];
+      // streamStartSent tracks if we already sent 'stream_start'
+      let streamStartSent = false; // eslint-disable-line prefer-const
 
-      const collectedFunctionCalls: any[] = [];
-      const collectedTextParts: string[] = [];
-
-      for await (const chunk of firstStream) {
+      for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
         if (isAborted) return;
 
-        // Collect any tool calls from this chunk
-        if (chunk.functionCalls && chunk.functionCalls.length > 0) {
-          collectedFunctionCalls.push(...chunk.functionCalls);
+        const isLastRound = round === MAX_TOOL_ROUNDS - 1;
+        const streamConfig = isLastRound
+          ? { systemInstruction: baseSystemInstruction }              // force text-only
+          : { systemInstruction: baseSystemInstruction, ...toolsConfig }; // allow tools
+
+        const stream = await this.ai.models.generateContentStream({
+          model: AI_MODEL,
+          contents: runningContents,
+          config: streamConfig,
+        });
+
+        const roundFunctionCalls: any[] = [];
+        const roundTextParts: string[] = [];
+
+        for await (const chunk of stream) {
+          if (isAborted) return;
+          if (chunk.functionCalls && chunk.functionCalls.length > 0) {
+            roundFunctionCalls.push(...chunk.functionCalls);
+          }
+          if (chunk.text) {
+            roundTextParts.push(chunk.text);
+          }
         }
-        // Collect any text tokens (used if there are no tool calls)
-        if (chunk.text) {
-          collectedTextParts.push(chunk.text);
+
+        if (isAborted) return;
+
+        // ── No tool calls → flush collected text and finish ──────────────
+        if (roundFunctionCalls.length === 0) {
+          if (!streamStartSent) sendEvent('stream_start', {});
+          for (const text of roundTextParts) {
+            if (isAborted) break;
+            sendEvent('delta', { text });
+          }
+          if (!isAborted) {
+            sendEvent('done', {});
+            res.end();
+          }
+          return;
+        }
+
+        // ── Has tool calls → execute them and loop ───────────────────────
+        this.logger.log(`[Stream] Round ${round + 1}: ${roundFunctionCalls.length} tool call(s)`);
+        sendEvent('tool_start', { tools: roundFunctionCalls.map((c) => c.name) });
+
+        for (const call of roundFunctionCalls) {
+          if (isAborted) return;
+          this.logger.log(`[Stream] Tool call: ${call.name}`);
+          sendEvent('tool_call', { name: call.name });
+
+          const args = { ...(call.args as Record<string, any>), lang };
+          if (userId) {
+            args['userId'] = userId; // 🛡 INJECTION FILTER
+          }
+          const mcpResult = await this.mcpClient!.callTool({ name: call.name, arguments: args });
+
+          let toolOutput = '';
+          const contentArray = mcpResult.content as any[];
+          if (contentArray && contentArray.length > 0) {
+            toolOutput = contentArray[0].text || JSON.stringify(contentArray);
+          }
+          sendEvent('tool_result', { name: call.name, preview: toolOutput.substring(0, 200) });
+
+          // Append call + response to running context for next round
+          runningContents.push(
+            { role: 'model', parts: [{ functionCall: call }] },
+            {
+              role: 'user',
+              parts: [{
+                functionResponse: {
+                  name: call.name,
+                  response: { result: toolOutput },
+                },
+              }],
+            },
+          );
         }
       }
 
-      if (isAborted) return;
-
-      // ── STEP 2a: No tool calls → stream the already-collected text ────────
-      if (collectedFunctionCalls.length === 0) {
-        sendEvent('stream_start', {});
-        for (const text of collectedTextParts) {
-          if (isAborted) break;
-          sendEvent('delta', { text });
-        }
-        if (!isAborted) {
-          sendEvent('done', {});
-          res.end();
-        }
-        return;
-      }
-
-      // ── STEP 2b: Has tool calls → execute them ───────────────────────────
-      sendEvent('tool_start', { tools: collectedFunctionCalls.map((c) => c.name) });
-
-      const toolResults: { name: string; result: string }[] = [];
-      for (const call of collectedFunctionCalls) {
-        if (isAborted) break;
-        this.logger.log(`[Stream] Tool call: ${call.name}`);
-        sendEvent('tool_call', { name: call.name });
-
-        const args = { ...(call.args as Record<string, any>), lang };
-        if (userId) {
-          args['userId'] = userId; // 🛡 INJECTION FILTER: Force-inject secure user boundary
-        }
-        const mcpResult = await this.mcpClient!.callTool({ name: call.name, arguments: args });
-
-        let toolOutput = '';
-        const contentArray = mcpResult.content as any[];
-        if (contentArray && contentArray.length > 0) {
-          toolOutput = contentArray[0].text || JSON.stringify(contentArray);
-        }
-        toolResults.push({ name: call.name, result: toolOutput });
-        sendEvent('tool_result', { name: call.name, preview: toolOutput.substring(0, 200) });
-      }
-
-      if (isAborted) return;
-
-      // ── STEP 3: Build full context + stream final answer ──────────────────
-      const fullContents: any[] = [...contents];
-      for (let i = 0; i < collectedFunctionCalls.length; i++) {
-        fullContents.push(
-          { role: 'model', parts: [{ functionCall: collectedFunctionCalls[i] }] },
-          {
-            role: 'user',
-            parts: [{
-              functionResponse: {
-                name: toolResults[i].name,
-                response: { result: toolResults[i].result },
-              },
-            }],
-          },
-        );
-      }
-
+      // Fallback: max rounds exhausted without text output
       sendEvent('stream_start', {});
-
-      const finalStream = await this.ai.models.generateContentStream({
-        model: AI_MODEL,
-        contents: fullContents,
-        config: { 
-          systemInstruction: baseSystemInstruction,
-          tools: toolsConfig.tools,
-          toolConfig: { functionCallingConfig: { mode: FunctionCallingConfigMode.NONE } }
-        },
-      });
-
-      for await (const chunk of finalStream) {
-        if (isAborted) break;
-        if (chunk.text) {
-          sendEvent('delta', { text: chunk.text });
-        }
-      }
-
-      if (!isAborted) {
-        sendEvent('done', {});
-        res.end();
-      }
+      sendEvent('delta', { text: 'Xin lỗi, tôi đã thực hiện quá nhiều bước mà chưa có kết quả. Vui lòng thử lại.' });
+      sendEvent('done', {});
+      res.end();
     } catch (error) {
       this.logger.error('[Stream] Error during streaming chat', error);
       sendEvent('error', { message: error.message || 'Internal AI Error' });

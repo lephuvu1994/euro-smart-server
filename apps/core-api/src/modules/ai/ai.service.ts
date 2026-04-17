@@ -414,7 +414,11 @@ For general queries, use your broad knowledge. DO NOT refuse. Reply in language:
       const finalStream = await this.ai.models.generateContentStream({
         model: AI_MODEL,
         contents: fullContents,
-        config: { systemInstruction: baseSystemInstruction },
+        config: { 
+          systemInstruction: baseSystemInstruction,
+          tools: toolsConfig.tools,
+          toolConfig: { functionCallingConfig: { mode: FunctionCallingConfigMode.NONE } }
+        },
       });
 
       for await (const chunk of finalStream) {

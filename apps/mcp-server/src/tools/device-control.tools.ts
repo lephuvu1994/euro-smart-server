@@ -30,12 +30,24 @@ export function registerDeviceControlTools(server: McpServer): void {
     {
       deviceToken: z
         .string()
-        .describe('The unique token of the device (MAC address)'),
+        .describe(
+          "The unique 'token' field of the device from list_devices (do NOT use identifier/MAC)",
+        ),
     },
     async ({ deviceToken }) => {
+      // Flexible lookup: if deviceToken looks like a short MAC string, it might be the identifier instead of token.
+      // But Redis status strictly uses 'token'. Let's first resolve the real token via DB.
+      const device = await prisma.device.findFirst({
+        where: {
+          OR: [{ token: deviceToken }, { identifier: deviceToken }],
+        },
+        select: { token: true },
+      });
+      const resolvedToken = device ? device.token : deviceToken;
+
       const [statusStr, shadowStr] = await Promise.all([
-        redis.get(`status:${deviceToken}`),
-        redis.get(`device:shadow:${deviceToken}`),
+        redis.get(`status:${resolvedToken}`),
+        redis.get(`device:shadow:${resolvedToken}`),
       ]);
 
       const isOnline = statusStr === 'online';
@@ -69,7 +81,9 @@ export function registerDeviceControlTools(server: McpServer): void {
     {
       deviceToken: z
         .string()
-        .describe('The unique token of the device (MAC address)'),
+        .describe(
+          "The unique 'token' field of the device from list_devices (do NOT use identifier/MAC)",
+        ),
       lang: z
         .enum(['vi', 'en'])
         .optional()
@@ -77,8 +91,8 @@ export function registerDeviceControlTools(server: McpServer): void {
         .describe('Language for response'),
     },
     async ({ deviceToken, lang }) => {
-      const device = await prisma.device.findUnique({
-        where: { token: deviceToken },
+      const device = await prisma.device.findFirst({
+        where: { OR: [{ token: deviceToken }, { identifier: deviceToken }] },
         include: {
           owner: { select: { email: true, firstName: true, lastName: true } },
           deviceModel: { select: { name: true, code: true } },
@@ -122,7 +136,11 @@ export function registerDeviceControlTools(server: McpServer): void {
     'set_device_entity_value',
     'Control a device by changing an entity value (e.g. turn on a switch, open a curtain). MUTATION. Requires user confirmation.',
     {
-      deviceToken: z.string().describe('The unique token of the device'),
+      deviceToken: z
+        .string()
+        .describe(
+          "The unique 'token' field of the device from list_devices (do NOT use identifier/MAC)",
+        ),
       entityCode: z
         .string()
         .describe(
@@ -139,8 +157,8 @@ export function registerDeviceControlTools(server: McpServer): void {
     },
     async ({ deviceToken, entityCode, value, lang }) => {
       // Xác minh thiết bị có tồn tại
-      const device = await prisma.device.findUnique({
-        where: { token: deviceToken },
+      const device = await prisma.device.findFirst({
+        where: { OR: [{ token: deviceToken }, { identifier: deviceToken }] },
         select: { id: true, name: true, token: true },
       });
 
@@ -164,7 +182,7 @@ export function registerDeviceControlTools(server: McpServer): void {
           await deviceQueue.add(
             'control_cmd',
             {
-              token: deviceToken,
+              token: device.token,
               entityCode,
               value,
               userId: 'admin-ai', // Ghi nhận người ra lệnh là hệ thống AI
@@ -181,7 +199,7 @@ export function registerDeviceControlTools(server: McpServer): void {
           return {
             message: `✅ Đã gửi lệnh điều khiển. Job ID được đưa vào hàng đợi BullMQ.`,
             status: 'queued',
-            deviceToken,
+            deviceToken: device.token,
             entityCode,
             value,
           };

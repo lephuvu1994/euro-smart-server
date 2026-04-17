@@ -311,7 +311,7 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
                 tools: this.geminiToolsCache,
                 toolConfig: {
                   functionCallingConfig: {
-                    mode: FunctionCallingConfigMode.AUTO,
+                    mode: FunctionCallingConfigMode.ANY,
                   },
                 },
               }

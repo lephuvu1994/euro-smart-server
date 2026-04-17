@@ -34,7 +34,7 @@ export class AiAppController {
     description: 'Securely bounded by user ID to only control devices/scenes owned by this user.',
   })
   async chatStream(
-    @Req() req: Request & { user: { id: string } },
+    @Req() req: Request & { user: { userId: string; id?: string } },
     @Body() body: {
       prompt: string;
       history?: Array<{ role: string; content: string }>;
@@ -46,7 +46,7 @@ export class AiAppController {
       res.status(400).json({ error: 'Prompt is required' });
       return;
     }
-    const userId = req.user.id;
+    const userId = req.user.userId || req.user.id;
     
     // Method to be implemented/updated in AiService
     await this.aiService.chatStream(

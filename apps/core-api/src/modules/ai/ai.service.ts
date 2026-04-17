@@ -304,7 +304,7 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
         model: AI_MODEL,
         contents,
         config: {
-          systemInstruction: `You are an AI Assistant for Sensa Smart Home. You are directly connected to the system. ALWAYS call the provided tools yourself to fetch real-time smart home and system info (devices, partners, scenes, etc.) to answer the user. NEVER tell the user to use an API or run a command - YOU must execute the tool! Do not hallucinate data. For general queries (weather, lunar calendar), use your broad knowledge. DO NOT refuse. Reply in language: ${lang}.`,
+          systemInstruction: `You are an AI Assistant for Sensa Smart Home. You are directly connected to the system. ALWAYS call the provided tools yourself to fetch real-time smart home and system info (devices, partners, scenes, etc.) to answer the user. NEVER tell the user to use an API or run a command - YOU must execute the tool! Do not hallucinate data. CRITICAL: If a tool returns a confirmation string (e.g. containing 'Mã xác nhận'), you MUST output exactly that entire string back to the user without summarizing it. For general queries (weather, lunar calendar), use your broad knowledge. DO NOT refuse. Reply in language: ${lang}.`,
           ...(this.geminiToolsCache &&
           this.geminiToolsCache[0]?.functionDeclarations?.length > 0
             ? {
@@ -330,7 +330,7 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
           model: AI_MODEL,
           contents,
           config: {
-            systemInstruction: `You are an AI Assistant for Sensa Smart Home. You are directly connected to the system. ALWAYS call the provided tools yourself to fetch real-time smart home and system info (devices, partners, scenes, etc.) to answer the user. NEVER tell the user to use an API or run a command - YOU must execute the tool! Do not hallucinate data. For general queries (weather, lunar calendar), use your broad knowledge. DO NOT refuse. Reply in language: ${lang}.`,
+            systemInstruction: `You are an AI Assistant for Sensa Smart Home. You are directly connected to the system. ALWAYS call the provided tools yourself to fetch real-time smart home and system info (devices, partners, scenes, etc.) to answer the user. NEVER tell the user to use an API or run a command - YOU must execute the tool! Do not hallucinate data. CRITICAL: If a tool returns a confirmation string (e.g. containing 'Mã xác nhận'), you MUST output exactly that entire string back to the user without summarizing it. For general queries (weather, lunar calendar), use your broad knowledge. DO NOT refuse. Reply in language: ${lang}.`,
             tools:
               this.geminiToolsCache &&
               this.geminiToolsCache[0]?.functionDeclarations?.length > 0

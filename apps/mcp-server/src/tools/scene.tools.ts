@@ -72,7 +72,7 @@ export function registerSceneTools(server: McpServer): void {
   // ─────────────────────────────────────────
   server.tool(
     'run_scene',
-    'Executes an automation scene manually by its ID. This causes the devices in actions to activate. MUTATION. Requires user confirmation.',
+    'Executes an automation scene manually by its ID. This causes the devices in actions to activate. MUTATION.',
     {
       sceneId: z.string().describe('The ID of the scene to execute'),
       userId: z.string().optional().describe('INTERNAL. Do NOT ask user for this value. Auto-injected by the system for ownership enforcement'),
@@ -149,7 +149,7 @@ export function registerSceneTools(server: McpServer): void {
   // ─────────────────────────────────────────
   server.tool(
     'toggle_scene_active',
-    'Enable or disable an automation scene. MUTATION. Requires user confirmation.',
+    'Enable or disable an automation scene. MUTATION.',
     {
       sceneId: z.string().describe('The ID of the scene'),
       active: z.boolean().describe('True to enable, false to disable'),
@@ -205,7 +205,7 @@ export function registerSceneTools(server: McpServer): void {
   // ─────────────────────────────────────────
   server.tool(
     'delete_scene',
-    'Safely delete an automation scene from the database. MUTATION. Requires user confirmation.',
+    'Safely delete an automation scene from the database. MUTATION.',
     {
       sceneId: z.string(),
       userId: z.string().optional().describe('INTERNAL. Do NOT ask user for this value. Auto-injected by the system for ownership enforcement'),

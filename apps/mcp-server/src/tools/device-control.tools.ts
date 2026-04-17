@@ -12,7 +12,7 @@ export function registerDeviceControlTools(server: McpServer): void {
   // ─────────────────────────────────────────
   server.tool(
     'get_device_status',
-    'Get real-time online/offline status and current shadow state (entity values) of a specific device. Use this whenever the admin asks if a device is online, or before controlling a device to know its current state.',
+    'Get real-time online/offline status and current shadow state (entity values) of a specific device. Use this whenever the user asks if a device is online, or before controlling a device to know its current state.',
     {
       deviceToken: z
         .string()
@@ -149,7 +149,7 @@ export function registerDeviceControlTools(server: McpServer): void {
   // ─────────────────────────────────────────
   server.tool(
     'set_device_entity_value',
-    'Control a device by changing an entity value (e.g. turn on a switch, open a curtain). MUTATION. Requires user confirmation.',
+    'Control a device by changing an entity value (e.g. turn on a switch, open a curtain). MUTATION.',
     {
       deviceToken: z
         .string()

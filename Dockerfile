@@ -43,6 +43,9 @@ COPY --from=builder /app/prisma ./prisma
 # Copy built dist
 COPY --from=builder /app/dist ./dist
 
+# Copy i18n language files (needed by mcp-server at runtime)
+COPY --from=builder /app/libs/common/src/message/languages ./libs/common/src/message/languages
+
 # Create entrypoint script inline (auto migrate on startup)
 RUN printf '#!/bin/sh\nset -e\necho "Running Prisma migrations..."\nnpx prisma migrate deploy\necho "Migrations complete. Starting $1..."\nexec node "$1"\n' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
 

@@ -37,9 +37,17 @@ export function registerDeviceControlTools(server: McpServer): void {
     async ({ deviceToken }) => {
       // Flexible lookup: if deviceToken looks like a short MAC string, it might be the identifier instead of token.
       // But Redis status strictly uses 'token'. Let's first resolve the real token via DB.
+      const isUuid =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          deviceToken,
+        );
       const device = await prisma.device.findFirst({
         where: {
-          OR: [{ token: deviceToken }, { identifier: deviceToken }],
+          OR: [
+            ...(isUuid ? [{ id: deviceToken }] : []),
+            { token: deviceToken },
+            { identifier: deviceToken },
+          ],
         },
         select: { token: true },
       });
@@ -91,8 +99,18 @@ export function registerDeviceControlTools(server: McpServer): void {
         .describe('Language for response'),
     },
     async ({ deviceToken, lang }) => {
+      const isUuid =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          deviceToken,
+        );
       const device = await prisma.device.findFirst({
-        where: { OR: [{ token: deviceToken }, { identifier: deviceToken }] },
+        where: {
+          OR: [
+            ...(isUuid ? [{ id: deviceToken }] : []),
+            { token: deviceToken },
+            { identifier: deviceToken },
+          ],
+        },
         include: {
           owner: { select: { email: true, firstName: true, lastName: true } },
           deviceModel: { select: { name: true, code: true } },
@@ -157,8 +175,18 @@ export function registerDeviceControlTools(server: McpServer): void {
     },
     async ({ deviceToken, entityCode, value, lang }) => {
       // Xác minh thiết bị có tồn tại
+      const isUuid =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          deviceToken,
+        );
       const device = await prisma.device.findFirst({
-        where: { OR: [{ token: deviceToken }, { identifier: deviceToken }] },
+        where: {
+          OR: [
+            ...(isUuid ? [{ id: deviceToken }] : []),
+            { token: deviceToken },
+            { identifier: deviceToken },
+          ],
+        },
         select: { id: true, name: true, token: true },
       });
 

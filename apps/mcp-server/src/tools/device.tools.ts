@@ -13,7 +13,7 @@ export function registerDeviceTools(server: McpServer): void {
   // ─────────────────────────────────────────
   server.tool(
     'list_devices',
-    'List active devices in the system. Filter by partner or device model. Use when admin asks about devices, online/offline status.',
+    'List active devices in the system (basic info only). Filter by partner or device model. Does NOT contain online/offline status - use get_device_status for that.',
     {
       partnerCode: z.string().optional().describe('Filter by partner code'),
       modelCode: z.string().optional().describe('Filter by device model code'),

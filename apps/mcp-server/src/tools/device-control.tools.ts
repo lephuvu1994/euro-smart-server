@@ -1,24 +1,10 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import prisma from '../prisma';
-import { createPendingAction } from '../utils/confirm';
+import { createOrExecuteAction } from '../utils/confirm';
 import { t } from '../utils/i18n';
-import Redis from 'ioredis';
-import { Queue } from 'bullmq';
+import { redis, deviceQueue } from '../shared/redis';
 
-// Khởi tạo Redis & BullMQ
-const REDIS_HOST = process.env.REDIS_HOST || 'localhost';
-const REDIS_PORT = parseInt(process.env.REDIS_PORT || '6379', 10);
-const REDIS_PASSWORD = process.env.REDIS_PASSWORD || undefined;
-
-const redis = new Redis({
-  host: REDIS_HOST,
-  port: REDIS_PORT,
-  password: REDIS_PASSWORD,
-});
-
-// Sử dụng đúng tên queue từ core-api (APP_BULLMQ_QUEUES.DEVICE_CONTROL)
-const deviceQueue = new Queue('device_controll', { connection: redis });
 
 export function registerDeviceControlTools(server: McpServer): void {
   // ─────────────────────────────────────────
@@ -33,8 +19,9 @@ export function registerDeviceControlTools(server: McpServer): void {
         .describe(
           "The unique 'token' field of the device from list_devices (do NOT use identifier/MAC)",
         ),
+      userId: z.string().optional().describe('INTERNAL. Do NOT ask user for this value. Auto-injected by the system for ownership enforcement'),
     },
-    async ({ deviceToken }) => {
+    async ({ deviceToken, userId }) => {
       // Flexible lookup: if deviceToken looks like a short MAC string, it might be the identifier instead of token.
       // But Redis status strictly uses 'token'. Let's first resolve the real token via DB.
       const isUuid =
@@ -48,9 +35,17 @@ export function registerDeviceControlTools(server: McpServer): void {
             { token: deviceToken },
             { identifier: deviceToken },
           ],
+          ...(userId && { ownerId: userId }), // 🔒 RLS Enforcement
         },
         select: { token: true },
       });
+
+      if (!device && userId) {
+        return {
+          content: [{ type: 'text', text: 'Access Denied: Device not found or you do not own this device.' }],
+        };
+      }
+
       const resolvedToken = device ? device.token : deviceToken;
 
       const [statusStr, shadowStr] = await Promise.all([
@@ -92,13 +87,14 @@ export function registerDeviceControlTools(server: McpServer): void {
         .describe(
           "The unique 'token' field of the device from list_devices (do NOT use identifier/MAC)",
         ),
+      userId: z.string().optional().describe('INTERNAL. Do NOT ask user for this value. Auto-injected by the system for ownership enforcement'),
       lang: z
         .enum(['vi', 'en'])
         .optional()
         .default('vi')
         .describe('Language for response'),
     },
-    async ({ deviceToken, lang }) => {
+    async ({ deviceToken, userId, lang }) => {
       const isUuid =
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
           deviceToken,
@@ -110,6 +106,7 @@ export function registerDeviceControlTools(server: McpServer): void {
             { token: deviceToken },
             { identifier: deviceToken },
           ],
+          ...(userId && { ownerId: userId }), // 🔒 RLS Enforcement
         },
         include: {
           owner: { select: { email: true, firstName: true, lastName: true } },
@@ -130,7 +127,7 @@ export function registerDeviceControlTools(server: McpServer): void {
           content: [
             {
               type: 'text',
-              text: t(lang, 'device.notFound', { id: deviceToken }),
+              text: userId ? 'Access Denied.' : t(lang, 'device.notFound', { id: deviceToken }),
             },
           ],
         };
@@ -167,13 +164,14 @@ export function registerDeviceControlTools(server: McpServer): void {
       value: z
         .union([z.string(), z.number(), z.boolean()])
         .describe('The new value to set (e.g. "ON", "OPEN", "CLOSE", 1, true)'),
+      userId: z.string().optional().describe('INTERNAL. Do NOT ask user for this value. Auto-injected by the system for ownership enforcement'),
       lang: z
         .enum(['vi', 'en'])
         .optional()
         .default('vi')
         .describe('Language for response'),
     },
-    async ({ deviceToken, entityCode, value, lang }) => {
+    async ({ deviceToken, entityCode, value, userId, lang }) => {
       // Xác minh thiết bị có tồn tại
       const isUuid =
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
@@ -186,6 +184,7 @@ export function registerDeviceControlTools(server: McpServer): void {
             { token: deviceToken },
             { identifier: deviceToken },
           ],
+          ...(userId && { ownerId: userId }), // 🔒 RLS Enforcement
         },
         select: { id: true, name: true, token: true },
       });
@@ -195,16 +194,18 @@ export function registerDeviceControlTools(server: McpServer): void {
           content: [
             {
               type: 'text',
-              text: t(lang, 'device.notFound', { id: deviceToken }),
+              text: userId ? 'Access Denied.' : t(lang, 'device.notFound', { id: deviceToken }),
             },
           ],
         };
       }
 
+      const actionDesc = `Điều khiển thiết bị "${device.name}" (${device.token}): Đặt [${entityCode}] thành [${value}]`;
+
       // Tạo pending action để chờ xác nhận từ user
-      const msg = createPendingAction(
-        lang,
-        `Điều khiển thiết bị "${device.name}" (${device.token}): Đặt [${entityCode}] thành [${value}]`,
+      const msg = await createOrExecuteAction(
+        lang || 'vi',
+        actionDesc,
         async () => {
           // Push job vào BullMQ (tuân thủ cấu trúc DEVICE_JOBS.CONTROL_CMD)
           await deviceQueue.add(
@@ -213,7 +214,7 @@ export function registerDeviceControlTools(server: McpServer): void {
               token: device.token,
               entityCode,
               value,
-              userId: 'admin-ai', // Ghi nhận người ra lệnh là hệ thống AI
+              userId: userId || 'admin-ai', // Ghi nhận người ra lệnh
               source: 'app',
               issuedAt: Date.now(),
             },
@@ -225,13 +226,12 @@ export function registerDeviceControlTools(server: McpServer): void {
           );
 
           return {
-            message: `✅ Đã gửi lệnh điều khiển. Job ID được đưa vào hàng đợi BullMQ.`,
-            status: 'queued',
-            deviceToken: device.token,
-            entityCode,
-            value,
+            status: 'Processing',
+            message: 'Control command has been queued successfully',
+            jobFilter: `Queue: deviceQueue, Token: ${deviceToken}`,
           };
         },
+        userId,
       );
 
       return {

@@ -1,22 +1,10 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import prisma from '../prisma';
-import { createPendingAction } from '../utils/confirm';
+import { createOrExecuteAction } from '../utils/confirm';
 import { t } from '../utils/i18n';
-import Redis from 'ioredis';
-import { Queue } from 'bullmq';
+import { redis, deviceQueue } from '../shared/redis';
 
-const REDIS_HOST = process.env.REDIS_HOST || 'localhost';
-const REDIS_PORT = parseInt(process.env.REDIS_PORT || '6379', 10);
-const REDIS_PASSWORD = process.env.REDIS_PASSWORD || undefined;
-
-const redis = new Redis({
-  host: REDIS_HOST,
-  port: REDIS_PORT,
-  password: REDIS_PASSWORD,
-});
-
-const deviceQueue = new Queue('device_controll', { connection: redis });
 
 export function registerSceneTools(server: McpServer): void {
   // ─────────────────────────────────────────
@@ -27,9 +15,12 @@ export function registerSceneTools(server: McpServer): void {
     'List all available automation scenes. You can use this to find the sceneId needed to run a scene.',
     {
       take: z.number().optional().default(20).describe('Limit results'),
+      userId: z.string().optional().describe('INTERNAL. Do NOT ask user for this value. Auto-injected by the system for ownership enforcement'),
     },
-    async ({ take }) => {
+    async ({ take, userId }) => {
+      const where = userId ? { home: { ownerId: userId } } : {};
       const scenes = await prisma.scene.findMany({
+        where,
         take,
         orderBy: { updatedAt: 'desc' },
         select: {
@@ -54,15 +45,19 @@ export function registerSceneTools(server: McpServer): void {
     'Get full details of a specific scene, including all its triggers and actions.',
     {
       sceneId: z.string().describe('The unique ID of the scene'),
+      userId: z.string().optional().describe('INTERNAL. Do NOT ask user for this value. Auto-injected by the system for ownership enforcement'),
     },
-    async ({ sceneId }) => {
-      const scene = await prisma.scene.findUnique({
-        where: { id: sceneId },
+    async ({ sceneId, userId }) => {
+      const scene = await prisma.scene.findFirst({
+        where: { 
+          id: sceneId,
+          ...(userId && { home: { ownerId: userId } })
+        },
       });
       if (!scene) {
         return {
           content: [
-            { type: 'text', text: `Scene not found with ID: ${sceneId}` },
+            { type: 'text', text: userId ? 'Access Denied or Scene not found.' : `Scene not found with ID: ${sceneId}` },
           ],
         };
       }
@@ -80,6 +75,7 @@ export function registerSceneTools(server: McpServer): void {
     'Executes an automation scene manually by its ID. This causes the devices in actions to activate. MUTATION. Requires user confirmation.',
     {
       sceneId: z.string().describe('The ID of the scene to execute'),
+      userId: z.string().optional().describe('INTERNAL. Do NOT ask user for this value. Auto-injected by the system for ownership enforcement'),
       lang: z
         .enum(['vi', 'en'])
         .optional()
@@ -90,16 +86,19 @@ export function registerSceneTools(server: McpServer): void {
         .optional()
         .describe('Optional delay in seconds before running the scene'),
     },
-    async ({ sceneId, lang, delaySeconds }) => {
-      const scene = await prisma.scene.findUnique({
-        where: { id: sceneId },
+    async ({ sceneId, userId, lang, delaySeconds }) => {
+      const scene = await prisma.scene.findFirst({
+        where: { 
+          id: sceneId,
+          ...(userId && { home: { ownerId: userId } })
+        },
         select: { id: true, name: true, active: true },
       });
 
       if (!scene) {
         return {
           content: [
-            { type: 'text', text: t(lang, 'scene.error.sceneNotFound') },
+            { type: 'text', text: userId ? 'Access Denied or Scene not found.' : t(lang, 'scene.error.sceneNotFound') },
           ],
         };
       }
@@ -116,7 +115,7 @@ export function registerSceneTools(server: McpServer): void {
       }
 
       // Tạo pending action để chờ user confirm (nếu có yêu cầu từ client)
-      const msg = createPendingAction(
+      const msg = await createOrExecuteAction(
         lang,
         `Chạy kịch bản / Run scene "${scene.name}" (ID: ${scene.id})${delaySeconds ? ` trong ${delaySeconds} giây nữa` : ''}`,
         async () => {
@@ -136,6 +135,7 @@ export function registerSceneTools(server: McpServer): void {
             message: `✅ Đã đưa lệnh chạy kịch bản "${scene.name}" vào hàng đợi thực thi.`,
           };
         },
+        userId,
       );
 
       return {
@@ -153,27 +153,31 @@ export function registerSceneTools(server: McpServer): void {
     {
       sceneId: z.string().describe('The ID of the scene'),
       active: z.boolean().describe('True to enable, false to disable'),
+      userId: z.string().optional().describe('INTERNAL. Do NOT ask user for this value. Auto-injected by the system for ownership enforcement'),
       lang: z
         .enum(['vi', 'en'])
         .optional()
         .default('vi')
         .describe('Language for response'),
     },
-    async ({ sceneId, active, lang }) => {
-      const scene = await prisma.scene.findUnique({
-        where: { id: sceneId },
+    async ({ sceneId, active, userId, lang }) => {
+      const scene = await prisma.scene.findFirst({
+        where: { 
+          id: sceneId,
+          ...(userId && { home: { ownerId: userId } })
+        },
         select: { id: true, name: true },
       });
 
       if (!scene) {
         return {
           content: [
-            { type: 'text', text: t(lang, 'scene.error.sceneNotFound') },
+            { type: 'text', text: userId ? 'Access Denied or Scene not found.' : t(lang, 'scene.error.sceneNotFound') },
           ],
         };
       }
 
-      const msg = createPendingAction(
+      const msg = await createOrExecuteAction(
         lang,
         `${active ? 'Bật / Enable' : 'Tắt / Disable'} kịch bản "${scene.name}"`,
         async () => {
@@ -187,6 +191,7 @@ export function registerSceneTools(server: McpServer): void {
             active: updated.active,
           };
         },
+        userId,
       );
 
       return {
@@ -203,22 +208,26 @@ export function registerSceneTools(server: McpServer): void {
     'Safely delete an automation scene from the database. MUTATION. Requires user confirmation.',
     {
       sceneId: z.string(),
+      userId: z.string().optional().describe('INTERNAL. Do NOT ask user for this value. Auto-injected by the system for ownership enforcement'),
       lang: z.enum(['vi', 'en']).optional().default('vi'),
     },
-    async ({ sceneId, lang }) => {
-      const scene = await prisma.scene.findUnique({
-        where: { id: sceneId },
+    async ({ sceneId, userId, lang }) => {
+      const scene = await prisma.scene.findFirst({
+        where: { 
+          id: sceneId,
+          ...(userId && { home: { ownerId: userId } })
+        },
         select: { id: true, name: true },
       });
       if (!scene) {
         return {
           content: [
-            { type: 'text', text: t(lang, 'scene.error.sceneNotFound') },
+            { type: 'text', text: userId ? 'Access Denied or Scene not found.' : t(lang, 'scene.error.sceneNotFound') },
           ],
         };
       }
 
-      const msg = createPendingAction(
+      const msg = await createOrExecuteAction(
         lang,
         `Xoá kịch bản / Delete scene "${scene.name}"`,
         async () => {
@@ -238,6 +247,7 @@ export function registerSceneTools(server: McpServer): void {
             sceneId,
           };
         },
+        userId,
       );
 
       return {

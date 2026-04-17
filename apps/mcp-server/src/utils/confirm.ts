@@ -34,8 +34,35 @@ function cleanExpired(): void {
 }
 
 /**
- * Tạo yêu cầu chờ xác nhận — tool Mutation gọi hàm này thay vì ghi DB trực tiếp.
- * @returns Message mô tả hành động, kèm pendingId theo ngôn ngữ.
+ * Tạo yêu cầu chờ xác nhận cho Admin, hoặc thực thi ngay nếu là End-User (có userId).
+ * @returns Message mô tả kết quả hoặc yêu cầu xác nhận.
+ */
+export async function createOrExecuteAction(
+  lang: string,
+  description: string,
+  action: () => Promise<unknown>,
+  userId?: string,
+): Promise<string> {
+  // End-User via Voice/App is already JWT authenticated, execute immediately
+  if (userId) {
+    try {
+      const result = await action();
+      return t(lang, 'confirm.success', { result: JSON.stringify(result, null, 2) });
+    } catch (error: any) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      return t(lang, 'confirm.error', { message });
+    }
+  }
+
+  // Admin flow: wait for explicit confirmation
+  cleanExpired();
+  const id = randomUUID().slice(0, 8);
+  pendingActions.set(id, { description, lang, action, createdAt: Date.now() });
+  return t(lang, 'confirm.title', { description, id });
+}
+
+/**
+ * @deprecated Use createOrExecuteAction instead.
  */
 export function createPendingAction(
   lang: string,

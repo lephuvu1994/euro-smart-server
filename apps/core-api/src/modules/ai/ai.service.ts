@@ -183,9 +183,11 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  // ──────────────────────────────────────────────
-  // Legacy synchronous chat (kept for backward compat)
-  // ──────────────────────────────────────────────
+  /**
+   * @deprecated Use chatStream() instead. This method lacks userId injection
+   * and does NOT support conversation history or streaming.
+   * Kept only for backward compatibility with Admin dashboard.
+   */
 
   public async chat(prompt: string, lang: 'vi' | 'en' = 'vi'): Promise<string> {
     await this.ensureMcpConnection();
@@ -263,6 +265,7 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
     prompt: string,
     history: Array<{ role: string; content: string }>,
     lang: 'vi' | 'en' = 'vi',
+    userId?: string,
   ): Promise<void> {
     await this.ensureMcpConnection();
     // Set SSE headers
@@ -289,61 +292,70 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
         role: msg.role === 'assistant' ? 'model' : 'user',
         parts: [{ text: msg.content }],
       }));
-      // Add current prompt
       contents.push({ role: 'user', parts: [{ text: prompt }] });
 
-      // CRITICAL: Use WARN so it appears in production logs (LOG level is filtered)
       this.logger.warn(
-        `[DEBUG] chatStream tools state: geminiToolsCache=${this.geminiToolsCache ? 'SET' : 'NULL'}, ` +
-          `toolCount=${this.geminiToolsCache?.[0]?.functionDeclarations?.length ?? 0}, ` +
-          `mcpToolsList=${this.mcpToolsList?.length ?? 0}`,
+        `[DEBUG] chatStream — tools: ${this.geminiToolsCache?.[0]?.functionDeclarations?.length ?? 0}, userId: ${userId ? 'set' : 'none'}`,
       );
 
-      // 1. First call: get initial response (may include tool calls)
-      const response = await this.ai.models.generateContent({
+      // ── Build system instruction ──────────────────────────────────────────
+      const userCtx = userId
+        ? `\nYou are assisting End-User ID: ${userId}. Only act on devices/scenes owned by this user.`
+        : '';
+
+      // Voice-optimised: short, natural sentences. No markdown.
+      const baseSystemInstruction = userId
+        ? `You are Sena, a helpful voice assistant for Sensa Smart Home.
+Respond in SHORT, NATURAL spoken sentences suitable for Text-to-Speech.
+Do NOT use markdown, tables, bullet points, or code blocks.
+ALWAYS call tools to get real data — never make up device names, states, or scene names.
+If a tool returns a confirmation code (e.g. "Mã xác nhận"), repeat the FULL confirmation message word-for-word without summarizing.
+Reply in language: ${lang}.${userCtx}`
+        : `You are an AI Assistant for Sensa Smart Home. You are directly connected to the system.
+ALWAYS call the provided tools yourself to fetch real-time data. NEVER tell the user to use an API or run a command — YOU must execute the tool!
+Do not hallucinate data. If a tool returns a confirmation string (e.g. "Mã xác nhận"), output it exactly without summarizing.
+For general queries (weather, lunar calendar), use your broad knowledge. DO NOT refuse.
+Reply in language: ${lang}.`;
+
+      const toolsConfig = this.geminiToolsCache &&
+        this.geminiToolsCache[0]?.functionDeclarations?.length > 0
+        ? {
+            tools: this.geminiToolsCache,
+            toolConfig: { functionCallingConfig: { mode: FunctionCallingConfigMode.AUTO } },
+          }
+        : { tools: [{ googleSearch: {} }] };
+
+      // ── STEP 1: Single streaming call — collect text OR tool calls ────────
+      const firstStream = await this.ai.models.generateContentStream({
         model: AI_MODEL,
         contents,
-        config: {
-          systemInstruction: `You are an AI Assistant for Sensa Smart Home. You are directly connected to the system. ALWAYS call the provided tools yourself to fetch real-time smart home and system info (devices, partners, scenes, etc.) to answer the user. NEVER tell the user to use an API or run a command - YOU must execute the tool! Do not hallucinate data. CRITICAL: If a tool returns a confirmation string (e.g. containing 'Mã xác nhận'), you MUST output exactly that entire string back to the user without summarizing it. For general queries (weather, lunar calendar), use your broad knowledge. DO NOT refuse. Reply in language: ${lang}.`,
-          ...(this.geminiToolsCache &&
-          this.geminiToolsCache[0]?.functionDeclarations?.length > 0
-            ? {
-                tools: this.geminiToolsCache,
-                toolConfig: {
-                  functionCallingConfig: {
-                    mode: FunctionCallingConfigMode.ANY,
-                  },
-                },
-              }
-            : { tools: [{ googleSearch: {} }] }),
-        },
+        config: { systemInstruction: baseSystemInstruction, ...toolsConfig },
       });
 
-      const functionCalls = response.functionCalls;
+      const collectedFunctionCalls: any[] = [];
+      const collectedTextParts: string[] = [];
+
+      for await (const chunk of firstStream) {
+        if (isAborted) return;
+
+        // Collect any tool calls from this chunk
+        if (chunk.functionCalls && chunk.functionCalls.length > 0) {
+          collectedFunctionCalls.push(...chunk.functionCalls);
+        }
+        // Collect any text tokens (used if there are no tool calls)
+        if (chunk.text) {
+          collectedTextParts.push(chunk.text);
+        }
+      }
 
       if (isAborted) return;
 
-      // 2. If no tool calls, stream the final response directly
-      if (!functionCalls || functionCalls.length === 0) {
-        // Stream the final response using generateContentStream
-        const stream = await this.ai.models.generateContentStream({
-          model: AI_MODEL,
-          contents,
-          config: {
-            systemInstruction: `You are an AI Assistant for Sensa Smart Home. You are directly connected to the system. ALWAYS call the provided tools yourself to fetch real-time smart home and system info (devices, partners, scenes, etc.) to answer the user. NEVER tell the user to use an API or run a command - YOU must execute the tool! Do not hallucinate data. CRITICAL: If a tool returns a confirmation string (e.g. containing 'Mã xác nhận'), you MUST output exactly that entire string back to the user without summarizing it. For general queries (weather, lunar calendar), use your broad knowledge. DO NOT refuse. Reply in language: ${lang}.`,
-            tools:
-              this.geminiToolsCache &&
-              this.geminiToolsCache[0]?.functionDeclarations?.length > 0
-                ? this.geminiToolsCache
-                : [{ googleSearch: {} }],
-          },
-        });
-
-        for await (const chunk of stream) {
+      // ── STEP 2a: No tool calls → stream the already-collected text ────────
+      if (collectedFunctionCalls.length === 0) {
+        sendEvent('stream_start', {});
+        for (const text of collectedTextParts) {
           if (isAborted) break;
-          if (chunk.text) {
-            sendEvent('delta', { text: chunk.text });
-          }
+          sendEvent('delta', { text });
         }
         if (!isAborted) {
           sendEvent('done', {});
@@ -352,22 +364,20 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
         return;
       }
 
-      // 3. Has tool calls — notify frontend, then execute tools
-      sendEvent('tool_start', {
-        tools: functionCalls.map((c) => c.name),
-      });
+      // ── STEP 2b: Has tool calls → execute them ───────────────────────────
+      sendEvent('tool_start', { tools: collectedFunctionCalls.map((c) => c.name) });
 
       const toolResults: { name: string; result: string }[] = [];
-      for (const call of functionCalls) {
+      for (const call of collectedFunctionCalls) {
         if (isAborted) break;
         this.logger.log(`[Stream] Tool call: ${call.name}`);
         sendEvent('tool_call', { name: call.name });
 
         const args = { ...(call.args as Record<string, any>), lang };
-        const mcpResult = await this.mcpClient!.callTool({
-          name: call.name,
-          arguments: args,
-        });
+        if (userId) {
+          args['userId'] = userId; // 🛡 INJECTION FILTER: Force-inject secure user boundary
+        }
+        const mcpResult = await this.mcpClient!.callTool({ name: call.name, arguments: args });
 
         let toolOutput = '';
         const contentArray = mcpResult.content as any[];
@@ -375,38 +385,34 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
           toolOutput = contentArray[0].text || JSON.stringify(contentArray);
         }
         toolResults.push({ name: call.name, result: toolOutput });
-
-        sendEvent('tool_result', {
-          name: call.name,
-          preview: toolOutput.substring(0, 200),
-        });
+        sendEvent('tool_result', { name: call.name, preview: toolOutput.substring(0, 200) });
       }
 
-      // 4. Build full context with tool results, then stream final answer
+      if (isAborted) return;
+
+      // ── STEP 3: Build full context + stream final answer ──────────────────
       const fullContents: any[] = [...contents];
-      for (let i = 0; i < functionCalls.length; i++) {
+      for (let i = 0; i < collectedFunctionCalls.length; i++) {
         fullContents.push(
-          { role: 'model', parts: [{ functionCall: functionCalls[i] }] },
+          { role: 'model', parts: [{ functionCall: collectedFunctionCalls[i] }] },
           {
             role: 'user',
-            parts: [
-              {
-                functionResponse: {
-                  name: toolResults[i].name,
-                  response: { result: toolResults[i].result },
-                },
+            parts: [{
+              functionResponse: {
+                name: toolResults[i].name,
+                response: { result: toolResults[i].result },
               },
-            ],
+            }],
           },
         );
       }
 
-      if (isAborted) return;
       sendEvent('stream_start', {});
 
       const finalStream = await this.ai.models.generateContentStream({
         model: AI_MODEL,
         contents: fullContents,
+        config: { systemInstruction: baseSystemInstruction },
       });
 
       for await (const chunk of finalStream) {
@@ -426,4 +432,5 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
       res.end();
     }
   }
+
 }

@@ -25,6 +25,10 @@ export function registerDeviceTools(server: McpServer): void {
         .describe(
           'Filter by exact device model code (e.g. ROLLING_DOOR). Do NOT guess this value.',
         ),
+      userId: z
+        .string()
+        .optional()
+        .describe('INTERNAL. Do NOT ask user for this value. Auto-injected by the system for ownership enforcement'),
       page: z.number().int().positive().default(1).describe('Page number'),
       limit: z.number().int().positive().default(20).describe('Items per page'),
       lang: z
@@ -33,13 +37,14 @@ export function registerDeviceTools(server: McpServer): void {
         .default('vi')
         .describe('Language for response (vi/en)'),
     },
-    async ({ partnerCode, modelCode, page, limit, lang }) => {
+    async ({ partnerCode, modelCode, userId, page, limit, lang }) => {
       const skip = (page - 1) * limit;
 
       const where = {
         unboundAt: null, // only active (non-unbound) devices
         ...(partnerCode && { partner: { code: partnerCode } }),
         ...(modelCode && { deviceModel: { code: modelCode } }),
+        ...(userId && { ownerId: userId }), // 🔒 RLS Enforcement
       };
 
       const [devices, total] = await Promise.all([
@@ -84,8 +89,9 @@ export function registerDeviceTools(server: McpServer): void {
           partner: `${d.partner.name} (${d.partner.code})`,
           model: `${d.deviceModel.name} (${d.deviceModel.code})`,
           owner:
-            [d.owner.firstName, d.owner.lastName].filter(Boolean).join(' ') ||
-            d.owner.email,
+            [d.owner?.firstName, d.owner?.lastName].filter(Boolean).join(' ') ||
+            d.owner?.email ||
+            'Unknown',
           entityCount: d._count.entities,
           createdAt: d.createdAt.toISOString(),
         })),
@@ -114,13 +120,16 @@ export function registerDeviceTools(server: McpServer): void {
     'count_devices_by_partner',
     'Get device count grouped by partner. Use when admin wants a summary of which partner has how many devices.',
     {
+      userId: z.string().optional().describe('INTERNAL. Do NOT ask user for this value.'),
       lang: z
         .enum(['vi', 'en'])
         .optional()
         .default('vi')
         .describe('Language for response (vi/en)'),
     },
-    async ({ lang }) => {
+    async ({ userId, lang }) => {
+      if (userId) return { content: [{ type: 'text', text: 'Access Denied. Admin only.' }] };
+
       const partners = await prisma.partner.findMany({
         orderBy: { name: 'asc' },
         select: {
@@ -167,6 +176,7 @@ export function registerDeviceTools(server: McpServer): void {
         .boolean()
         .optional()
         .describe('Filter banned hardware (true/false)'),
+      userId: z.string().optional().describe('INTERNAL. Do NOT ask user for this value.'),
       page: z.number().int().positive().default(1).describe('Page number'),
       limit: z.number().int().positive().default(20).describe('Items per page'),
       lang: z
@@ -175,7 +185,9 @@ export function registerDeviceTools(server: McpServer): void {
         .default('vi')
         .describe('Language for response (vi/en)'),
     },
-    async ({ partnerCode, modelCode, isBanned, page, limit, lang }) => {
+    async ({ partnerCode, modelCode, isBanned, userId, page, limit, lang }) => {
+      if (userId) return { content: [{ type: 'text', text: 'Access Denied. Admin only.' }] };
+
       const skip = (page - 1) * limit;
 
       const where = {
@@ -254,13 +266,16 @@ export function registerDeviceTools(server: McpServer): void {
       firmwareVersion: z
         .string()
         .describe('New firmware version string (e.g. "v2.1.0")'),
+      userId: z.string().optional().describe('INTERNAL. Do NOT ask user for this value.'),
       lang: z
         .enum(['vi', 'en'])
         .optional()
         .default('vi')
         .describe('Language for response (vi/en)'),
     },
-    async ({ modelCode, firmwareVersion, lang }) => {
+    async ({ modelCode, firmwareVersion, userId, lang }) => {
+      if (userId) return { content: [{ type: 'text', text: 'Access Denied. Admin only.' }] };
+
       const model = await prisma.deviceModel.findUnique({
         where: { code: modelCode },
       });

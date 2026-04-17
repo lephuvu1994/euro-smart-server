@@ -15,8 +15,16 @@ export function registerDeviceTools(server: McpServer): void {
     'list_devices',
     'List active devices in the system (basic info only). Filter by partner or device model. Does NOT contain online/offline status - use get_device_status for that.',
     {
-      partnerCode: z.string().optional().describe('Filter by partner code'),
-      modelCode: z.string().optional().describe('Filter by device model code'),
+      partnerCode: z
+        .string()
+        .optional()
+        .describe('Filter by partner code. Do NOT guess this value.'),
+      modelCode: z
+        .string()
+        .optional()
+        .describe(
+          'Filter by exact device model code (e.g. ROLLING_DOOR). Do NOT guess this value.',
+        ),
       page: z.number().int().positive().default(1).describe('Page number'),
       limit: z.number().int().positive().default(20).describe('Items per page'),
       lang: z

@@ -161,8 +161,21 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
       };
     });
 
+    // Injects a pseudo-tool specifically for General Knowledge & Web Search Delegation
+    functionDeclarations.push({
+      name: 'ask_general_knowledge',
+      description: 'Sử dụng công cụ này ĐỂ TRA CỨU thông tin thực tế, thời tiết, tin tức sự kiện, lịch âm dương, định nghĩa, hoặc vạn vật trên Internet khi bạn không có sẵn dữ liệu. Hệ thống sẽ lấy dữ liệu từ Google Search.',
+      parameters: {
+        type: 'OBJECT',
+        properties: {
+          query: { type: 'STRING', description: 'Câu lệnh truy vấn rõ ràng. VD: "Thời tiết tại Hà Nội hôm nay thế nào?" hoặc "Lịch âm hôm nay là ngày mấy?"' }
+        },
+        required: ['query'],
+      },
+    });
+
     this.geminiToolsCache = [{ functionDeclarations }];
-    this.logger.log(`Loaded ${tools.length} tools from MCP Server.`);
+    this.logger.log(`Loaded ${tools.length} tools from MCP Server. Added 1 pseudo-tool (ask_general_knowledge) for Delegation.`);
   }
 
   private mapType(
@@ -401,17 +414,34 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
 
           let toolOutput = '';
           try {
-            const args = { ...(call.args as Record<string, any>), lang };
-            if (userId) args['userId'] = userId;
+            if (call.name === 'ask_general_knowledge') {
+              // ── DELEGATION INTERCEPTOR: Ask a secondary Gemini agent with Google Search enabled ──
+              const query = (call.args as Record<string, any>)?.query || 'No query provided';
+              this.logger.warn(`[Search Agent] Delegating query... "${query}"`);
 
-            const mcpResult = await this.mcpClient!.callTool({
-              name: call.name,
-              arguments: args,
-            });
+              const searchRes = await this.ai.models.generateContent({
+                model: AI_MODEL,
+                contents: query,
+                config: {
+                  systemInstruction: 'Bạn là chuyên gia tra cứu thông tin (thời tiết, tin tức, lịch...). Hãy dùng Google Search trả lời ngắn gọn, súc tích, chính xác theo câu hỏi.',
+                  tools: [{ googleSearch: {} }],
+                },
+              });
+              toolOutput = searchRes.text || 'Không tìm thấy thông tin trên internet';
+            } else {
+              // ── NORMAL MCP TOOL EXECUTOR ──
+              const args = { ...(call.args as Record<string, any>), lang };
+              if (userId) args['userId'] = userId;
 
-            const contentArray = mcpResult.content as any[];
-            if (contentArray?.length > 0) {
-              toolOutput = contentArray[0].text || JSON.stringify(contentArray);
+              const mcpResult = await this.mcpClient!.callTool({
+                name: call.name,
+                arguments: args,
+              });
+
+              const contentArray = mcpResult.content as any[];
+              if (contentArray?.length > 0) {
+                toolOutput = contentArray[0].text || JSON.stringify(contentArray);
+              }
             }
           } catch (err: any) {
             toolOutput = JSON.stringify({ error: `Tool failed: ${err?.message || err}` });
@@ -468,7 +498,7 @@ CÁCH LÀM VIỆC (BẮT BUỘC):
 PHONG CÁCH:
 - Trả lời ngắn gọn, thân thiện (VD: "Dạ em đã mở cửa rồi ạ").
 - KHÔNG xuất JSON thô. KHÔNG hỏi token/ID từ user.
-- Câu hỏi ngoài lề (thời tiết, lịch...): dùng kiến thức chung để trả lời.
+- KHÔNG ĐƯỢC TỪ CHỐI khi người dùng hỏi các câu hỏi kiến thức chung, thời tiết, lịch, định nghĩa... BẮT BUỘC GỌI TOOL \`ask_general_knowledge\` ĐỂ TÌM KIẾM CÂU TRẢ LỜI CHO HỌ.
 - Trả lời bằng: ${lang === 'vi' ? 'tiếng Việt' : 'English'}.`;
     }
 
@@ -490,7 +520,7 @@ CÁCH LÀM VIỆC (BẮT BUỘC):
 
 PHONG CÁCH:
 - Trả lời tự nhiên, chuyên nghiệp. KHÔNG xuất JSON thô.
-- Câu hỏi ngoài lề (thời tiết, lịch...): dùng kiến thức chung để trả lời.
+- KHÔNG ĐƯỢC TỪ CHỐI khi Administrator hỏi các câu hỏi kiến thức chung, thời tiết, lịch, định nghĩa... BẮT BUỘC GỌI TOOL \`ask_general_knowledge\` ĐỂ TÌM KIẾM CÂU TRẢ LỜI CHO HỌ.
 - Trả lời bằng: ${lang === 'vi' ? 'tiếng Việt' : 'English'}.`;
   }
 }

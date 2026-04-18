@@ -156,7 +156,7 @@ describe('AiService', () => {
       }
 
       const cache = (service as any).geminiToolsCache[0];
-      expect(cache.functionDeclarations).toHaveLength(2);
+      expect(cache.functionDeclarations).toHaveLength(3);
 
       const testToolDecl = cache.functionDeclarations[0];
       expect(testToolDecl.name).toBe('test_tool');
@@ -379,6 +379,38 @@ describe('AiService', () => {
       // Because it aborted immediately, write should not be called with Chunk 1 or done
       expect(mockRes.write).not.toHaveBeenCalled();
       expect(mockRes.end).not.toHaveBeenCalled();
+    });
+    it('should intercept ask_general_knowledge tool call and query Gemini fallback', async () => {
+      // Mock generateContentStream to return exactly 1 tool call: ask_general_knowledge
+      mockGoogleGenAI.models = {
+        generateContentStream: jest.fn().mockImplementation(() =>
+          (async function* () {
+            yield { functionCalls: [{ name: 'ask_general_knowledge', args: { query: 'test query' } }] };
+          })()
+        ),
+        generateContent: jest.fn().mockResolvedValue({
+          text: 'Google Search Weather Result',
+        }),
+      };
+
+      // Ensure MCP is NOT called for this pseudo-tool
+      mockMcpClient.callTool = jest.fn();
+
+      await service.chatStream(mockRes, 'Weather', []);
+
+      // It should call the secondary search agent using generateContent
+      expect(mockGoogleGenAI.models.generateContent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          contents: 'test query',
+        })
+      );
+
+      // MCP should NOT be called
+      expect(mockMcpClient.callTool).not.toHaveBeenCalled();
+
+      // Output should be written
+      expect(mockRes.write).toHaveBeenCalledWith(expect.stringContaining('Google Search Weather Result'));
+      expect(mockRes.end).toHaveBeenCalledTimes(1);
     });
 
     it('should return too many steps fallback if MAX_ROUNDS is exhausted', async () => {

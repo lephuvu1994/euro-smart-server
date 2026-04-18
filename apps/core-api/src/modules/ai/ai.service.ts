@@ -102,9 +102,10 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
             this.mcpClient.connect(transport),
             timeoutPromise,
           ]);
-          this.logger.log('✅ MCP Server connected successfully.');
-
+          this.logger.warn('✅ MCP Server connected successfully.');
+          this.logger.warn('[MCP] Calling refreshTools (listTools)...');
           await this.refreshTools();
+          this.logger.warn('[MCP] refreshTools completed.');
           this.connectionPromise = null;
           return;
         } catch (error) {
@@ -199,7 +200,7 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
           systemInstruction: `You are an AI Assistant for Sensa Smart Home. You are directly connected to the system. ALWAYS call the provided tools yourself to fetch real-time smart home and system info (devices, partners, scenes, etc.) to answer the user. NEVER tell the user to use an API or run a command - YOU must execute the tool! Do not hallucinate data. For general queries (weather, lunar calendar), use your broad knowledge. DO NOT refuse. Reply in language: ${lang}.`,
           tools:
             this.geminiToolsCache &&
-            this.geminiToolsCache[0]?.functionDeclarations?.length > 0
+              this.geminiToolsCache[0]?.functionDeclarations?.length > 0
               ? this.geminiToolsCache
               : [{ googleSearch: {} }],
         },
@@ -267,17 +268,19 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
     lang: 'vi' | 'en' = 'vi',
     userId?: string,
   ): Promise<void> {
+    this.logger.warn(`[Chat] Incoming stream request: "${prompt}"`);
     await this.ensureMcpConnection();
+    this.logger.warn(`[Chat] MCP connection resolved. Starting SSE response...`);
     // Set SSE headers
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
-    res.setHeader('X-Accel-Buffering', 'no'); // Nginx unbuffering
+    res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders();
 
     let isAborted = false;
     res.on('close', () => {
-      this.logger.warn('[Stream] Client closed connection mid-stream');
+      this.logger.warn('[Stream] Client closed connection');
       isAborted = true;
     });
 
@@ -287,84 +290,89 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
     };
 
     try {
-      // Build conversation context from history
+      // ── Build conversation contents ────────────────────────────────────
       const contents: any[] = history.map((msg) => ({
         role: msg.role === 'assistant' ? 'model' : 'user',
         parts: [{ text: msg.content }],
       }));
       contents.push({ role: 'user', parts: [{ text: prompt }] });
 
-      this.logger.warn(
-        `[DEBUG] chatStream — tools: ${this.geminiToolsCache?.[0]?.functionDeclarations?.length ?? 0}, userId: ${userId ? 'set' : 'none'}`,
-      );
+      // ── System Instruction ─────────────────────────────────────────────
+      const systemInstruction = this.buildSystemInstruction(lang, userId);
 
-      // ── Build system instruction ──────────────────────────────────────────
-      const userCtx = userId
-        ? `\nYou are assisting End-User ID: ${userId}. Only act on devices/scenes owned by this user.`
-        : '';
-
-      const baseSystemInstruction = userId
-        ? `You are an AI Assistant for Sensa Smart Home. You are communicating with a standard End-User.
-YOUR CAPABILITIES ARE STRICTLY RESTRICTED FOR SAFETY:
-1. You may ONLY perform basic smart home actions: Turn On/Off, Open/Close, Adjust Temperature, Adjust Light Colors, and run Scenes.
-2. You may ONLY answer general questions (weather, calendar, standard information).
-3. IF the user asks you to modify the system structure, edit settings, create accounts, or do any admin/dangerous tasks, YOU MUST REFUSE and gently reply "Xin lỗi, chức năng này chỉ dành cho Quản trị viên (Admin)."
-ALWAYS call the provided tools yourself to fetch data or control devices. NEVER tell the user to run a command.
-After calling a tool, you MUST ALWAYS respond to the user in a natural, conversational, and very short way (e.g. "Dạ, em đã bật đèn rồi ạ", "Cửa đã được chuyển trạng thái"). NEVER OUTPUT RAW JSON.
-Reply in language: ${lang}.${userCtx}`
-        : `You are an AI Assistant for Sensa Smart Home acting in ADMIN MODE. You have FULL system privileges.
-Because of your power, dangerous actions will require secondary confirmation.
-CRITICAL: If a tool returns an Admin confirmation string (e.g. containing 'Mã xác nhận'), you MUST output exactly that entire string back to the user word-for-word, without summarizing it.
-ALWAYS call the provided tools yourself to fetch real-time info. NEVER tell the user to run a command. Do not hallucinate data.
-After calling a tool, you MUST ALWAYS respond to the user in a natural, conversational way. NEVER OUTPUT RAW JSON.
-For general queries, use your broad knowledge. DO NOT refuse. Reply in language: ${lang}.`;
-
-      const toolsConfig = this.geminiToolsCache &&
-        this.geminiToolsCache[0]?.functionDeclarations?.length > 0
+      // ── Tools config ───────────────────────────────────────────────────
+      const hasTools = this.geminiToolsCache?.[0]?.functionDeclarations?.length > 0;
+      const toolsConfig = hasTools
         ? {
-            tools: this.geminiToolsCache,
-            toolConfig: { functionCallingConfig: { mode: FunctionCallingConfigMode.AUTO } },
-          }
+          tools: this.geminiToolsCache,
+          toolConfig: { functionCallingConfig: { mode: FunctionCallingConfigMode.AUTO } },
+        }
         : { tools: [{ googleSearch: {} }] };
 
-      // ── MULTI-TURN TOOL CALL LOOP (max 5 rounds) ─────────────────────────
-      const MAX_TOOL_ROUNDS = 5;
-      const runningContents: any[] = [...contents];
-      // streamStartSent tracks if we already sent 'stream_start'
-      let streamStartSent = false; // eslint-disable-line prefer-const
+      this.logger.warn(
+        `[Chat] Starting — tools: ${hasTools ? this.geminiToolsCache[0].functionDeclarations.length : 0}, userId: ${userId ? 'set' : 'admin'}`,
+      );
 
-      for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      // ══════════════════════════════════════════════════════════════════
+      // MULTI-TURN TOOL LOOP (max 5 rounds)
+      // ALL rounds use streaming for faster feedback to the user.
+      // ══════════════════════════════════════════════════════════════════
+      const MAX_ROUNDS = 5;
+      const runningContents: any[] = [...contents];
+      let streamStartSent = false;
+
+      for (let round = 0; round < MAX_ROUNDS; round++) {
         if (isAborted) return;
 
-        const isLastRound = round === MAX_TOOL_ROUNDS - 1;
-        const streamConfig = isLastRound
-          ? { systemInstruction: baseSystemInstruction }              // force text-only
-          : { systemInstruction: baseSystemInstruction, ...toolsConfig }; // allow tools
+        const isLastRound = round === MAX_ROUNDS - 1;
+        const config = isLastRound
+          ? { systemInstruction }
+          : { systemInstruction, ...toolsConfig };
 
-        const stream = await this.ai.models.generateContentStream({
+        this.logger.warn(`[Chat] Round ${round + 1}/${MAX_ROUNDS}`);
+
+        // Streaming call with 30s timeout
+        const streamPromise = this.ai.models.generateContentStream({
           model: AI_MODEL,
           contents: runningContents,
-          config: streamConfig,
+          config,
         });
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Gemini response timeout (30s)')), 30000),
+        );
+        const stream = await Promise.race([streamPromise, timeoutPromise]);
 
         const roundFunctionCalls: any[] = [];
         const roundTextParts: string[] = [];
 
         for await (const chunk of stream) {
           if (isAborted) return;
-          if (chunk.functionCalls && chunk.functionCalls.length > 0) {
-            roundFunctionCalls.push(...chunk.functionCalls);
-          }
-          if (chunk.text) {
-            roundTextParts.push(chunk.text);
+          try {
+            const calls = chunk.functionCalls;
+            if (calls && calls.length > 0) {
+              roundFunctionCalls.push(...calls);
+            } else if (chunk.candidates?.[0]?.content?.parts?.[0]?.text) {
+              const textOutput = chunk.candidates[0].content.parts[0].text;
+              if (textOutput.trim()) {
+                roundTextParts.push(textOutput);
+              }
+            } else if (chunk.text) { // fallback
+              roundTextParts.push(chunk.text);
+            }
+          } catch (e) {
+            // handle SDK getter warnings
           }
         }
 
         if (isAborted) return;
 
-        // ── No tool calls → flush collected text and finish ──────────────
+        // ── No tool calls → flush text and finish ────────────────────
         if (roundFunctionCalls.length === 0) {
-          if (!streamStartSent) sendEvent('stream_start', {});
+          this.logger.warn(`[Chat] Round ${round + 1}: text response`);
+          if (!streamStartSent) {
+            sendEvent('stream_start', {});
+            streamStartSent = true;
+          }
           for (const text of roundTextParts) {
             if (isAborted) break;
             sendEvent('delta', { text });
@@ -376,29 +384,37 @@ For general queries, use your broad knowledge. DO NOT refuse. Reply in language:
           return;
         }
 
-        // ── Has tool calls → execute them and loop ───────────────────────
-        this.logger.log(`[Stream] Round ${round + 1}: ${roundFunctionCalls.length} tool call(s)`);
-        sendEvent('tool_start', { tools: roundFunctionCalls.map((c) => c.name) });
+        // ── Has tool calls → execute and loop ────────────────────────
+        this.logger.warn(`[Chat] Round ${round + 1}: ${roundFunctionCalls.length} tool call(s)`);
+        sendEvent('tool_start', { tools: roundFunctionCalls.map((c: any) => c.name) });
 
         for (const call of roundFunctionCalls) {
           if (isAborted) return;
-          this.logger.log(`[Stream] Tool call: ${call.name}`);
+
+          this.logger.warn(`[Chat] → ${call.name}`);
           sendEvent('tool_call', { name: call.name });
 
-          const args = { ...(call.args as Record<string, any>), lang };
-          if (userId) {
-            args['userId'] = userId; // 🛡 INJECTION FILTER
-          }
-          const mcpResult = await this.mcpClient!.callTool({ name: call.name, arguments: args });
-
           let toolOutput = '';
-          const contentArray = mcpResult.content as any[];
-          if (contentArray && contentArray.length > 0) {
-            toolOutput = contentArray[0].text || JSON.stringify(contentArray);
+          try {
+            const args = { ...(call.args as Record<string, any>), lang };
+            if (userId) args['userId'] = userId;
+
+            const mcpResult = await this.mcpClient!.callTool({
+              name: call.name,
+              arguments: args,
+            });
+
+            const contentArray = mcpResult.content as any[];
+            if (contentArray?.length > 0) {
+              toolOutput = contentArray[0].text || JSON.stringify(contentArray);
+            }
+          } catch (err: any) {
+            toolOutput = JSON.stringify({ error: `Tool failed: ${err?.message || err}` });
+            this.logger.error(`[Chat] Tool ${call.name} failed: ${err?.message}`);
           }
+
           sendEvent('tool_result', { name: call.name, preview: toolOutput.substring(0, 200) });
 
-          // Append call + response to running context for next round
           runningContents.push(
             { role: 'model', parts: [{ functionCall: call }] },
             {
@@ -414,16 +430,63 @@ For general queries, use your broad knowledge. DO NOT refuse. Reply in language:
         }
       }
 
-      // Fallback: max rounds exhausted without text output
+      // Fallback: max rounds exhausted
       sendEvent('stream_start', {});
-      sendEvent('delta', { text: 'Xin lỗi, tôi đã thực hiện quá nhiều bước mà chưa có kết quả. Vui lòng thử lại.' });
+      sendEvent('delta', { text: 'Xin lỗi, tôi đã thực hiện quá nhiều bước. Vui lòng thử lại.' });
       sendEvent('done', {});
       res.end();
-    } catch (error) {
-      this.logger.error('[Stream] Error during streaming chat', error);
-      sendEvent('error', { message: error.message || 'Internal AI Error' });
+    } catch (error: any) {
+      this.logger.error('[Chat] Fatal error', error);
+      sendEvent('error', { message: error?.message || 'Internal AI Error' });
       res.end();
     }
   }
 
+  // ─── Build System Instruction ───────────────────────────────────────
+  private buildSystemInstruction(lang: 'vi' | 'en', userId?: string): string {
+    if (userId) {
+      // ── END-USER MODE ──
+      return `Bạn là trợ lý AI điều khiển nhà thông minh Sensa Smart cho End-User (ID: ${userId}).
+
+QUYỀN HẠN:
+- CHỈ được điều khiển thiết bị và chạy kịch bản (scene) thuộc sở hữu của user này.
+- Từ chối mọi yêu cầu thay đổi hệ thống (tạo user, xóa partner...): "Xin lỗi, chức năng này chỉ dành cho Quản trị viên."
+
+CÁCH LÀM VIỆC (BẮT BUỘC):
+- Gọi tool NGAY, KHÔNG BAO GIỜ hỏi lại "Bạn có muốn...?". Cứ làm luôn.
+- Bạn đang chạy trong vòng lặp đa lượt. Gọi tool → nhận kết quả → gọi tiếp tool khác → cuối cùng mới trả lời text.
+- Khi user hỏi về thiết bị: gọi list_devices → dùng token để gọi get_device_detail → trả lời.
+- Khi user muốn điều khiển: gọi list_devices → get_device_detail (lấy entity codes) → control_device. PHẢI gọi đủ 3 bước.
+- KHÔNG BAO GIỜ đoán entity code. LUÔN lấy từ get_device_detail.
+- Mỗi yêu cầu là ĐỘC LẬP. Kết quả tool trước KHÔNG còn trong bộ nhớ. Phải gọi lại.
+
+PHONG CÁCH:
+- Trả lời ngắn gọn, thân thiện (VD: "Dạ em đã mở cửa rồi ạ").
+- KHÔNG xuất JSON thô. KHÔNG hỏi token/ID từ user.
+- Câu hỏi ngoài lề (thời tiết, lịch...): dùng kiến thức chung để trả lời.
+- Trả lời bằng: ${lang === 'vi' ? 'tiếng Việt' : 'English'}.`;
+    }
+
+    // ── ADMIN MODE ──
+    return `Bạn là trợ lý AI quản trị hệ thống Sensa Smart Home (ADMIN MODE - toàn quyền).
+
+QUYỀN HẠN:
+- Điều khiển thiết bị và chạy kịch bản: thực hiện NGAY, không cần xác nhận.
+- Thay đổi hệ thống (tạo/sửa/xóa user, partner, device model...): CẦN xác nhận từ Admin.
+- Nếu tool trả về chuỗi chứa "Mã xác nhận", BẮT BUỘC phải xuất nguyên văn chuỗi đó cho Admin.
+
+CÁCH LÀM VIỆC (BẮT BUỘC):
+- Gọi tool NGAY, KHÔNG BAO GIỜ hỏi lại "Bạn có muốn...?". Cứ làm luôn.
+- Bạn đang chạy trong vòng lặp đa lượt. Gọi tool → nhận kết quả → gọi tiếp tool khác → cuối cùng mới trả lời text.
+- Khi hỏi về thiết bị: gọi list_devices → get_device_detail → trả lời đầy đủ.
+- Khi điều khiển: gọi list_devices → get_device_detail (lấy entity codes) → control_device. PHẢI gọi đủ 3 bước.
+- KHÔNG BAO GIỜ đoán entity code. LUÔN lấy từ get_device_detail.
+- Mỗi yêu cầu là ĐỘC LẬP. Phải gọi tool lại mỗi lần.
+
+PHONG CÁCH:
+- Trả lời tự nhiên, chuyên nghiệp. KHÔNG xuất JSON thô.
+- Câu hỏi ngoài lề (thời tiết, lịch...): dùng kiến thức chung để trả lời.
+- Trả lời bằng: ${lang === 'vi' ? 'tiếng Việt' : 'English'}.`;
+  }
 }
+

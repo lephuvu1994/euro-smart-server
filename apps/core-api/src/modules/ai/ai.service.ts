@@ -304,12 +304,17 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
 
       // ── Tools config ───────────────────────────────────────────────────
       const hasTools = this.geminiToolsCache?.[0]?.functionDeclarations?.length > 0;
-      const toolsConfig = hasTools
-        ? {
-          tools: this.geminiToolsCache,
-          toolConfig: { functionCallingConfig: { mode: FunctionCallingConfigMode.AUTO } },
-        }
-        : { tools: [{ googleSearch: {} }] };
+      const combinedTools = hasTools
+        ? [
+          { functionDeclarations: this.geminiToolsCache[0].functionDeclarations },
+          { googleSearch: {} },
+        ]
+        : [{ googleSearch: {} }];
+
+      const toolsConfig = {
+        tools: combinedTools,
+        toolConfig: { functionCallingConfig: { mode: FunctionCallingConfigMode.AUTO } },
+      };
 
       this.logger.warn(
         `[Chat] Starting — tools: ${hasTools ? this.geminiToolsCache[0].functionDeclarations.length : 0}, userId: ${userId ? 'set' : 'admin'}`,

@@ -9,12 +9,16 @@
       "executor": "nx:run-commands",
       "options": {
         "command": "webpack-cli build",
-        "args": ["--node-env=production"],
+        "args": [
+          "--node-env=production"
+        ],
         "cwd": "apps/mcp-server"
       },
       "configurations": {
         "development": {
-          "args": ["--node-env=development"]
+          "args": [
+            "--node-env=development"
+          ]
         }
       }
     },
@@ -22,7 +26,9 @@
       "continuous": true,
       "executor": "@nx/js:node",
       "defaultConfiguration": "development",
-      "dependsOn": ["build"],
+      "dependsOn": [
+        "build"
+      ],
       "options": {
         "buildTarget": "mcp-server:build",
         "runBuildTargetDependencies": false
@@ -34,11 +40,6 @@
         "production": {
           "buildTarget": "mcp-server:build:production"
         }
-      }
-    },
-    "test": {
-      "options": {
-        "passWithNoTests": true
       }
     }
   }

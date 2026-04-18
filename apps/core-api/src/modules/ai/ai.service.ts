@@ -94,14 +94,16 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
           } as any);
 
           // Timeout to prevent hanging forever
-          const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('MCP Connect Timeout')), 5000),
-          );
+          let connTimeoutId: NodeJS.Timeout;
+          const timeoutPromise = new Promise((_, reject) => {
+            connTimeoutId = setTimeout(() => reject(new Error('MCP Connect Timeout')), 5000);
+          });
 
           await Promise.race([
             this.mcpClient.connect(transport),
             timeoutPromise,
           ]);
+          clearTimeout(connTimeoutId!);
           this.logger.warn('✅ MCP Server connected successfully.');
           this.logger.warn('[MCP] Calling refreshTools (listTools)...');
           await this.refreshTools();
@@ -337,10 +339,13 @@ export class AiService implements OnModuleInit, OnModuleDestroy {
           contents: runningContents,
           config,
         });
-        const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Gemini response timeout (30s)')), 30000),
-        );
+        let timeoutId: NodeJS.Timeout;
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timeoutId = setTimeout(() => reject(new Error('Gemini response timeout (30s)')), 30000);
+        });
+
         const stream = await Promise.race([streamPromise, timeoutPromise]);
+        clearTimeout(timeoutId!);
 
         const roundFunctionCalls: any[] = [];
         const roundTextParts: string[] = [];

@@ -50,7 +50,7 @@ describe('AiController', () => {
     it('should call aiService.chat with default lang "vi" if not provided', async () => {
       mockAiService.chat.mockResolvedValue('Chào bạn');
       const result = await controller.chat({ prompt: 'Xin chào' });
-      
+
       expect(service.chat).toHaveBeenCalledWith('Xin chào', 'vi');
       expect(result).toEqual({ response: 'Chào bạn' });
     });
@@ -58,9 +58,32 @@ describe('AiController', () => {
     it('should call aiService.chat with provided lang', async () => {
       mockAiService.chat.mockResolvedValue('Hello there');
       const result = await controller.chat({ prompt: 'Hello', lang: 'en' });
-      
+
       expect(service.chat).toHaveBeenCalledWith('Hello', 'en');
       expect(result).toEqual({ response: 'Hello there' });
+    });
+  });
+
+  describe('getTools', () => {
+    it('should return geminiToolsCache from service', () => {
+      (service as any).geminiToolsCache = [{ name: 'test' }];
+      expect(controller.getTools()).toEqual([{ name: 'test' }]);
+    });
+  });
+
+  describe('chatStream', () => {
+    it('should return 400 error if prompt is missing', async () => {
+      const mockRes = { status: jest.fn().mockReturnThis(), json: jest.fn() } as any;
+      await controller.chatStream({ prompt: '' }, mockRes);
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+      expect(mockRes.json).toHaveBeenCalledWith({ error: 'Prompt is required' });
+    });
+
+    it('should call aiService.chatStream with correct arguments', async () => {
+      const mockRes = {} as any;
+      service.chatStream = jest.fn().mockResolvedValue(undefined);
+      await controller.chatStream({ prompt: 'Hello', history: [], lang: 'en' }, mockRes);
+      expect(service.chatStream).toHaveBeenCalledWith(mockRes, 'Hello', [], 'en');
     });
   });
 });

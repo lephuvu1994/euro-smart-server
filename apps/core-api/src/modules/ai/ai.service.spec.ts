@@ -281,10 +281,6 @@ describe('AiService', () => {
 
     it('should stream final response directly if no tool calls', async () => {
       mockGoogleGenAI.models = {
-        generateContent: jest.fn().mockResolvedValue({
-          text: '',
-          functionCalls: [],
-        }),
         generateContentStream: jest.fn().mockResolvedValue(
           (async function* () {
             yield { text: 'Chunk 1 ' };
@@ -314,15 +310,18 @@ describe('AiService', () => {
 
     it('should handle tool calls and emit SSE events', async () => {
       mockGoogleGenAI.models = {
-        generateContent: jest.fn().mockResolvedValue({
-          text: '',
-          functionCalls: [{ name: 'get_users', args: { limit: 2 } }],
-        }),
-        generateContentStream: jest.fn().mockResolvedValue(
-          (async function* () {
-            yield { text: 'Final Answer' };
-          })(),
-        ),
+        generateContentStream: jest
+          .fn()
+          .mockResolvedValueOnce(
+            (async function* () {
+              yield { functionCalls: [{ name: 'get_users', args: { limit: 2 } }] };
+            })(),
+          )
+          .mockResolvedValueOnce(
+            (async function* () {
+              yield { candidates: [{ content: { parts: [{ text: 'Final Answer' }] } }] };
+            })(),
+          ),
       };
 
       mockMcpClient.callTool = jest.fn().mockResolvedValue({
@@ -366,9 +365,6 @@ describe('AiService', () => {
       });
 
       mockGoogleGenAI.models = {
-        generateContent: jest.fn().mockResolvedValue({
-          functionCalls: [],
-        }),
         generateContentStream: jest.fn().mockResolvedValue(
           (async function* () {
             yield { text: 'Chunk 1' };
@@ -383,6 +379,44 @@ describe('AiService', () => {
       // Because it aborted immediately, write should not be called with Chunk 1 or done
       expect(mockRes.write).not.toHaveBeenCalled();
       expect(mockRes.end).not.toHaveBeenCalled();
+    });
+
+    it('should return too many steps fallback if MAX_ROUNDS is exhausted', async () => {
+      // Mock generateContentStream to continually return a tool call every round, reaching 5 rounds
+      mockGoogleGenAI.models = {
+        generateContentStream: jest.fn().mockImplementation(() =>
+          (async function* () {
+            yield { functionCalls: [{ name: 'get_users', args: {} }] };
+          })()
+        ),
+      };
+
+      mockMcpClient.callTool = jest.fn().mockResolvedValue({ content: [{ text: 'Dummy' }] });
+
+      await service.chatStream(mockRes, 'Loop forever', []);
+
+      expect(mockRes.write).toHaveBeenCalledWith(
+        expect.stringContaining('Xin lỗi, tôi đã thực hiện quá nhiều bước. Vui lòng thử lại.')
+      );
+      expect(mockGoogleGenAI.models.generateContentStream).toHaveBeenCalledTimes(5);
+      expect(mockRes.end).toHaveBeenCalledTimes(1);
+    });
+
+    it('should emit error event if a fatal error occurs during streaming', async () => {
+      mockGoogleGenAI.models = {
+        generateContentStream: jest.fn().mockResolvedValue(
+          (async function* () {
+            throw new Error('Fatal Stream Crash');
+          })(),
+        ),
+      };
+
+      await service.chatStream(mockRes, 'Crash', []);
+
+      expect(mockRes.write).toHaveBeenCalledWith(
+        expect.stringContaining('event: error\ndata: {"message":"Fatal Stream Crash"}')
+      );
+      expect(mockRes.end).toHaveBeenCalledTimes(1);
     });
   });
 });

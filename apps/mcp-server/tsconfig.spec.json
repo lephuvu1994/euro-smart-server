@@ -3,15 +3,14 @@
   "compilerOptions": {
     "outDir": "../../dist/out-tsc",
     "module": "commonjs",
-    "types": ["node"],
-    "target": "es2021",
-    "moduleResolution": "node"
+    "moduleResolution": "node10",
+    "types": ["jest", "node"]
   },
-  "include": ["src/**/*.ts"],
-  "exclude": [
+  "include": [
     "jest.config.ts",
-    "src/**/*.spec.ts",
+    "jest.config.cts",
     "src/**/*.test.ts",
-    "jest.config.cts"
+    "src/**/*.spec.ts",
+    "src/**/*.d.ts"
   ]
 }

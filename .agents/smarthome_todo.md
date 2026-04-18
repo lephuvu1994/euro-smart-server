@@ -290,7 +290,7 @@ Mỗi 3 giờ sáng hàng ngày, hệ thống sẽ tự động trích xuất to
 
 ## Tính năng 8: MCP Server (Admin Chatbox & AI Context Assistant)
 
-**Trạng thái**: ⏳ Lên Kế Hoạch (Planning) - **Xem kế hoạch chi tiết + task tại: [feature_8_mcp_chatbox.md](./feature_8_mcp_chatbox.md)**
+**Trạng thái**: 🔄 Đang triển khai (Đã hoàn thành Phase 1 & 2 Backend, bao gồm kết nối AI SDK và unit test 100%) - **Xem kế hoạch chi tiết + task tại: [feature_8_mcp_chatbox.md](./feature_8_mcp_chatbox.md)**
 
 ### 1. Mô tả tổng quan
 

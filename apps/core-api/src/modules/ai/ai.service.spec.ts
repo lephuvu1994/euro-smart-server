@@ -405,6 +405,7 @@ describe('AiService', () => {
     it('should emit error event if a fatal error occurs during streaming', async () => {
       mockGoogleGenAI.models = {
         generateContentStream: jest.fn().mockResolvedValue(
+          // eslint-disable-next-line require-yield
           (async function* () {
             throw new Error('Fatal Stream Crash');
           })(),

@@ -21,7 +21,7 @@ jest.mock('../utils/confirm', () => ({
 
 describe('Partner Tools', () => {
     let mockServer: jest.Mocked<McpServer>;
-    let registeredTools: Map<string, Function> = new Map();
+    const registeredTools: Map<string, (...args: any[]) => any> = new Map();
 
     beforeEach(() => {
         jest.clearAllMocks();

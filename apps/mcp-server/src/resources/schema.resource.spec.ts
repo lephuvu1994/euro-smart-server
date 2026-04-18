@@ -8,7 +8,7 @@ jest.mock('fs', () => ({
 
 describe('Schema Resource', () => {
     let mockServer: jest.Mocked<McpServer>;
-    let registeredResources: Map<string, Function> = new Map();
+    const registeredResources: Map<string, (...args: any[]) => any> = new Map();
 
     beforeEach(() => {
         jest.clearAllMocks();
